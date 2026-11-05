@@ -91,6 +91,8 @@ try {
 
 O comando não escreve a senha em logs nem em arquivos. Guarde o `OrganizationId` informado na saída para uma repetição futura. Ao repetir com o mesmo ID e e-mail, ele informa que a organização já está provisionada e mantém a credencial existente.
 
+Depois de provisionar, inicie a API e o Angular conforme as instruções acima e abra `http://localhost:4200/entrar`. Entre com o e-mail e a senha definidos no provisionamento. A primeira conta Administrador usa essa senha; as contas da equipe cadastradas depois recebem senha temporária e precisam trocá-la no primeiro acesso.
+
 ## Estado atual
 
 O escopo da primeira entrega foi aprovado em 05/11/2026. T01–T17 foram implementadas localmente; a interface de equipe e senha inicial está em T19. Consulte [.specs/STATE.md](.specs/STATE.md) para andamento por tarefa. As regras do levantamento vêm das respostas do responsável pela operação; decisões ainda abertas continuam identificadas como propostas ou perguntas.
