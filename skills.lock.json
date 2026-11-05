@@ -1,0 +1,186 @@
+{
+  "schema_version": 1,
+  "recorded_on": "2026-11-04",
+  "project": "PIT-CRM",
+  "scope": "repository",
+  "description": "Project-owned provenance inventory; not a Tech Leads Club CLI lockfile.",
+  "attribution": "Tech Leads Club and authors named in the upstream skill files",
+  "license_notice": "docs/third-party/agent-skills-LICENSE.txt",
+  "skills": [
+    {
+      "name": "tlc-spec-driven",
+      "kind": "adapted",
+      "path": ".agents/skills/tlc-spec-driven",
+      "source": {
+        "repository": "https://github.com/tech-leads-club/agent-skills",
+        "revision": "1da2195067c14ae5d44dc615b31cb26f50ebeb91",
+        "path": "packages/skills-catalog/skills/(development)/tlc-spec-driven"
+      },
+      "adapted_files": [
+        "SKILL.md"
+      ],
+      "upstream_entrypoint": "UPSTREAM.md",
+      "upstream_files_sha256": {
+        "references/coding-principles.md": "8c548affbcdaa4c62bd75bf27b39a81af41ec16bd603e5e634f30771bebd4fbb",
+        "references/design.md": "5001febbbaea2b62c8dfe06faa18fdba71a403489e935db7fcd88b8c2f716184",
+        "references/discuss.md": "53baf35f8d23713323f5b08ba5f32d79253365a7c82829c09b000f657397cb0b",
+        "references/implement.md": "239a490d2b96ec2d698f94ad6f18308979f66b03be7ccdd3a2fd86088a6ce683",
+        "references/lessons.md": "7b0b5d7295e8e17739ae81e454c726bdc0341d06525c1f90ae61fae3a1ad06ca",
+        "references/memory.md": "b1c3556ae1f4260d35379f2360fbbe7cee0dc3b570ca94bff50ca49e26658d19",
+        "references/specify.md": "650b8dfeb7fdc3743fc97d9cab6c036f8b814c8b89fe64ae3ea3c84736fdc4ee",
+        "references/sub-agents.md": "68de32f1ad4a14f7caa7164465288260ea7a4c46c0e1630c46a7b73d2b481685",
+        "references/tasks.md": "1ba57f668c2ba1e7a007c8beec3005dbe795d056001820c3b370593011f96d63",
+        "references/validate.md": "4ea2ece9fa19a6c3abf2bae1e8738a7653746969da65f9073f67bcf58047b3b2",
+        "references/verify-screens.md": "8576bc42c4e013581467cf5e8f5ab925cd20e6de732e13679e077cd8389f09ae",
+        "scripts/check_commit.py": "c4c10d5a4963e263997544705036eb2e7609d366c87542bcf0c994202d52f1ac",
+        "scripts/check_proofs.py": "801c7e876c3e934d4a0cd76a2b991554afed9ba17f937cdb8b855a46c1a8158a",
+        "scripts/fixtures/checks.md": "95d4dcd18d364d817b38f8a9adab9102db36964fd887310c6523311019e6bbb7",
+        "scripts/fixtures/plan.md": "d932d475f22e39b3eb0302690fd159b1ff0a934e5074071dfd606f67fe680b1c",
+        "scripts/fixtures/proofs.md": "4cc146b4bda2a319f0a6ee8ba1a70238aa9acd72bca9665703ff561feccaafd1",
+        "scripts/fixtures/verification.md": "b29a20c9824b7511e4c133363e9578692df8ffc6e3cc0c81b02501964dd92360",
+        "scripts/lean_config.py": "0018fff62e281e85d83466879692955511039cd52ea98c38d50c9544791c4989",
+        "scripts/lessons.py": "a08986589f8dead357acab4c5d0716fb6c02e43e4dba2ed29d9984c5f2667248",
+        "scripts/selftest.py": "a0882b54fe0f62d3260398a14b693596352f4f1e881e05a48d7f0e6f0878e759",
+        "scripts/validate_spec.py": "5bc094b031f89a2e776a4f5d74c05bddc836b2e3e757dfdaa4926bd9395d67b6",
+        "scripts/validate_tasks.py": "a4d6f04bf03675b34ecb82d1439bf9401c8582fa1b378db04310df932ecbd456",
+        "scripts/validate_verification.py": "f0e2b84b9b971b8f95b3735e9df702f5979c31eace7333fa2a15b797e0be4a13",
+        "SKILL.md": "cca28458ff959911af099165dbf378b5936e4cb925f6404184d1368e42715909"
+      },
+      "files_sha256": {
+        "references/coding-principles.md": "8c548affbcdaa4c62bd75bf27b39a81af41ec16bd603e5e634f30771bebd4fbb",
+        "references/design.md": "5001febbbaea2b62c8dfe06faa18fdba71a403489e935db7fcd88b8c2f716184",
+        "references/discuss.md": "53baf35f8d23713323f5b08ba5f32d79253365a7c82829c09b000f657397cb0b",
+        "references/implement.md": "239a490d2b96ec2d698f94ad6f18308979f66b03be7ccdd3a2fd86088a6ce683",
+        "references/lessons.md": "7b0b5d7295e8e17739ae81e454c726bdc0341d06525c1f90ae61fae3a1ad06ca",
+        "references/memory.md": "b1c3556ae1f4260d35379f2360fbbe7cee0dc3b570ca94bff50ca49e26658d19",
+        "references/specify.md": "650b8dfeb7fdc3743fc97d9cab6c036f8b814c8b89fe64ae3ea3c84736fdc4ee",
+        "references/sub-agents.md": "68de32f1ad4a14f7caa7164465288260ea7a4c46c0e1630c46a7b73d2b481685",
+        "references/tasks.md": "1ba57f668c2ba1e7a007c8beec3005dbe795d056001820c3b370593011f96d63",
+        "references/validate.md": "4ea2ece9fa19a6c3abf2bae1e8738a7653746969da65f9073f67bcf58047b3b2",
+        "references/verify-screens.md": "8576bc42c4e013581467cf5e8f5ab925cd20e6de732e13679e077cd8389f09ae",
+        "scripts/check_commit.py": "c4c10d5a4963e263997544705036eb2e7609d366c87542bcf0c994202d52f1ac",
+        "scripts/check_proofs.py": "801c7e876c3e934d4a0cd76a2b991554afed9ba17f937cdb8b855a46c1a8158a",
+        "scripts/fixtures/checks.md": "95d4dcd18d364d817b38f8a9adab9102db36964fd887310c6523311019e6bbb7",
+        "scripts/fixtures/plan.md": "d932d475f22e39b3eb0302690fd159b1ff0a934e5074071dfd606f67fe680b1c",
+        "scripts/fixtures/proofs.md": "4cc146b4bda2a319f0a6ee8ba1a70238aa9acd72bca9665703ff561feccaafd1",
+        "scripts/fixtures/verification.md": "b29a20c9824b7511e4c133363e9578692df8ffc6e3cc0c81b02501964dd92360",
+        "scripts/lean_config.py": "0018fff62e281e85d83466879692955511039cd52ea98c38d50c9544791c4989",
+        "scripts/lessons.py": "a08986589f8dead357acab4c5d0716fb6c02e43e4dba2ed29d9984c5f2667248",
+        "scripts/selftest.py": "a0882b54fe0f62d3260398a14b693596352f4f1e881e05a48d7f0e6f0878e759",
+        "scripts/validate_spec.py": "5bc094b031f89a2e776a4f5d74c05bddc836b2e3e757dfdaa4926bd9395d67b6",
+        "scripts/validate_tasks.py": "a4d6f04bf03675b34ecb82d1439bf9401c8582fa1b378db04310df932ecbd456",
+        "scripts/validate_verification.py": "f0e2b84b9b971b8f95b3735e9df702f5979c31eace7333fa2a15b797e0be4a13",
+        "SKILL.md": "863306d76f1895a30914a85a580fb32edaa92f2256bdfb39a1c7660bdd050c0a",
+        "UPSTREAM.md": "cca28458ff959911af099165dbf378b5936e4cb925f6404184d1368e42715909"
+      }
+    },
+    {
+      "name": "modular-design-principles",
+      "kind": "imported",
+      "path": ".agents/skills/modular-design-principles",
+      "source": {
+        "repository": "https://github.com/tech-leads-club/agent-skills",
+        "revision": "1da2195067c14ae5d44dc615b31cb26f50ebeb91",
+        "path": "packages/skills-catalog/skills/(architecture)/modular-design-principles"
+      },
+      "adapted_files": [],
+      "upstream_entrypoint": "SKILL.md",
+      "upstream_files_sha256": {
+        "references/principles.md": "090de066fa75d66033a4a635cb9b2fc27618f277fa9048b96747dfbe4960026d",
+        "SKILL.md": "52fe4ca680c80de2abd52773f47ba8014ff753030da6ccaa4cc1fe48d4e400f7"
+      },
+      "files_sha256": {
+        "references/principles.md": "090de066fa75d66033a4a635cb9b2fc27618f277fa9048b96747dfbe4960026d",
+        "SKILL.md": "52fe4ca680c80de2abd52773f47ba8014ff753030da6ccaa4cc1fe48d4e400f7"
+      }
+    },
+    {
+      "name": "create-adr",
+      "kind": "imported",
+      "path": ".agents/skills/create-adr",
+      "source": {
+        "repository": "https://github.com/tech-leads-club/agent-skills",
+        "revision": "1da2195067c14ae5d44dc615b31cb26f50ebeb91",
+        "path": "packages/skills-catalog/skills/(creation)/create-adr"
+      },
+      "adapted_files": [],
+      "upstream_entrypoint": "SKILL.md",
+      "upstream_files_sha256": {
+        "README.md": "5a0baaf788999d2c27a77480d8b23a85d0e781c2bfda32dfc71a320f7fc338ba",
+        "SKILL.md": "cde8b63afba27bcbbe22e46de64ed63287314233c331420bc33f50abdde06d1a"
+      },
+      "files_sha256": {
+        "README.md": "5a0baaf788999d2c27a77480d8b23a85d0e781c2bfda32dfc71a320f7fc338ba",
+        "SKILL.md": "cde8b63afba27bcbbe22e46de64ed63287314233c331420bc33f50abdde06d1a"
+      }
+    },
+    {
+      "name": "docs-writer",
+      "kind": "adapted",
+      "path": ".agents/skills/docs-writer",
+      "source": {
+        "repository": "https://github.com/tech-leads-club/agent-skills",
+        "revision": "1da2195067c14ae5d44dc615b31cb26f50ebeb91",
+        "path": "packages/skills-catalog/skills/(development)/docs-writer"
+      },
+      "adapted_files": [
+        "SKILL.md"
+      ],
+      "upstream_entrypoint": "UPSTREAM.md",
+      "upstream_files_sha256": {
+        "references/style-guide.md": "1b55350f52aa1b3bf0abc469f54b24b27556c1d32719a6d4d917c14304ea6248",
+        "SKILL.md": "2d7b01308e5076b4a56488643d05873d5017fa360ae78fb7baa7343d2f83fc7e"
+      },
+      "files_sha256": {
+        "references/style-guide.md": "1b55350f52aa1b3bf0abc469f54b24b27556c1d32719a6d4d917c14304ea6248",
+        "SKILL.md": "2832fc99dffce47a1c819f50e51ca22b8a9778c538d4526cbe9a5a6a0c6dbcf0",
+        "UPSTREAM.md": "2d7b01308e5076b4a56488643d05873d5017fa360ae78fb7baa7343d2f83fc7e"
+      }
+    },
+    {
+      "name": "coding-guidelines",
+      "kind": "imported",
+      "path": ".agents/skills/coding-guidelines",
+      "source": {
+        "repository": "https://github.com/tech-leads-club/agent-skills",
+        "revision": "1da2195067c14ae5d44dc615b31cb26f50ebeb91",
+        "path": "packages/skills-catalog/skills/(development)/coding-guidelines"
+      },
+      "adapted_files": [],
+      "upstream_entrypoint": "SKILL.md",
+      "upstream_files_sha256": {
+        "SKILL.md": "ccf8e60fa3300e7d6b685cb113d33ae267e48ff238f07c15cff90be801e7db1f"
+      },
+      "files_sha256": {
+        "SKILL.md": "ccf8e60fa3300e7d6b685cb113d33ae267e48ff238f07c15cff90be801e7db1f"
+      }
+    },
+    {
+      "name": "pitcrm-backend",
+      "kind": "project",
+      "path": ".agents/skills/pitcrm-backend",
+      "version": "1.0.0",
+      "files_sha256": {
+        "SKILL.md": "dea3f64eff48241dd8d4de62815c5cbf48fb586ce3f875d9d1084ee8066a1aab"
+      }
+    },
+    {
+      "name": "pitcrm-frontend",
+      "kind": "project",
+      "path": ".agents/skills/pitcrm-frontend",
+      "version": "1.0.0",
+      "files_sha256": {
+        "SKILL.md": "f770099d299f65ad4265e689de0926f37a380ed4adbdfe9541519f9feeab278d"
+      }
+    },
+    {
+      "name": "pitcrm-verification",
+      "kind": "project",
+      "path": ".agents/skills/pitcrm-verification",
+      "version": "1.0.0",
+      "files_sha256": {
+        "SKILL.md": "2c2a9d5021981b4b62770c5b7e465597e464a4e25775e884a56542880fc97657"
+      }
+    }
+  ]
+}

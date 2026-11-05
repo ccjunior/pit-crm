@@ -1,0 +1,27 @@
+:host { display: block; min-height: 100vh; }
+.app-shell { min-height: 100vh; display: grid; grid-template-columns: 16rem minmax(0, 1fr); background: #f4f7fa; }
+.sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; padding: 1.55rem 1.1rem 1.2rem; color: #d9e4ed; background: #142c49; }
+.brand, .mobile-brand { display: flex; align-items: center; gap: .7rem; color: #fff; font-size: 1.05rem; font-weight: 800; letter-spacing: -.035em; text-decoration: none; }
+.brand-mark { width: 2.15rem; height: 2.15rem; flex: 0 0 auto; display: grid; place-items: center; border-radius: .62rem; color: white; background: #17877a; font-size: 1.1rem; font-weight: 800; }
+.workspace-label { margin: 3.2rem 0 .45rem .65rem; color: #8fa4b9; font-size: .68rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.organization-name { margin: 0 .65rem 1.7rem; overflow: hidden; color: #f2f6fa; font-size: .9rem; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
+nav { display: grid; gap: .3rem; }
+.nav-link { display: flex; align-items: center; gap: .75rem; min-height: 2.8rem; border-radius: .5rem; padding: .6rem .7rem; color: #d6e0e9; text-decoration: none; font-size: .88rem; font-weight: 650; }
+.nav-link:hover, .nav-link:focus-visible { color: #fff; background: rgb(255 255 255 / 8%); outline: none; }
+.nav-link.active { color: #fff; background: #20516a; }
+.nav-icon { width: 1.1rem; color: #8ed9cb; font-size: 1.15rem; text-align: center; }
+.sidebar-footer { margin-top: auto; border-top: 1px solid rgb(255 255 255 / 12%); padding: 1rem .65rem 0; color: #9cafc0; font-size: .76rem; }
+.main-column { min-width: 0; }
+.topbar { min-height: 4.5rem; display: flex; align-items: center; justify-content: flex-end; gap: 1rem; border-bottom: 1px solid #e0e7ed; padding: .7rem clamp(1rem, 3vw, 2.5rem); background: #fff; }
+.mobile-brand { display: none; color: #142c49; }
+.account-area { display: flex; align-items: center; gap: 1.15rem; }
+.account-copy { display: grid; gap: .12rem; text-align: right; }
+.account-name { color: #203954; font-size: .85rem; font-weight: 750; }
+.account-role { color: #738297; font-size: .73rem; }
+.logout-button { min-height: 2.35rem; border: 1px solid #d5dee8; border-radius: .45rem; padding: .4rem .8rem; color: #344d68; background: #fff; font: inherit; font-size: .8rem; font-weight: 700; cursor: pointer; }
+.logout-button:hover:not(:disabled) { border-color: #9bb2c7; background: #f8fafc; }
+.logout-button:focus-visible { outline: 3px solid #85cfc3; outline-offset: 2px; }
+.logout-button:disabled { opacity: .6; cursor: wait; }
+.workspace { max-width: 88rem; margin: 0 auto; padding: clamp(1.25rem, 3vw, 2.7rem); }
+.shell-error { margin: 1rem clamp(1rem, 3vw, 2.5rem) 0; border-radius: .45rem; padding: .7rem .85rem; color: #8d2525; background: #fff2f2; font-size: .84rem; }
+@media (max-width: 760px) { .app-shell { grid-template-columns: 1fr; } .sidebar { display: none; } .topbar { justify-content: space-between; min-height: 4.1rem; } .mobile-brand { display: flex; } .account-area { gap: .65rem; } .account-copy { display: none; } .workspace { padding: 1.25rem 1rem; } }

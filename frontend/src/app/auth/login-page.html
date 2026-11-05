@@ -1,0 +1,58 @@
+<main class="login-layout">
+  <section class="login-panel" aria-labelledby="login-title">
+    <a class="brand" routerLink="/entrar" aria-label="PIT-CRM, entrar">
+      <span class="brand-mark" aria-hidden="true">P</span>
+      <span>PIT-CRM</span>
+    </a>
+
+    <div class="login-intro">
+      <p class="eyebrow">Acesso à operação</p>
+      <h1 id="login-title">Entre na sua conta</h1>
+      <p>Use seu e-mail de trabalho e sua senha para continuar.</p>
+    </div>
+
+    <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      <div class="field">
+        <label for="email">E-mail</label>
+        <input id="email" type="email" formControlName="email" autocomplete="username"
+          inputmode="email" required [attr.aria-invalid]="form.controls.email.touched && form.controls.email.invalid"
+          [attr.aria-describedby]="form.controls.email.touched && form.controls.email.invalid ? 'email-error' : null">
+        @if (form.controls.email.touched && form.controls.email.hasError('required')) {
+          <span class="field-error" id="email-error">Informe seu e-mail.</span>
+        } @else if (form.controls.email.touched && form.controls.email.hasError('email')) {
+          <span class="field-error" id="email-error">Informe um endereço de e-mail válido.</span>
+        }
+      </div>
+
+      <div class="field">
+        <label for="password">Senha</label>
+        <input id="password" type="password" formControlName="password" autocomplete="current-password"
+          required [attr.aria-invalid]="form.controls.password.touched && form.controls.password.invalid"
+          [attr.aria-describedby]="form.controls.password.touched && form.controls.password.invalid ? 'password-error' : null">
+        @if (form.controls.password.touched && form.controls.password.invalid) {
+          <span class="field-error" id="password-error">Informe sua senha.</span>
+        }
+      </div>
+
+      @if (errorMessage()) {
+        <p class="form-error" role="alert">{{ errorMessage() }}</p>
+      }
+
+      <button class="submit-button" type="submit" [disabled]="pending()">
+        {{ pending() ? 'Entrando…' : 'Entrar' }}
+      </button>
+    </form>
+
+    <p class="login-note">O acesso é administrado pela sua organização.</p>
+  </section>
+  <aside class="login-aside" aria-hidden="true">
+    <div class="aside-orbit orbit-one"></div>
+    <div class="aside-orbit orbit-two"></div>
+    <div class="aside-content">
+      <span class="aside-label">Operação conectada</span>
+      <h2>Do primeiro chamado ao trabalho concluído.</h2>
+      <p>Organize clientes, locais e demandas em um só lugar.</p>
+      <div class="aside-lines"><span></span><span></span><span></span></div>
+    </div>
+  </aside>
+</main>

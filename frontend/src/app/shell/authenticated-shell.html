@@ -1,0 +1,38 @@
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Navegação principal">
+    <a class="brand" routerLink="/demandas">
+      <span class="brand-mark" aria-hidden="true">P</span>
+      <span>PIT-CRM</span>
+    </a>
+    <div class="workspace-label">Organização</div>
+    <div class="organization-name">{{ auth.session()?.organization?.name }}</div>
+    <nav>
+      <a class="nav-link" routerLink="/demandas" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">
+        <span class="nav-icon" aria-hidden="true">◈</span> Demandas
+      </a>
+      <a class="nav-link" routerLink="/clientes" routerLinkActive="active">
+        <span class="nav-icon" aria-hidden="true">▧</span> Clientes e locais
+      </a>
+    </nav>
+    <div class="sidebar-footer">Gestão da operação</div>
+  </aside>
+
+  <div class="main-column">
+    <header class="topbar">
+      <div class="mobile-brand"><span class="brand-mark" aria-hidden="true">P</span> PIT-CRM</div>
+      <div class="account-area">
+        <div class="account-copy">
+          <span class="account-name">{{ auth.session()?.displayName }}</span>
+          <span class="account-role">{{ auth.session()?.roles?.join(' · ') }}</span>
+        </div>
+        <button class="logout-button" type="button" (click)="logout()" [disabled]="signingOut()">
+          {{ signingOut() ? 'Saindo…' : 'Sair' }}
+        </button>
+      </div>
+    </header>
+    @if (signOutError()) {
+      <p class="shell-error" role="alert">{{ signOutError() }}</p>
+    }
+    <main class="workspace"><router-outlet /></main>
+  </div>
+</div>

@@ -1,0 +1,6 @@
+@PitCrm.Api_HostAddress = http://localhost:5006
+
+GET {{PitCrm.Api_HostAddress}}/api/health
+Accept: application/json
+
+###

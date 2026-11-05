@@ -1,0 +1,112 @@
+<section class="customers-page" aria-labelledby="customers-title">
+  <div class="page-heading">
+    <div>
+      <p class="eyebrow">Cadastros</p>
+      <h1 id="customers-title">Clientes</h1>
+      <p class="intro">Consulte e mantenha os clientes da sua organização.</p>
+    </div>
+    @if (canManage()) {
+      <button class="primary-button" type="button" (click)="startCreate()">+ Novo cliente</button>
+    }
+  </div>
+
+  <div class="customer-layout">
+    <section class="list-card" aria-label="Lista de clientes">
+      <form class="search-form" (ngSubmit)="search()">
+        <label class="sr-only" for="customer-search">Buscar cliente por nome ou documento</label>
+        <input id="customer-search" [formControl]="query" placeholder="Nome ou documento" />
+        <button class="secondary-button" type="submit" [disabled]="loading()">Buscar</button>
+      </form>
+      @if (error() && customers().length > 0) { <p class="error-banner list-error" role="alert">{{ error() }}</p> }
+      @if (loading()) {
+        <div class="message" role="status">Carregando clientes…</div>
+      } @else if (error() && customers().length === 0) {
+        <div class="message error" role="alert">{{ error() }} <button type="button" class="text-button" (click)="load()">Tentar novamente</button></div>
+      } @else if (customers().length === 0) {
+        <div class="empty-state" role="status">
+          <span class="empty-icon" aria-hidden="true">◇</span>
+          <h2>{{ query.value ? 'Nenhum resultado' : 'Ainda não há clientes' }}</h2>
+          <p>{{ query.value ? 'Tente outro nome ou documento.' : 'Os clientes cadastrados aparecerão nesta lista.' }}</p>
+        </div>
+      } @else {
+        <ul class="customer-list">
+          @for (customer of customers(); track trackCustomer($index, customer)) {
+            <li>
+              <button type="button" class="customer-row" [class.selected]="selected()?.id === customer.id" (click)="select(customer)">
+                <span class="customer-avatar" aria-hidden="true">{{ customer.name.slice(0, 1).toLocaleUpperCase() }}</span>
+                <span class="customer-copy"><strong>{{ customer.name }}</strong><small>{{ customer.document || 'Sem documento informado' }}</small></span>
+                <span class="chevron" aria-hidden="true">›</span>
+              </button>
+            </li>
+          }
+        </ul>
+        <div class="pagination">
+          <span>{{ totalCount() }} {{ totalCount() === 1 ? 'cliente' : 'clientes' }}</span>
+          <div><button type="button" (click)="previousPage()" [disabled]="page() === 1 || loading()" aria-label="Página anterior">‹</button>
+          <span>Página {{ page() }}</span>
+          <button type="button" (click)="nextPage()" [disabled]="page() * 20 >= totalCount() || loading()" aria-label="Próxima página">›</button></div>
+        </div>
+      }
+    </section>
+
+    <section class="detail-card" aria-label="Detalhes do cliente">
+      @if (notice()) { <p class="notice" role="status">{{ notice() }}</p> }
+      @if (error() && (customers().length > 0 || selected())) { <p class="error-banner" role="alert">{{ error() }}</p> }
+      @if (editing()) {
+        <div class="detail-heading"><div><p class="eyebrow">{{ selected() ? 'Editar cadastro' : 'Novo cadastro' }}</p><h2>{{ selected() ? 'Editar cliente' : 'Novo cliente' }}</h2></div></div>
+        <form class="customer-form" (ngSubmit)="save()" novalidate>
+          <label for="customer-name">Nome <span>*</span></label>
+          <input id="customer-name" formControlName="name" maxlength="200" autocomplete="organization" />
+          @if (form.controls.name.touched && form.controls.name.invalid) { <small class="field-error">Informe o nome (até 200 caracteres).</small> }
+          <label for="customer-document">Documento <small>opcional</small></label>
+          <input id="customer-document" formControlName="document" maxlength="30" />
+          @if (form.controls.document.touched && form.controls.document.invalid) { <small class="field-error">Use até 30 caracteres.</small> }
+          <label for="customer-instructions">Instruções <small>opcional</small></label>
+          <textarea id="customer-instructions" formControlName="instructions" rows="4" maxlength="2000"></textarea>
+          @if (form.controls.instructions.touched && form.controls.instructions.invalid) { <small class="field-error">Use até 2.000 caracteres.</small> }
+          <div class="form-actions"><button class="secondary-button" type="button" (click)="cancelEdit()" [disabled]="saving()">Cancelar</button>
+            <button class="primary-button" type="submit" [disabled]="saving()">{{ saving() ? 'Salvando…' : 'Salvar cliente' }}</button></div>
+        </form>
+      } @else if (selected(); as customer) {
+        <div class="detail-heading"><div><p class="eyebrow">Cadastro do cliente</p><h2>{{ customer.name }}</h2></div>
+          @if (canManage()) { <button class="secondary-button" type="button" (click)="startEdit()">Editar</button> }
+        </div>
+        <dl class="detail-list"><div><dt>Documento</dt><dd>{{ customer.document || 'Não informado' }}</dd></div>
+          <div><dt>Instruções</dt><dd>{{ customer.instructions || 'Nenhuma instrução registrada.' }}</dd></div></dl>
+        <section class="locations-section" aria-labelledby="locations-title">
+          <div class="locations-heading"><div><p class="eyebrow">Atendimento</p><h3 id="locations-title">Locais</h3></div>
+            @if (canManage() && editingLocationId() === null) { <button type="button" class="secondary-button" (click)="startCreateLocation()">+ Adicionar local</button> }
+          </div>
+          @if (locationNotice()) { <p class="notice" role="status">{{ locationNotice() }}</p> }
+          @if (locationError()) { <p class="error-banner" role="alert">{{ locationError() }} <button type="button" class="text-button" (click)="loadLocations(customer.id)">Tentar novamente</button></p> }
+          @if (locationsLoading()) { <p class="message" role="status">Carregando locais…</p> }
+          @else if (locations().length === 0 && editingLocationId() !== 'new') {
+            <div class="no-locations" role="status"><span class="empty-icon" aria-hidden="true">⌖</span><p>Nenhum local cadastrado para este cliente.</p></div>
+          }
+          @if (locations().length > 0) {
+            <ul class="location-list">
+              @for (location of locations(); track location.id) {
+                <li class="location-item"><div><strong>{{ location.name }}</strong><p>{{ location.address }}</p>@if (location.instructions) { <small>{{ location.instructions }}</small> }</div>
+                  @if (canManage() && editingLocationId() === null) { <button class="text-button" type="button" (click)="startEditLocation(location)" [attr.aria-label]="'Editar ' + location.name">Editar</button> }
+                </li>
+              }
+            </ul>
+          }
+          @if (editingLocationId() !== null) {
+            <form class="location-form" [formGroup]="locationForm" (ngSubmit)="saveLocation()" novalidate>
+              <h4>{{ editingLocationId() === 'new' ? 'Novo local' : 'Editar local' }}</h4>
+              <label for="location-name">Nome <span>*</span></label><input id="location-name" formControlName="name" maxlength="200" />
+              @if (locationForm.controls.name.touched && locationForm.controls.name.invalid) { <small class="field-error">Informe o nome (até 200 caracteres).</small> }
+              <label for="location-address">Endereço <span>*</span></label><input id="location-address" formControlName="address" maxlength="500" autocomplete="street-address" />
+              @if (locationForm.controls.address.touched && locationForm.controls.address.invalid) { <small class="field-error">Informe o endereço (até 500 caracteres).</small> }
+              <label for="location-instructions">Instruções <small>opcional</small></label><textarea id="location-instructions" formControlName="instructions" rows="3" maxlength="2000"></textarea>
+              <div class="form-actions"><button class="secondary-button" type="button" (click)="cancelLocationEdit()" [disabled]="locationSaving()">Cancelar</button><button class="primary-button" type="submit" [disabled]="locationSaving()">{{ locationSaving() ? 'Salvando…' : 'Salvar local' }}</button></div>
+            </form>
+          }
+        </section>
+      } @else {
+        <div class="detail-empty"><span class="empty-icon" aria-hidden="true">↖</span><h2>Selecione um cliente</h2><p>Os dados do cadastro aparecerão neste painel.</p></div>
+      }
+    </section>
+  </div>
+</section>
