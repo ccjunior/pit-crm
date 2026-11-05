@@ -57,7 +57,7 @@ npm ci
 npm start
 ```
 
-O Angular fica em `http://localhost:4200` e encaminha `/api` para a API local em `http://localhost:5006`. O PostgreSQL do Compose fica disponível em `localhost:5433`; a porta evita conflito com uma instalação local padrão em `5432`. `npm run build` compila o frontend. `docker compose down` interrompe o PostgreSQL e mantém o volume local.
+O Angular fica em `http://localhost:4200` e encaminha `/api` para a API local em `http://localhost:5006`. O PostgreSQL do Compose fica disponível em `localhost:5433`; a porta evita conflito com uma instalação local padrão em `5432`. Para a imagem PostgreSQL 18, o volume nomeado `pitcrm_postgres_data` é montado em `/var/lib/postgresql`, caminho que mantém o diretório de dados versionado da imagem. `docker compose down` interrompe o PostgreSQL sem remover esse volume.
 
 As ferramentas de migração ficam no manifesto local `backend/dotnet-tools.json`. O projeto inclui o `DbContext` e as migrações de organização, conta, clientes, locais, demandas e troca obrigatória de senha inicial. A configuração local acima aplica as migrações já existentes. Para **criar uma migração depois de alterar o modelo**, use o comando abaixo no mesmo terminal:
 

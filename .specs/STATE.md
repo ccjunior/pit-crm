@@ -4,7 +4,7 @@ Atualizado em 05/11/2026.
 
 ## Situação
 
-Documentação de descoberta, escopo, modelo operacional e arquitetura disponível. O usuário aprovou a primeira entrega operacional em 05/11/2026. T01–T17 estão concluídas localmente; T18 é a próxima. Schema, provisionamento idempotente, sessão com antifalsificação, políticas iniciais, interface de entrada, clientes/locais, criação de demanda e gestão de equipe/senha inicial foram verificados. Um cluster local, ignorado em `.local/postgres-data`, está acessível em `127.0.0.1:5432`; o daemon Docker não está ativo.
+Documentação de descoberta, escopo, modelo operacional e arquitetura disponível. O usuário aprovou a primeira entrega operacional em 05/11/2026. T01–T17 estão concluídas localmente; T18 é a próxima. Schema, provisionamento idempotente, sessão com antifalsificação, políticas iniciais, interface de entrada, clientes/locais, criação de demanda e gestão de equipe/senha inicial foram verificados. O PostgreSQL 18.4 do Compose está ativo em `127.0.0.1:5433`; o banco `pitcrm_dev` foi inicializado agora e ainda aguarda as migrações da aplicação.
 
 ## Decisions
 
@@ -47,4 +47,4 @@ Permanecem as questões da Etapa 0 em [03-ROADMAP-E-PENDENCIAS.md](../docs/03-RO
 
 ## Handoff
 
-Execução: primeira entrega aprovada; T01–T17 concluídas localmente; T18 pendente. Repositório inicializado em `ccjunior/pit-crm`; commit inicial `99f9d7f` e registro `4e529d8` enviados para `origin/main`. Checkpoint de código T14–T17 enviado para `origin/main` no commit `f989039`. O Compose foi validado por configuração, mas não iniciado porque o daemon Docker está desligado; banco PostgreSQL 18.4 local está acessível para desenvolvimento/teste. Não declarar a Etapa 0 inteira concluída.
+Execução: primeira entrega aprovada; T01–T17 concluídas localmente; T18 pendente. Repositório inicializado em `ccjunior/pit-crm`; commits iniciais e checkpoint de código T14–T17 estão em `origin/main`. O Compose foi ajustado ao caminho de volume do PostgreSQL 18; serviço ativo e conexão local em 5433 confirmada. O schema da aplicação e o provisionamento do primeiro Administrador ainda não foram executados neste banco recém-inicializado. Não declarar a Etapa 0 inteira concluída.
