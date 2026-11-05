@@ -25,17 +25,28 @@ A [primeira entrega operacional](.specs/features/primeira-entrega-operacional/sp
 
 Requisitos instalados e registrados em [arquitetura técnica](docs/04-ARQUITETURA-TECNICA.md): SDK/runtime .NET 10, Node.js 24.15.0 ou superior na linha 24, npm 11.12.1 e Docker com Compose. O serviço PostgreSQL desta configuração usa a imagem 18.4.
 
+### PostgreSQL pelo Docker Compose
+
 No PowerShell, a partir da raiz do projeto:
 
 ```powershell
-Copy-Item .env.example .env
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 docker compose up -d postgres
 $env:PITCRM_CONNECTION_STRING = "Host=localhost;Port=5433;Database=pitcrm_dev;Username=pitcrm;Password=pitcrm_local_dev"
 $env:PITCRM_TEST_CONNECTION = $env:PITCRM_CONNECTION_STRING
-dotnet restore backend/PitCrm.sln
-dotnet test backend/PitCrm.sln
-dotnet run --project backend/src/PitCrm.Api
+Set-Location backend
+dotnet restore PitCrm.sln
+dotnet tool restore
+dotnet ef database update --project src/PitCrm.Infrastructure --startup-project src/PitCrm.Api
+dotnet test PitCrm.sln
+dotnet run --project src/PitCrm.Api
 ```
+
+O arquivo `.env` é lido pelo Docker Compose para configurar o container PostgreSQL; a API .NET e os comandos do Entity Framework **não** leem esse arquivo. As variáveis `$env:PITCRM_CONNECTION_STRING` e `$env:PITCRM_TEST_CONNECTION` acima são definidas no processo do PowerShell e valem apenas naquele terminal. Mantenha a connection string coerente com `PITCRM_DB_NAME`, `PITCRM_DB_USER`, `PITCRM_DB_PASSWORD` e `PITCRM_DB_PORT` do `.env`. Com os valores padrão do `.env.example`, a porta publicada é `5433`.
+
+Se você usar um PostgreSQL instalado diretamente no computador, não inicie o serviço `postgres` do Compose; defina `PITCRM_CONNECTION_STRING` com a porta, o banco e as credenciais dessa instalação. A porta padrão de uma instalação local costuma ser `5432`; use as credenciais reais dela.
+
+Execute a API, testes e migrações no mesmo terminal onde definiu as variáveis. `PITCRM_TEST_CONNECTION` pode apontar para o mesmo banco local: cada teste cria um schema temporário, aplica as migrações nele e remove somente esse schema ao terminar.
 
 Em outro terminal, valide a API e inicie o Angular:
 
@@ -48,15 +59,15 @@ npm start
 
 O Angular fica em `http://localhost:4200` e encaminha `/api` para a API local em `http://localhost:5006`. O PostgreSQL do Compose fica disponível em `localhost:5433`; a porta evita conflito com uma instalação local padrão em `5432`. `npm run build` compila o frontend. `docker compose down` interrompe o PostgreSQL e mantém o volume local.
 
-As ferramentas de migração ficam no manifesto local `backend/dotnet-tools.json`. O projeto inclui o `DbContext` e as migrações de organização, conta, clientes, locais, demandas e troca obrigatória de senha inicial. Configure a connection string pela variável local e rode no PowerShell:
+As ferramentas de migração ficam no manifesto local `backend/dotnet-tools.json`. O projeto inclui o `DbContext` e as migrações de organização, conta, clientes, locais, demandas e troca obrigatória de senha inicial. A configuração local acima aplica as migrações já existentes. Para **criar uma migração depois de alterar o modelo**, use o comando abaixo no mesmo terminal:
 
 ```powershell
-Set-Location backend
-$env:PITCRM_CONNECTION_STRING = "Host=localhost;Port=5433;Database=pitcrm_dev;Username=pitcrm;Password=pitcrm_local_dev"
 dotnet tool restore
 dotnet ef migrations add MinhaAlteracao --project src/PitCrm.Infrastructure --startup-project src/PitCrm.Api --output-dir Persistence/Migrations
 dotnet ef database update --project src/PitCrm.Infrastructure --startup-project src/PitCrm.Api
 ```
+
+Se abrir um terminal novo, defina novamente `PITCRM_CONNECTION_STRING` antes de iniciar a API, executar testes ou aplicar migrações.
 
 Não coloque a connection string ou senha em arquivos versionados. O valor de exemplo usa a senha local do `.env.example`; ajuste-o ao ambiente ativo. Os testes PostgreSQL criam um schema isolado e o removem ao terminar.
 
