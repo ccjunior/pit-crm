@@ -47,4 +47,4 @@ Permanecem as questões da Etapa 0 em [03-ROADMAP-E-PENDENCIAS.md](../docs/03-RO
 
 ## Handoff
 
-Execução: primeira entrega aprovada; T01–T17 concluídas localmente; T18 pendente. Repositório inicializado em `ccjunior/pit-crm`; commit inicial `99f9d7f` e registro `4e529d8` enviados para `origin/main`. Alterações T14–T17 aguardam o próximo checkpoint Git. O Compose foi validado por configuração, mas não iniciado porque o daemon Docker está desligado; banco PostgreSQL 18.4 local está acessível para desenvolvimento/teste. Não declarar a Etapa 0 inteira concluída.
+Execução: primeira entrega aprovada; T01–T17 concluídas localmente; T18 pendente. Repositório inicializado em `ccjunior/pit-crm`; commit inicial `99f9d7f` e registro `4e529d8` enviados para `origin/main`. Checkpoint de código T14–T17 enviado para `origin/main` no commit `f989039`. O Compose foi validado por configuração, mas não iniciado porque o daemon Docker está desligado; banco PostgreSQL 18.4 local está acessível para desenvolvimento/teste. Não declarar a Etapa 0 inteira concluída.

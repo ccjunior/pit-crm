@@ -258,5 +258,5 @@ Após as tarefas, conferir PEO-01 a PEO-26 e atualizar [verification.md](verific
 
 - T01–T17 concluídas localmente. D04–D08 foram aplicadas; interface da equipe e troca obrigatória continuam em T19.
 - O escopo da funcionalidade foi aprovado em 05/11/2026; D01–D03 permanecem confirmadas e os detalhamentos condicionais continuam como proposta até serem necessários.
-- Nenhum agente foi delegado. Commit `99f9d7f` enviado para `origin/main` conforme solicitação do usuário; deploy não autorizado.
+- Nenhum agente foi delegado. Commits `99f9d7f`, `4e529d8` e `f989039` enviados para `origin/main` conforme solicitação do usuário; deploy não autorizado.
 - Próximo trabalho: T18 (busca paginada e detalhe de demandas). T12 foi entregue antecipadamente por ser independente.
