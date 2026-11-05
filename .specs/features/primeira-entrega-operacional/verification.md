@@ -1,7 +1,7 @@
 # Primeira entrega operacional — verificação
 
 **Objeto:** especificação, desenho, plano de tarefas e implementação da primeira entrega operacional.
-**Estado:** T01–T13 verificadas em 05/11/2026. Formulário/consulta de demandas, equipe e critérios restantes seguem pendentes.
+**Estado:** T01–T17 verificadas localmente em 05/11/2026. Consulta/edição de demandas, interface de equipe e critérios restantes seguem pendentes.
 
 ## Escopo da conferência
 
@@ -155,16 +155,37 @@ Não foi feita autenticação visual com conta provisionada no banco de desenvol
 | Persistência | Migração `AddDemandCreation` em schema de teste e `pitcrm_dev` | Tabelas, índices e FKs compostas criados; schema temporário removido |
 | Suíte backend | `dotnet test backend/PitCrm.sln --configuration Debug` com `PITCRM_TEST_CONNECTION` | 6 aprovados, 0 falhas |
 
+## Evidências de T14
+
+| Verificação | Procedimento | Resultado |
+| --- | --- | --- |
+| Seleção e vínculo local | Teste carrega cliente, seleciona, busca locais; mudança limpa local anterior | Requisição de locais usa o cliente ativo; seleção antiga descartada |
+| Campos do formulário | Teste envia campos obrigatórios e omite responsável/chamado/OC; prioridade opcional em enum | Body respeita requisitos D02/D06 e campos opcionais |
+| CSRF, envio único e erros | Interceptor injeta token; dois submits seguidos; resposta 400 com erro de vínculo | Um POST; erro localizado; valores digitados preservados; sem repetição automática |
+| Sucesso | API retorna demanda criada | Interface confirma ID interno e estado Recebida |
+| Frontend | `npm test -- --watch=false`; `npm run build` | 4 arquivos/11 testes aprovados; build de produção sem avisos |
+
+## Evidências de T15 a T17
+
+| Verificação | Procedimento | Resultado |
+| --- | --- | --- |
+| Equipe: sessão, papéis e isolamento | HTTP sem sessão, Administrador, Gestor, Operador e outra organização | Sem sessão 401; Administrador lista/cria/edita; Gestor e Operador recebem 403; IDs de outra organização recebem 404 |
+| Criação e troca obrigatória | Criar conta com senha temporária; tentar operação; trocar senha própria com CSRF; autenticar com credencial antiga e nova | Conta exige troca; operação negada até troca; senha antiga recebe 401 e nova autentica; segredo/hash não são retornados |
+| Edição de conta | Administrador atualiza nome/e-mail/papel/estado; consultar listagem e persistência | HTTP 200 e campos persistidos na organização correta |
+| Proteção do último Administrador | Desativar último Administrador ativo via API | HTTP 409; conta permanece ativa |
+| Alterações concorrentes | Duas sessões Administradoras reduzem simultaneamente seus próprios perfis | Uma alteração é aceita e a outra é recusada; exatamente um Administrador ativo permanece |
+| Migração e backend | Migração `AddInitialPasswordChange`; `dotnet test backend/PitCrm.sln --configuration Debug` com `PITCRM_TEST_CONNECTION` e `PITCRM_CONNECTION_STRING` | Migração aplicada em schema de teste e `pitcrm_dev`; 7 testes aprovados, 0 falhas |
+
 ## Verificação de comportamento planejada
 
 | Cenário | Critérios principais | Estado atual |
 | --- | --- | --- |
 | Preparar organização e primeiro Administrador; repetir provisionamento | PEO-01 | Backend verificado por teste e smoke test; demonstração integrada ainda em T23 |
 | Entrar, consultar sessão e sair | PEO-02, PEO-03, PEO-04, PEO-25 | Backend T04 e integração Angular T06 verificados; interface validada em navegador |
-| Trocar credencial inicial quando exigida | PEO-06 | Não executado; tarefas T15–T16 e T19 |
-| Administrador cadastra equipe; Gestor/Operador recebem recusa | PEO-05, PEO-07 | Política avaliada em T05; endpoint HTTP e último Administrador pendentes em T15–T17 |
+| Trocar credencial inicial quando exigida | PEO-06 | API T16 verificada; interface guiada ainda pendente em T19 |
+| Administrador cadastra/edita equipe; Gestor/Operador recebem recusa | PEO-05, PEO-07 | APIs T15/T17 e proteção do último Administrador verificadas; interface pendente em T19 |
 | Administrador/Gestor mantêm clientes e locais; Operador consulta | PEO-08, PEO-09, PEO-10, PEO-11 | APIs e telas T07–T11 verificadas; Gestor grava e Operador consulta |
-| Criar demanda sem chamado e sem responsável | PEO-12, PEO-13, PEO-14, PEO-15 | API T13 verificada; formulário ainda pendente em T14 |
+| Criar demanda sem chamado e sem responsável | PEO-12, PEO-13, PEO-14, PEO-15 | API T13 e formulário T14 verificados; recarga/consulta integrada ainda em T23 |
 | Consultar responsáveis elegíveis; rejeitar referência incompatível na demanda | PEO-16, PEO-21 | T12 e vínculos de T13 verificados por HTTP; edição/concorrência pendentes em T20 |
 | Buscar, filtrar e abrir detalhe após nova sessão | PEO-17, PEO-18, PEO-21 | Não executado; tarefas T18 e T21 |
 | Editar demanda, registrar atividade e detectar versão antiga | PEO-19, PEO-20, PEO-22 | Não executado; tarefas T20 e T22 |
@@ -174,6 +195,6 @@ Não foi feita autenticação visual com conta provisionada no banco de desenvol
 
 ## Limites
 
-Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream, de Git, commits e provas de feature não foram executados; seu gate completo não está aprovado. T01–T13 cobrem estrutura, autenticação, autorização inicial, interface de entrada, APIs/telas de clientes e locais, consulta de responsáveis e criação transacional de demanda. Equipe, formulário/consulta de demandas e critérios restantes seguem pendentes. A tela de login foi inspecionada no navegador; clientes/locais foram conferidos por testes de componentes e build, sem autenticação visual em navegador.
+Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T17 cobrem estrutura, autenticação, autorização inicial, entrada, clientes/locais, criação de demanda e APIs administrativas de equipe/senha. Interface de equipe, consulta/edição de demandas e critérios restantes seguem pendentes. Login foi inspecionado no navegador; telas de cadastros/demanda foram verificadas por testes de componentes e build, sem sessão autenticada no navegador.
 
-Revisão documental e implementação T01–T13 realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.
+Revisão documental e implementação T01–T17 realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.

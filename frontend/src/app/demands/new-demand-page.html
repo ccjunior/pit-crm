@@ -1,0 +1,52 @@
+<section class="new-demand-page" aria-labelledby="new-demand-title">
+  <a class="back-link" routerLink="/demandas">← Voltar para demandas</a>
+  <div class="page-heading"><div><p class="eyebrow">Operação</p><h1 id="new-demand-title">Nova demanda</h1>
+    <p class="intro">Registre a solicitação. Chamado, ordem de compra e responsável podem ser informados depois.</p></div></div>
+
+  @if (pageError()) { <div class="error-banner" role="alert">{{ pageError() }} <button class="text-button" type="button" (click)="searchCustomers()">Recarregar clientes</button></div> }
+  @if (created(); as demand) {
+    <section class="success-card" aria-live="polite" role="status">
+      <span class="success-icon" aria-hidden="true">✓</span>
+      <div><p class="eyebrow">Demanda registrada</p><h2>{{ demand.id }}</h2><p>Status inicial: <strong>{{ demand.status }}</strong></p>
+        <p>Guarde este identificador para localizar a demanda.</p></div>
+      <a class="secondary-button" routerLink="/demandas">Voltar às demandas</a>
+    </section>
+  } @else {
+    <form class="demand-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
+      @if (submitError()) { <div class="error-banner" role="alert">{{ submitError() }}</div> }
+      <section class="form-section" aria-labelledby="reference-title">
+        <div class="section-heading"><span class="section-number">1</span><div><h2 id="reference-title">Cliente e local</h2><p>Escolha onde o serviço será realizado.</p></div></div>
+        <div class="customer-search"><label for="customer-search">Buscar cliente</label><div><input id="customer-search" [formControl]="customerSearch" placeholder="Nome ou documento" (keydown.enter)="$event.preventDefault(); searchCustomers()" /><button class="secondary-button" type="button" (click)="searchCustomers()" [disabled]="searchingCustomers()">{{ searchingCustomers() ? 'Buscando…' : 'Buscar' }}</button></div></div>
+        <label for="customer-id">Cliente <span>*</span></label>
+        <select id="customer-id" formControlName="customerId" (change)="onCustomerChange()"><option value="">Selecione o cliente</option>@for (customer of customers(); track customer.id) { <option [value]="customer.id">{{ customer.name }}{{ customer.document ? ' · ' + customer.document : '' }}</option> }</select>
+        @if (form.controls.customerId.touched && form.controls.customerId.invalid) { <small class="field-error">Selecione um cliente.</small> }
+        @if (fieldError('CustomerId')) { <small class="field-error">{{ fieldError('CustomerId') }}</small> }
+        <label for="location-id">Local <span>*</span></label>
+        <select id="location-id" formControlName="locationId" [disabled]="!form.controls.customerId.value || loadingLocations()"><option value="">{{ loadingLocations() ? 'Carregando locais…' : 'Selecione o local' }}</option>@for (location of locations(); track location.id) { <option [value]="location.id">{{ location.name }} — {{ location.address }}</option> }</select>
+        @if (form.controls.locationId.touched && form.controls.locationId.invalid) { <small class="field-error">Selecione um local deste cliente.</small> }
+        @if (fieldError('LocationId')) { <small class="field-error">{{ fieldError('LocationId') }}</small> }
+        @if (form.controls.customerId.value && !loadingLocations() && locations().length === 0) { <p class="inline-hint" role="status">Este cliente ainda não possui locais cadastrados.</p> }
+      </section>
+
+      <section class="form-section" aria-labelledby="request-title">
+        <div class="section-heading"><span class="section-number">2</span><div><h2 id="request-title">Solicitação</h2><p>Descreva o que foi solicitado e como chegou até a equipe.</p></div></div>
+        <label for="description">Descrição <span>*</span></label><textarea id="description" formControlName="description" rows="5" maxlength="4000" placeholder="Descreva a solicitação do cliente"></textarea>
+        @if (form.controls.description.touched && form.controls.description.invalid) { <small class="field-error">A descrição é obrigatória e deve ter até 4.000 caracteres.</small> }
+        @if (fieldError('Description')) { <small class="field-error">{{ fieldError('Description') }}</small> }
+        <label for="origin">Origem <span>*</span></label><select id="origin" formControlName="origin"><option value="">Selecione a origem</option><option value="WhatsApp">WhatsApp</option><option value="Ligação">Ligação</option><option value="E-mail">E-mail</option><option value="Outra">Outra</option></select>
+        @if (form.controls.origin.touched && form.controls.origin.invalid) { <small class="field-error">Selecione a origem.</small> }
+        @if (fieldError('Origin')) { <small class="field-error">{{ fieldError('Origin') }}</small> }
+      </section>
+
+      <section class="form-section optional-section" aria-labelledby="details-title">
+        <div class="section-heading"><span class="section-number optional">3</span><div><h2 id="details-title">Detalhes opcionais</h2><p>Você pode completar estas informações depois.</p></div></div>
+        <div class="field-grid"><div><label for="assignee">Responsável interno</label><select id="assignee" formControlName="assignedToUserId"><option value="">Sem responsável</option>@for (assignee of assignees(); track assignee.id) { <option [value]="assignee.id">{{ assignee.displayName }}</option> }</select></div>
+          <div><label for="priority">Prioridade</label><select id="priority" formControlName="priority"><option value="">Sem prioridade</option><option value="Baixa">Baixa</option><option value="Média">Média</option><option value="Alta">Alta</option></select></div>
+          <div><label for="ticket-reference">Chamado/ticket</label><input id="ticket-reference" formControlName="ticketReference" maxlength="100" /></div>
+          <div><label for="purchase-order-reference">Ordem de compra</label><input id="purchase-order-reference" formControlName="purchaseOrderReference" maxlength="100" /></div></div>
+      </section>
+
+      <div class="form-footer"><p>Ao salvar, a demanda começará com o status <strong>Recebida</strong>.</p><button class="primary-button" type="submit" [disabled]="submitting()">{{ submitting() ? 'Enviando…' : 'Registrar demanda' }}</button></div>
+    </form>
+  }
+</section>

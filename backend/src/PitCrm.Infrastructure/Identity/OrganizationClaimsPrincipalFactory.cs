@@ -14,6 +14,7 @@ public sealed class OrganizationClaimsPrincipalFactory(
     {
         var identity = await base.GenerateClaimsAsync(user);
         identity.AddClaim(new Claim(OrganizationIdClaim.Type, user.OrganizationId.ToString("D")));
+        identity.AddClaim(new Claim("must_change_password", user.MustChangePassword ? "true" : "false"));
         return identity;
     }
 }

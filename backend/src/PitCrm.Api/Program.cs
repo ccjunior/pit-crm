@@ -8,6 +8,7 @@ using PitCrm.Api.Authorization;
 using PitCrm.Api.Features.Customers;
 using PitCrm.Api.Features.Locations;
 using PitCrm.Api.Features.Demands;
+using PitCrm.Api.Features.Users;
 using PitCrm.Application.Authorization;
 using PitCrm.Application.Organizations.Provisioning;
 using PitCrm.Application.Users.EligibleAssignees;
@@ -81,6 +82,7 @@ builder.Services.ConfigureApplicationCookie(options =>
             .Select(user => new
             {
                 user.IsActive,
+                user.MustChangePassword,
                 user.OrganizationId,
                 OrganizationIsActive = user.Organization.IsActive,
                 Roles = dbContext.UserRoles.Where(role => role.UserId == user.Id)
@@ -89,6 +91,7 @@ builder.Services.ConfigureApplicationCookie(options =>
             })
             .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
         var organizationClaim = context.Principal?.FindFirstValue(OrganizationIdClaim.Type);
+        var passwordChangeClaim = context.Principal?.FindFirstValue(AuthorizationPolicies.MustChangePasswordClaim);
         var sessionRoles = context.Principal?.FindAll(ClaimTypes.Role)
             .Select(claim => claim.Value)
             .OrderBy(role => role, StringComparer.Ordinal)
@@ -99,6 +102,7 @@ builder.Services.ConfigureApplicationCookie(options =>
         if (account is not { IsActive: true, OrganizationIsActive: true }
             || !Guid.TryParse(organizationClaim, out var organizationId)
             || organizationId != account.OrganizationId
+            || !string.Equals(passwordChangeClaim, account.MustChangePassword ? "true" : "false", StringComparison.Ordinal)
             || !sessionRoles.SequenceEqual(currentRoles, StringComparer.Ordinal))
         {
             context.RejectPrincipal();
@@ -109,13 +113,17 @@ builder.Services.ConfigureApplicationCookie(options =>
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy(AuthorizationPolicies.ReadCustomersAndLocations, policy =>
-        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator));
+        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
     options.AddPolicy(AuthorizationPolicies.ManageCustomersAndLocations, policy =>
-        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager));
+        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
     options.AddPolicy(AuthorizationPolicies.ManageTeam, policy =>
-        policy.RequireRole(RoleNames.Administrator));
+        policy.RequireRole(RoleNames.Administrator)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
     options.AddPolicy(AuthorizationPolicies.OperateDemands, policy =>
-        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator));
+        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
     options.AddPolicy(AuthorizationPolicies.ChangeOwnPassword, policy =>
         policy.RequireRole(RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator));
 });
@@ -211,6 +219,7 @@ app.MapGet("/api/auth/me", async (HttpContext context, ClaimsPrincipal principal
         {
             user.Id,
             user.DisplayName,
+            user.MustChangePassword,
             Email = user.Email!,
             Organization = new { user.Organization.Id, user.Organization.Name },
             Roles = dbContext.UserRoles.Where(role => role.UserId == user.Id)
@@ -245,9 +254,45 @@ app.MapPost("/api/auth/logout", async (
     return Results.NoContent();
 }).RequireAuthorization();
 
+app.MapPost("/api/auth/change-password", async (
+    ChangePasswordRequest request,
+    HttpContext context,
+    IAntiforgery antiforgery,
+    UserManager<ApplicationUser> userManager,
+    SignInManager<ApplicationUser> signInManager,
+    ICurrentOrganizationContext organizationContext) =>
+{
+    if (!await IsAntiforgeryValidAsync(context, antiforgery))
+    {
+        return Results.BadRequest(new { error = "Proteção da solicitação inválida. Atualize a página e tente novamente." });
+    }
+    if (string.IsNullOrEmpty(request.CurrentPassword) || string.IsNullOrEmpty(request.NewPassword))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]> { ["NewPassword"] = ["Informe a senha atual e uma nova senha."] });
+    }
+
+    var user = await userManager.FindByIdAsync(organizationContext.UserId.ToString());
+    if (user is null || !user.IsActive || user.OrganizationId != organizationContext.OrganizationId) return Results.Unauthorized();
+    var result = await userManager.ChangePasswordAsync(user, request.CurrentPassword, request.NewPassword);
+    if (!result.Succeeded)
+    {
+        var errors = result.Errors.Any(error => error.Code == "PasswordMismatch")
+            ? new Dictionary<string, string[]> { ["CurrentPassword"] = ["A senha atual está incorreta."] }
+            : new Dictionary<string, string[]> { ["NewPassword"] = ["A nova senha não atende aos requisitos de segurança."] };
+        return Results.ValidationProblem(errors);
+    }
+
+    user.MustChangePassword = false;
+    var updateResult = await userManager.UpdateAsync(user);
+    if (!updateResult.Succeeded) return Results.Problem("Não foi possível atualizar a credencial.");
+    await signInManager.RefreshSignInAsync(user);
+    return Results.NoContent();
+}).RequireAuthorization(AuthorizationPolicies.ChangeOwnPassword);
+
 CustomerEndpoints.Map(app);
 CustomerLocationEndpoints.Map(app);
 DemandEndpoints.Map(app);
+TeamEndpoints.Map(app);
 
 static string RequiredEnvironmentValue(string name)
 {
@@ -277,3 +322,4 @@ app.Run();
 
 public partial class Program { }
 public sealed record LoginRequest(string Email, string Password);
+public sealed record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);

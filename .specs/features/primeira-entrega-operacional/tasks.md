@@ -1,6 +1,6 @@
 # Primeira entrega operacional — plano de tarefas
 
-**Estado:** escopo aprovado para implementação em 05/11/2026; T01–T13 concluídas; T14 é a próxima.
+**Estado:** escopo aprovado para implementação em 05/11/2026; T01–T17 concluídas; T18 é a próxima.
 **Fontes:** [spec.md](spec.md), [design.md](design.md) e decisões confirmadas em [context.md](context.md).
 **Autorização atual:** implementação local aprovada em 05/11/2026; o usuário solicitou inicializar Git e enviar para `ccjunior/pit-crm` em 05/11/2026.
 **Approved**: 2026-11-05 - user: "aprovo"
@@ -89,7 +89,7 @@ Cada linha identifica um resultado verificável, uma área responsável e depend
 | T22 | Edição dos dados básicos de demanda — frontend | T20, T21, T12, T14 | PEO-16, PEO-19, PEO-20, PEO-23, PEO-24, PEO-26 | Reutiliza o formulário de demanda; integra responsáveis elegíveis; respeita versão e vínculos; mantém preenchimento no erro e orienta recarga em conflito |
 | T23 | Demonstração integrada e consolidação de evidências — integração | T11, T14, T19, T21, T22, T03 | PEO-01, PEO-02, PEO-04, PEO-05, PEO-08, PEO-11, PEO-13, PEO-17, PEO-18, PEO-19, PEO-20, PEO-21, PEO-23, PEO-24, PEO-25, PEO-26 | Executa as suítes reais das tarefas e o cenário com três perfis e duas organizações; testa recarga e edição entre sessões; consolida resultados, limitações e instruções no README e na verificação |
 
-**Andamento:** T01–T13 concluídas em 05/11/2026; T14–T23 pendentes. Nenhuma linha concluída significa apenas “arquivo criado”; a condição é o resultado e sua verificação.
+**Andamento:** T01–T17 concluídas em 05/11/2026; T18–T23 pendentes. Nenhuma linha concluída significa apenas “arquivo criado”; a condição é o resultado e sua verificação.
 
 ### Evidência de T01
 
@@ -180,6 +180,27 @@ Cada linha identifica um resultado verificável, uma área responsável e depend
 - Demanda e atividade inicial são gravadas na mesma transação. Teste de sucesso confirmou a atividade; uma falha relacional simulada na atividade confirmou que nenhuma demanda parcial ficou persistida.
 - Migração `AddDemandCreation` aplicada em schema de teste e `pitcrm_dev`; `dotnet test backend/PitCrm.sln --configuration Debug` com `PITCRM_TEST_CONNECTION`: 6 aprovados, 0 falhas.
 
+### Evidência de T14
+
+- Tela `/demandas/nova` carrega clientes pesquisáveis e responsáveis elegíveis; ao trocar cliente, limpa o local e consulta somente os locais do novo cliente.
+- Formulário exige cliente, local, descrição e origem; prioridade Baixa/Média/Alta, responsável, chamado e OC permanecem opcionais. Comprimentos seguem a spec.
+- Envio inclui antifalsificação, desabilita o botão durante a requisição e não repete automaticamente. Erros mantêm os valores e exibem mensagem/campo retornado pela API; sucesso mostra o ID e status Recebida.
+- `npm test -- --watch=false`: 4 arquivos/11 testes aprovados, incluindo filtro por cliente, CSRF, dados opcionais, envio simultâneo, preservação em erro e resultado de sucesso. `npm run build`: aprovado sem avisos.
+
+### Evidência de T15 e T16
+
+- `GET /api/users` e `POST /api/users` são exclusivos do Administrador. A criação exige nome, e-mail, perfil-base e senha temporária; associa a organização da sessão, ativa troca obrigatória e não devolve senha/hash.
+- Testes HTTP confirmam 201/listagem para Administrador, 403 para Gestor e Operador e limite da listagem à organização atual.
+- `POST /api/auth/change-password` exige CSRF e senha atual. Enquanto a troca é obrigatória, a API permite sessão/saída/troca e recusa operações protegidas. Após a troca, renova claims e libera operação; a senha temporária não autentica mais.
+- Migração `AddInitialPasswordChange` aplicada em schema de teste e `pitcrm_dev`; teste confirma comportamento completo. `dotnet test backend/PitCrm.sln --configuration Debug` com `PITCRM_TEST_CONNECTION` e `PITCRM_CONNECTION_STRING`: 7 aprovados, 0 falhas.
+
+### Evidência de T17
+
+- `PUT /api/users/{userId}` é exclusivo do Administrador, exige antifalsificação e limita o alvo à organização da sessão. Atualiza nome, e-mail, papel-base e estado ativo; não aceita perfis fora de Administrador/Gestor/Operador.
+- Teste HTTP confirma que Gestor recebe 403, usuário de outra organização recebe 404 e atualização válida mantém o vínculo organizacional.
+- A alteração bloqueia a linha da organização com `FOR UPDATE` dentro da transação antes de avaliar administradores ativos. Tentativa de desativar o único Administrador recebe 409; duas reduções concorrentes deixam exatamente um Administrador ativo.
+- `dotnet test backend/PitCrm.sln --configuration Debug` com `PITCRM_TEST_CONNECTION` e `PITCRM_CONNECTION_STRING`: 7 aprovados, 0 falhas.
+
 ## Matriz de cobertura planejada
 
 Derivada de `AGENTS.md`, das skills locais e da especificação. Ainda não existe aplicação ou suíte de testes de onde extrair comandos.
@@ -235,7 +256,7 @@ Após as tarefas, conferir PEO-01 a PEO-26 e atualizar [verification.md](verific
 
 ## Handoff
 
-- T01–T13 concluídas. D04–D07 foram aplicadas às APIs/telas de clientes, locais e criação de demanda; D08 será aplicada nas tarefas de equipe e senha.
+- T01–T17 concluídas localmente. D04–D08 foram aplicadas; interface da equipe e troca obrigatória continuam em T19.
 - O escopo da funcionalidade foi aprovado em 05/11/2026; D01–D03 permanecem confirmadas e os detalhamentos condicionais continuam como proposta até serem necessários.
 - Nenhum agente foi delegado. Commit `99f9d7f` enviado para `origin/main` conforme solicitação do usuário; deploy não autorizado.
-- Próximo trabalho: T14 (formulário de demanda integrado à API). T12 foi entregue antecipadamente por ser independente.
+- Próximo trabalho: T18 (busca paginada e detalhe de demandas). T12 foi entregue antecipadamente por ser independente.

@@ -4,6 +4,7 @@ import { LoginPage } from './auth/login-page';
 import { AuthenticatedShell } from './shell/authenticated-shell';
 import { DemandsHome } from './shell/demands-home';
 import { CustomersPage } from './customers/customers-page';
+import { NewDemandPage } from './demands/new-demand-page';
 
 export const routes: Routes = [
   { path: 'entrar', component: LoginPage },
@@ -15,6 +16,7 @@ export const routes: Routes = [
       { path: '', pathMatch: 'full', redirectTo: 'demandas' },
       { path: 'demandas', component: DemandsHome },
       { path: 'clientes', component: CustomersPage },
+      { path: 'demandas/nova', component: NewDemandPage },
     ],
   },
   { path: '**', redirectTo: '' },

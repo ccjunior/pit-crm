@@ -44,8 +44,8 @@ export interface CustomerLocationInput {
 export class CustomerApi {
   private readonly http = inject(HttpClient);
 
-  search(query: string, page: number): Observable<CustomerPage> {
-    let params = new HttpParams().set('page', page).set('pageSize', 20);
+  search(query: string, page: number, pageSize = 20): Observable<CustomerPage> {
+    let params = new HttpParams().set('page', page).set('pageSize', pageSize);
     if (query.trim()) params = params.set('q', query.trim());
     return this.http.get<CustomerPage>('/api/customers', { params });
   }

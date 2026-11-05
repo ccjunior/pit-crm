@@ -152,6 +152,9 @@ public sealed class PitCrmDbContext(
             user.Property(value => value.IsActive)
                 .HasDefaultValue(true)
                 .IsRequired();
+            user.Property(value => value.MustChangePassword)
+                .HasDefaultValue(false)
+                .IsRequired();
         });
     }
 }

@@ -4,7 +4,7 @@ Atualizado em 05/11/2026.
 
 ## Situação
 
-Documentação de descoberta, escopo, modelo operacional e arquitetura disponível. O usuário aprovou a primeira entrega operacional em 05/11/2026. T01–T13 estão concluídas; T14 é a próxima. Schema, provisionamento idempotente, sessão com antifalsificação, políticas iniciais, interface de entrada, telas e APIs de clientes/locais, consulta de responsáveis e criação transacional de demandas foram verificados com PostgreSQL 18.4. Um cluster local, ignorado em `.local/postgres-data`, está acessível em `127.0.0.1:5432`; o daemon Docker não está ativo.
+Documentação de descoberta, escopo, modelo operacional e arquitetura disponível. O usuário aprovou a primeira entrega operacional em 05/11/2026. T01–T17 estão concluídas localmente; T18 é a próxima. Schema, provisionamento idempotente, sessão com antifalsificação, políticas iniciais, interface de entrada, clientes/locais, criação de demanda e gestão de equipe/senha inicial foram verificados. Um cluster local, ignorado em `.local/postgres-data`, está acessível em `127.0.0.1:5432`; o daemon Docker não está ativo.
 
 ## Decisions
 
@@ -39,7 +39,7 @@ As oito skills passaram na validação de formato. Foram conferidos os hashes do
 - Fontes de produto e roadmap atualizados com essas respostas; o restante da Etapa 0 permanece aberto.
 - Verificação desta especificação: [verification.md](features/primeira-entrega-operacional/verification.md).
 - Conferência documental concluída: 26 critérios rastreados, 23 tarefas, 40 dependências coerentes com o diagrama e 81 links locais válidos em 18 documentos. Os hashes dos 36 arquivos de skills foram preservados.
-- Implementação: T01–T13 concluídas em 05/11/2026; T14 (formulário de demanda) é a próxima. D04–D08 registrados em [context.md](features/primeira-entrega-operacional/context.md). PEO-01 verificado por teste e smoke test CLI; persistência, sessão, matriz de papéis, Angular, consulta de responsáveis, clientes/locais e criação transacional de demandas verificados; ver [verification.md](features/primeira-entrega-operacional/verification.md). Limites técnicos restantes continuam identificados como proposta.
+- Implementação: T01–T17 concluídas localmente em 05/11/2026; T18 é a próxima. D04–D08 registrados em [context.md](features/primeira-entrega-operacional/context.md). PEO-01 verificado por teste e smoke test CLI; persistência, sessão, matriz de papéis, Angular, consulta de responsáveis, clientes/locais, criação de demandas e APIs de equipe/senha verificados; ver [verification.md](features/primeira-entrega-operacional/verification.md). Limites técnicos restantes continuam identificados como proposta.
 
 ## Pendências de produto
 
@@ -47,4 +47,4 @@ Permanecem as questões da Etapa 0 em [03-ROADMAP-E-PENDENCIAS.md](../docs/03-RO
 
 ## Handoff
 
-Execução: primeira entrega aprovada; T01–T13 concluídas; T14 pendente. Repositório inicializado em `ccjunior/pit-crm`; commit `99f9d7f` enviado para `origin/main`. O Compose foi validado por configuração, mas não iniciado porque o daemon Docker está desligado; banco PostgreSQL 18.4 local está acessível para desenvolvimento/teste. Não declarar a Etapa 0 inteira concluída.
+Execução: primeira entrega aprovada; T01–T17 concluídas localmente; T18 pendente. Repositório inicializado em `ccjunior/pit-crm`; commit inicial `99f9d7f` e registro `4e529d8` enviados para `origin/main`. Alterações T14–T17 aguardam o próximo checkpoint Git. O Compose foi validado por configuração, mas não iniciado porque o daemon Docker está desligado; banco PostgreSQL 18.4 local está acessível para desenvolvimento/teste. Não declarar a Etapa 0 inteira concluída.
