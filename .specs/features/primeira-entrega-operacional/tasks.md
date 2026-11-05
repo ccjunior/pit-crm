@@ -237,5 +237,5 @@ Após as tarefas, conferir PEO-01 a PEO-26 e atualizar [verification.md](verific
 
 - T01–T13 concluídas. D04–D07 foram aplicadas às APIs/telas de clientes, locais e criação de demanda; D08 será aplicada nas tarefas de equipe e senha.
 - O escopo da funcionalidade foi aprovado em 05/11/2026; D01–D03 permanecem confirmadas e os detalhamentos condicionais continuam como proposta até serem necessários.
-- Nenhum agente foi delegado. Commit e push iniciais estão sendo preparados conforme solicitação do usuário; publicação/deploy não autorizados.
+- Nenhum agente foi delegado. Commit `99f9d7f` enviado para `origin/main` conforme solicitação do usuário; deploy não autorizado.
 - Próximo trabalho: T14 (formulário de demanda integrado à API). T12 foi entregue antecipadamente por ser independente.

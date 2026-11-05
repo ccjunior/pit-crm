@@ -47,4 +47,4 @@ Permanecem as questões da Etapa 0 em [03-ROADMAP-E-PENDENCIAS.md](../docs/03-RO
 
 ## Handoff
 
-Execução: primeira entrega aprovada; T01–T13 concluídas; T14 pendente. O remoto `ccjunior/pit-crm` está vazio; Git local e envio inicial em preparação. O Compose foi validado por configuração, mas não iniciado porque o daemon Docker está desligado; banco PostgreSQL 18.4 local está acessível para desenvolvimento/teste. Não declarar a Etapa 0 inteira concluída.
+Execução: primeira entrega aprovada; T01–T13 concluídas; T14 pendente. Repositório inicializado em `ccjunior/pit-crm`; commit `99f9d7f` enviado para `origin/main`. O Compose foi validado por configuração, mas não iniciado porque o daemon Docker está desligado; banco PostgreSQL 18.4 local está acessível para desenvolvimento/teste. Não declarar a Etapa 0 inteira concluída.
