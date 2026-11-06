@@ -78,6 +78,10 @@ public static class CustomerEndpoints
             request.Name!,
             request.Document,
             request.Instructions,
+            request.Address,
+            request.Locality,
+            request.City,
+            request.State,
             now);
         await customerStore.AddAsync(customer, cancellationToken);
 
@@ -91,7 +95,8 @@ public static class CustomerEndpoints
         ICustomerStore customerStore,
         CancellationToken cancellationToken)
     {
-        var errors = Validate(new CreateCustomerRequest(request.Name, request.Document, request.Instructions));
+        var errors = Validate(new CreateCustomerRequest(request.Name, request.Document, request.Instructions,
+            request.Address, request.Locality, request.City, request.State));
         if (errors.Count > 0) return Results.ValidationProblem(errors);
 
         var customer = await customerStore.FindForUpdateAsync(
@@ -105,6 +110,10 @@ public static class CustomerEndpoints
             request.Name!,
             request.Document,
             request.Instructions,
+            request.Address,
+            request.Locality,
+            request.City,
+            request.State,
             DateTimeOffset.UtcNow);
         await customerStore.UpdateAsync(customer, cancellationToken);
         return Results.Ok(ToDto(customer));
@@ -129,6 +138,10 @@ public static class CustomerEndpoints
         {
             errors[nameof(request.Instructions)] = ["As instruções devem ter até 2000 caracteres."];
         }
+        if (request.Address?.Trim().Length > 500) errors[nameof(request.Address)] = ["O endereço principal deve ter até 500 caracteres."];
+        if (request.Locality?.Trim().Length > 200) errors[nameof(request.Locality)] = ["A localidade deve ter até 200 caracteres."];
+        if (request.City?.Trim().Length > 200) errors[nameof(request.City)] = ["A cidade deve ter até 200 caracteres."];
+        if (request.State?.Trim().Length > 200) errors[nameof(request.State)] = ["O estado deve ter até 200 caracteres."];
 
         return errors;
     }
@@ -138,9 +151,15 @@ public static class CustomerEndpoints
         customer.Name,
         customer.Document,
         customer.Instructions,
+        customer.Address,
+        customer.Locality,
+        customer.City,
+        customer.State,
         customer.CreatedAtUtc,
         customer.UpdatedAtUtc);
 
-    public sealed record CreateCustomerRequest(string? Name, string? Document, string? Instructions);
-    public sealed record UpdateCustomerRequest(string? Name, string? Document, string? Instructions);
+    public sealed record CreateCustomerRequest(string? Name, string? Document, string? Instructions,
+        string? Address, string? Locality, string? City, string? State);
+    public sealed record UpdateCustomerRequest(string? Name, string? Document, string? Instructions,
+        string? Address, string? Locality, string? City, string? State);
 }

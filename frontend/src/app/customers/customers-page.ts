@@ -36,6 +36,10 @@ export class CustomersPage implements OnInit {
     name: ['', [Validators.required, Validators.maxLength(200)]],
     document: ['', Validators.maxLength(30)],
     instructions: ['', Validators.maxLength(2000)],
+    address: ['', Validators.maxLength(500)],
+    locality: ['', Validators.maxLength(200)],
+    city: ['', Validators.maxLength(200)],
+    state: ['', Validators.maxLength(200)],
   });
   readonly locationForm = this.formBuilder.nonNullable.group({
     name: ['', [Validators.required, Validators.maxLength(200)]],
@@ -67,7 +71,7 @@ export class CustomersPage implements OnInit {
 
   startCreate(): void {
     this.selected.set(null);
-    this.form.reset({ name: '', document: '', instructions: '' });
+    this.form.reset({ name: '', document: '', instructions: '', address: '', locality: '', city: '', state: '' });
     this.editing.set(true);
     this.error.set('');
     this.notice.set('');
@@ -76,7 +80,8 @@ export class CustomersPage implements OnInit {
   startEdit(): void {
     const customer = this.selected();
     if (!customer || !this.canManage()) return;
-    this.form.reset({ name: customer.name, document: customer.document ?? '', instructions: customer.instructions ?? '' });
+    this.form.reset({ name: customer.name, document: customer.document ?? '', instructions: customer.instructions ?? '',
+      address: customer.address ?? '', locality: customer.locality ?? '', city: customer.city ?? '', state: customer.state ?? '' });
     this.editing.set(true);
     this.error.set('');
     this.notice.set('');
@@ -93,7 +98,8 @@ export class CustomersPage implements OnInit {
     const selected = this.selected();
     const values = this.form.getRawValue();
     const input = { name: values.name.trim(), document: values.document.trim() || null,
-      instructions: values.instructions.trim() || null };
+      instructions: values.instructions.trim() || null, address: values.address.trim() || null,
+      locality: values.locality.trim() || null, city: values.city.trim() || null, state: values.state.trim() || null };
     this.saving.set(true);
     const request = selected ? this.api.update(selected.id, input) : this.api.create(input);
     request.pipe(finalize(() => this.saving.set(false))).subscribe({
@@ -106,7 +112,7 @@ export class CustomersPage implements OnInit {
       },
       error: (error: HttpErrorResponse) => {
         this.error.set(error.status === 400
-          ? 'Confira o nome, documento e instruções informados.'
+          ? 'Confira o nome, documento, instruções e endereço principal do cliente.'
           : 'Não foi possível salvar o cliente. Verifique a conexão e tente novamente.');
       },
     });

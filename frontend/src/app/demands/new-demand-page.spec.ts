@@ -25,7 +25,7 @@ describe('NewDemandPage', () => {
     fixture = TestBed.createComponent(NewDemandPage);
     fixture.detectChanges();
     http.expectOne('/api/customers?page=1&pageSize=100').flush({ items: [
-      { id: 'customer-a', name: 'Cliente Alfa', document: null, instructions: null,
+      { id: 'customer-a', name: 'Cliente Alfa', document: null, instructions: null, address: null, locality: null, city: null, state: null,
         createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z' },
     ], page: 1, pageSize: 100, totalCount: 1 });
     http.expectOne('/api/users/eligible-assignees').flush([{ id: 'user-a', displayName: 'Gestora' }]);

@@ -43,6 +43,10 @@ public sealed class PitCrmDbContext(
             customer.Property(value => value.Name).HasMaxLength(200).IsRequired();
             customer.Property(value => value.Document).HasMaxLength(30);
             customer.Property(value => value.Instructions).HasMaxLength(2000);
+            customer.Property(value => value.Address).HasMaxLength(500);
+            customer.Property(value => value.Locality).HasMaxLength(200);
+            customer.Property(value => value.City).HasMaxLength(200);
+            customer.Property(value => value.State).HasMaxLength(200);
             customer.Property(value => value.CreatedAtUtc).IsRequired();
             customer.Property(value => value.UpdatedAtUtc).IsRequired();
             customer.HasOne<Organization>()

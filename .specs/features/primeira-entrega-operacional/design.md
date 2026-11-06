@@ -40,7 +40,7 @@ sequenceDiagram
 | Organização | ID, nome, ativo | Fronteira de escopo; provisionamento conforme D03 |
 | Conta | ID Identity, nome, e-mail, estado da credencial inicial | Credencial protegida pelo mecanismo Identity; sem senha em logs ou respostas |
 | Vínculo organizacional | Organização, usuário, perfil-base, ativo | Resolve o contexto autenticado; a interface desta entrega trabalha em um único contexto por sessão |
-| Cliente | ID, organização, nome, documento opcional, instruções, autoria e datas | Sem unicidade por nome; organização resolvida pelo servidor |
+| Cliente | ID, organização, nome, documento/instruções opcionais, endereço principal/localidade/cidade/estado opcionais, autoria e datas | Sem unicidade por nome; endereço principal não substitui os locais de atendimento; organização resolvida pelo servidor |
 | Local | ID, organização, cliente, nome, endereço obrigatório, instruções opcionais, autoria e datas | Pertence ao cliente da mesma organização |
 | Demanda | ID, organização, cliente, local, descrição, origem, responsável opcional, prioridade opcional (Baixa/Média/Alta), status (inicial Recebida), versão, autoria e datas | Cliente/local válidos; versão para conflito de edição |
 | Referência da demanda | ID, organização, demanda, tipo, valor | Tipos iniciais chamado e ordem de compra; pesquisa sem unicidade global |
@@ -75,8 +75,8 @@ As rotas são propostas de implementação. Os DTOs respeitam os campos da spec;
 | `PUT /api/users/{id}` | Nome, perfil e ativo | 200; preserva último administrador | Administrador |
 | `GET /api/customers` | `q`, `page`, `pageSize` | Página de clientes | Três perfis |
 | `GET /api/customers/{id}` | ID | Cliente | Três perfis |
-| `POST /api/customers` | Nome, documento e instruções | 201 | Administrador e Gestor |
-| `PUT /api/customers/{id}` | Dados descritivos | 200 | Administrador e Gestor |
+| `POST /api/customers` | Nome, documento/instruções e campos opcionais do endereço principal | 201; devolve os dados salvos | Administrador e Gestor |
+| `PUT /api/customers/{id}` | Dados descritivos e campos opcionais do endereço principal | 200; mantém os locais associados | Administrador e Gestor |
 | `GET /api/customers/{id}/locations` | Cliente | Lista de locais desse cliente | Três perfis |
 | `GET /api/customers/{id}/locations/{locationId}` | Cliente e local | Local | Três perfis |
 | `POST /api/customers/{id}/locations` | Nome, endereço e instruções | 201 | Administrador e Gestor |

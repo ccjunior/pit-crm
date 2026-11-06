@@ -5,5 +5,9 @@ public sealed record CustomerDto(
     string Name,
     string? Document,
     string? Instructions,
+    string? Address,
+    string? Locality,
+    string? City,
+    string? State,
     DateTimeOffset CreatedAtUtc,
     DateTimeOffset UpdatedAtUtc);

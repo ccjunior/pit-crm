@@ -64,6 +64,21 @@
           <label for="customer-instructions">Instruções <small>opcional</small></label>
           <textarea id="customer-instructions" formControlName="instructions" rows="4" maxlength="2000"></textarea>
           @if (form.controls.instructions.touched && form.controls.instructions.invalid) { <small class="field-error">Use até 2.000 caracteres.</small> }
+          <fieldset class="address-fields">
+            <legend>Endereço principal <small>opcional</small></legend>
+            <label class="address-wide" for="customer-address">Endereço</label>
+            <input class="address-wide" id="customer-address" formControlName="address" maxlength="500" autocomplete="street-address" />
+            @if (form.controls.address.touched && form.controls.address.invalid) { <small class="field-error address-wide">Use até 500 caracteres.</small> }
+            <label for="customer-locality">Localidade</label>
+            <input id="customer-locality" formControlName="locality" maxlength="200" />
+            @if (form.controls.locality.touched && form.controls.locality.invalid) { <small class="field-error">Use até 200 caracteres.</small> }
+            <label for="customer-city">Cidade</label>
+            <input id="customer-city" formControlName="city" maxlength="200" autocomplete="address-level2" />
+            @if (form.controls.city.touched && form.controls.city.invalid) { <small class="field-error">Use até 200 caracteres.</small> }
+            <label for="customer-state">Estado</label>
+            <input id="customer-state" formControlName="state" maxlength="200" autocomplete="address-level1" />
+            @if (form.controls.state.touched && form.controls.state.invalid) { <small class="field-error">Use até 200 caracteres.</small> }
+          </fieldset>
           <div class="form-actions"><button class="secondary-button" type="button" (click)="cancelEdit()" [disabled]="saving()">Cancelar</button>
             <button class="primary-button" type="submit" [disabled]="saving()">{{ saving() ? 'Salvando…' : 'Salvar cliente' }}</button></div>
         </form>
@@ -72,6 +87,10 @@
           @if (canManage()) { <button class="secondary-button" type="button" (click)="startEdit()">Editar</button> }
         </div>
         <dl class="detail-list"><div><dt>Documento</dt><dd>{{ customer.document || 'Não informado' }}</dd></div>
+          <div><dt>Endereço principal</dt><dd>{{ customer.address || 'Não informado' }}</dd></div>
+          <div><dt>Localidade</dt><dd>{{ customer.locality || 'Não informada' }}</dd></div>
+          <div><dt>Cidade</dt><dd>{{ customer.city || 'Não informada' }}</dd></div>
+          <div><dt>Estado</dt><dd>{{ customer.state || 'Não informado' }}</dd></div>
           <div><dt>Instruções</dt><dd>{{ customer.instructions || 'Nenhuma instrução registrada.' }}</dd></div></dl>
         <section class="locations-section" aria-labelledby="locations-title">
           <div class="locations-heading"><div><p class="eyebrow">Atendimento</p><h3 id="locations-title">Locais</h3></div>

@@ -17,9 +17,9 @@ Resultado demonstrável: uma organização é preparada, seu administrador acess
 - [Fluxo e modelo](../../../docs/02-FLUXO-E-MODELO.md): conceitos e regras operacionais.
 - [Roadmap](../../../docs/03-ROADMAP-E-PENDENCIAS.md): recorte e pendências das próximas entregas.
 - [Arquitetura](../../../docs/04-ARQUITETURA-TECNICA.md): stack, autenticação e isolamento.
-- [Contexto](context.md): autorização deste trabalho e respostas literais D01–D03.
+- [Contexto](context.md): autorização deste trabalho e respostas literais D01–D09.
 
-Os critérios abaixo detalham uma proposta de entrega. Regras preexistentes e D01–D03 são vinculantes. Campos adicionais, limites, códigos de resposta e comportamentos de interface são detalhamentos propostos para revisão, sem atribuí-los ao piloto como decisões já confirmadas.
+Os critérios abaixo detalham a entrega aprovada e as decisões confirmadas D01–D09. Outros limites, códigos de resposta e comportamentos de interface permanecem detalhamentos propostos, sem atribuí-los ao piloto como decisões já confirmadas.
 
 ## Escopo
 
@@ -62,6 +62,7 @@ Os limites de texto são limites técnicos propostos. Remover espaços externos 
 | Usuário da equipe | Nome, e-mail e perfil-base | Obrigatórios; nome até 200 caracteres; perfil entre Administrador, Gestor e Operador |
 | Cliente | Nome de identificação | Obrigatório; 1 a 200 caracteres |
 | Cliente | Documento e instruções | Opcionais, decisão D04; documento até 30 e instruções até 2.000 caracteres; não criar uma regra fiscal ou deduplicação por nome |
+| Cliente | Endereço principal, localidade, cidade e estado | Todos opcionais, decisão D09; endereço até 500 caracteres e demais campos até 200; endereço principal separado dos locais de atendimento |
 | Local | Cliente e nome de identificação | Obrigatórios; nome de 1 a 200 caracteres; pertence ao cliente indicado |
 | Local | Endereço | Obrigatório, decisão D05; até 500 caracteres |
 | Local | Instruções | Opcional; até 2.000 caracteres |
@@ -94,6 +95,7 @@ Cada ID identifica um resultado que deverá ser demonstrado na implementação. 
 - **PEO-10:** Quando o usuário consultar clientes, o sistema deverá listar somente os da organização da sessão e permitir busca por nome e documento informado.
 - **PEO-11:** Quando Administrador ou Gestor salvar ou editar um local válido, o sistema deverá mantê-lo vinculado ao cliente selecionado da mesma organização; o Operador poderá somente consultar.
 - **PEO-12:** Quando o usuário escolher um cliente no formulário de demanda, o sistema deverá oferecer somente seus locais; ao trocar o cliente, deverá limpar uma seleção de local que deixou de ser válida.
+- **PEO-27:** Quando Administrador ou Gestor criar ou editar um cliente, poderá registrar ou limpar seu endereço principal, localidade, cidade e estado; os valores deverão ser persistidos e consultáveis, sem substituir os locais de atendimento associados ao cliente.
 
 ### Demandas
 
@@ -125,15 +127,15 @@ Cada ID identifica um resultado que deverá ser demonstrado na implementação. 
 | Solicitação HTTP repetida manualmente | Pode representar nova demanda; esta entrega não deduplica por ticket, descrição ou local |
 | Falha de banco | Operação atômica, erro identificável e nenhuma confirmação falsa de sucesso |
 | Conflito de edição | Resposta de conflito, sem sobrescrever a versão mais recente |
-| Cadastro ainda incompleto | Somente os campos obrigatórios acima impedem a gravação; endereço do local é obrigatório (D05), enquanto o responsável da demanda é opcional |
+| Cadastro ainda incompleto | Somente os campos obrigatórios acima impedem a gravação; endereço principal do cliente é opcional (D09), endereço do local é obrigatório (D05), e o responsável da demanda é opcional |
 | Material visual | Nenhuma referência ou identidade visual foi fornecida; os esboços são funcionais e propostos |
 
 ## Decisões encerradas e pendências
 
-D01–D08 estão confirmadas em [context.md](context.md). Limites de texto, paginação e outros parâmetros operacionais desta especificação continuam como detalhamentos técnicos propostos; não são regras comerciais adicionais do piloto.
+D01–D09 estão confirmadas em [context.md](context.md). Limites de texto, paginação e outros parâmetros operacionais desta especificação continuam como detalhamentos técnicos propostos; não são regras comerciais adicionais do piloto.
 
 As pendências de Financeiro, categorias de custo, tipos de referência específicos por cliente e recorte da importação histórica permanecem no roadmap e não impedem a elaboração desta entrega. Esta especificação não declara a Etapa 0 inteira concluída.
 
 ## Critério de conclusão da futura implementação
 
-Demonstrar os critérios PEO-01 a PEO-26, incluindo um ciclo completo com Administrador, Gestor e Operador e tentativas de acesso cruzado entre duas organizações. Registrar os testes, inspeções de interface e limitações em `verification.md`. Na fase atual, esse arquivo registra apenas a revisão documental.
+Demonstrar os critérios PEO-01 a PEO-27, incluindo um ciclo completo com Administrador, Gestor e Operador e tentativas de acesso cruzado entre duas organizações. Registrar os testes, inspeções de interface e limitações em `verification.md`. Na fase atual, esse arquivo registra apenas a revisão documental.

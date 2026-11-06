@@ -1,12 +1,12 @@
 # Primeira entrega operacional — verificação
 
 **Objeto:** especificação, desenho, plano de tarefas e implementação da primeira entrega operacional.
-**Estado:** T01–T17 verificadas localmente em 05/11/2026. Consulta/edição de demandas, interface de equipe e critérios restantes seguem pendentes.
+**Estado:** T01–T17 verificadas; T24 implementada e compilada localmente em 05/11/2026. Testes automatizados da T24 não foram executados; consulta/edição de demandas e interface de equipe seguem pendentes.
 
 ## Escopo da conferência
 
 - Fidelidade às respostas D01–D03 e às fontes de produto/arquitetura.
-- Rastreabilidade dos critérios PEO-01 a PEO-26 nas tarefas propostas.
+- Rastreabilidade dos critérios PEO-01 a PEO-27 nas tarefas propostas.
 - Coerência entre dependências declaradas e o diagrama de execução.
 - Links locais dos documentos e ausência de uma aprovação integral inventada.
 - Separação entre decisões confirmadas, novos detalhamentos propostos e pendências futuras.
@@ -176,6 +176,18 @@ Não foi feita autenticação visual com conta provisionada no banco de desenvol
 | Alterações concorrentes | Duas sessões Administradoras reduzem simultaneamente seus próprios perfis | Uma alteração é aceita e a outra é recusada; exatamente um Administrador ativo permanece |
 | Migração e backend | Migração `AddInitialPasswordChange`; `dotnet test backend/PitCrm.sln --configuration Debug` com `PITCRM_TEST_CONNECTION` e `PITCRM_CONNECTION_STRING` | Migração aplicada em schema de teste e `pitcrm_dev`; 7 testes aprovados, 0 falhas |
 
+## Evidências de T24 — endereço principal do Cliente
+
+| Verificação | Procedimento | Resultado |
+| --- | --- | --- |
+| Contrato de Cliente | Inspeção dos DTOs e endpoints POST/PUT/GET/lista | Inclui endereço, localidade, cidade e estado opcionais; campos em branco normalizados para nulo; leituras devolvem os valores |
+| Persistência | Migração `AddCustomerMainAddress` aplicada no PostgreSQL local `pitcrm_dev` | Quatro colunas nullable adicionadas; clientes sem esses dados continuam válidos |
+| Interface | `npm run build` | Build Angular aprovado sem avisos; formulário de criar/editar e painel de detalhe exibem os quatro campos |
+| Backend | `dotnet build backend/PitCrm.sln --configuration Debug --no-restore` | Aprovado, 0 avisos e 0 erros |
+| Suíte automatizada | Testes backend e Angular | Não executados nesta alteração |
+
+O cadastro e a seleção dos locais de atendimento continuam no fluxo existente: o local permanece associado ao cliente e é carregado ao selecionar o cliente na abertura da demanda. A integração autenticada em runtime não foi verificada nesta alteração.
+
 ## Verificação de comportamento planejada
 
 | Cenário | Critérios principais | Estado atual |
@@ -184,7 +196,7 @@ Não foi feita autenticação visual com conta provisionada no banco de desenvol
 | Entrar, consultar sessão e sair | PEO-02, PEO-03, PEO-04, PEO-25 | Backend T04 e integração Angular T06 verificados; interface validada em navegador |
 | Trocar credencial inicial quando exigida | PEO-06 | API T16 verificada; interface guiada ainda pendente em T19 |
 | Administrador cadastra/edita equipe; Gestor/Operador recebem recusa | PEO-05, PEO-07 | APIs T15/T17 e proteção do último Administrador verificadas; interface pendente em T19 |
-| Administrador/Gestor mantêm clientes e locais; Operador consulta | PEO-08, PEO-09, PEO-10, PEO-11 | APIs e telas T07–T11 verificadas; Gestor grava e Operador consulta |
+| Administrador/Gestor mantêm clientes e locais; Operador consulta | PEO-08, PEO-09, PEO-10, PEO-11, PEO-27 | APIs e telas T07–T11 verificadas; T24 adiciona endereço principal opcional e passou nos builds; testes automatizados pendentes |
 | Criar demanda sem chamado e sem responsável | PEO-12, PEO-13, PEO-14, PEO-15 | API T13 e formulário T14 verificados; recarga/consulta integrada ainda em T23 |
 | Consultar responsáveis elegíveis; rejeitar referência incompatível na demanda | PEO-16, PEO-21 | T12 e vínculos de T13 verificados por HTTP; edição/concorrência pendentes em T20 |
 | Buscar, filtrar e abrir detalhe após nova sessão | PEO-17, PEO-18, PEO-21 | Não executado; tarefas T18 e T21 |
@@ -195,6 +207,6 @@ Não foi feita autenticação visual com conta provisionada no banco de desenvol
 
 ## Limites
 
-Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T17 cobrem estrutura, autenticação, autorização inicial, entrada, clientes/locais, criação de demanda e APIs administrativas de equipe/senha. Interface de equipe, consulta/edição de demandas e critérios restantes seguem pendentes. Login foi inspecionado no navegador; telas de cadastros/demanda foram verificadas por testes de componentes e build, sem sessão autenticada no navegador.
+Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T17 cobrem estrutura, autenticação, autorização inicial, entrada, clientes/locais, criação de demanda e APIs administrativas de equipe/senha; T24 adiciona endereço principal opcional do cliente. Interface de equipe, consulta/edição de demandas e critérios restantes seguem pendentes. Login foi inspecionado no navegador; telas de cadastros/demanda foram verificadas por testes de componentes e build, sem sessão autenticada no navegador.
 
-Revisão documental e implementação T01–T17 realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.
+Revisão documental e implementação T01–T17/T24 realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.

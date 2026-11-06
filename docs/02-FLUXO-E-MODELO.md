@@ -42,8 +42,8 @@ As definições abaixo foram informadas pela operação piloto. O desenho final 
 - **Organização:** empresa cliente do PIT-CRM e fronteira de isolamento dos dados.
 - **Usuário e papel:** pessoa que acessa a organização. Perfis iniciais: Administrador (acesso completo e gestão de usuários/configurações), Gestor (operação, indicadores e dados financeiros conforme permissão) e Operador (criar/alterar demandas, programação e evidências). Permissões podem ser ajustadas por organização/usuário.
 - **Perfis opcionais/futuros:** Financeiro (custos, cálculo LL, notas e recebimentos); Prestador (somente demandas atribuídas, atualizações e evidências); Cliente (acompanhar/autorizar demandas próprias, fora do MVP até confirmar necessidade).
-- **Cliente e contato:** empresa atendida e seus responsáveis.
-- **Local de atendimento:** loja, unidade ou endereço de execução.
+- **Cliente e contato:** empresa atendida, seus responsáveis e endereço principal opcional (endereço, localidade, cidade e estado; D09).
+- **Local de atendimento:** loja, unidade ou endereço de execução, registrado separadamente e associado ao cliente; a demanda seleciona um desses locais.
 - **Demanda/ordem de serviço:** unidade principal do trabalho, com ID interno, origem, descrição, responsável e referências externas.
 - **Referência externa:** chamado/ticket, ordem de compra ou código do sistema do cliente. Pode haver mais de uma e não substitui o ID interno.
 - **Orçamento e revisão:** valor proposto, versões, aprovação, retificação e aditivo.

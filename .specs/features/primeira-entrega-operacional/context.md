@@ -18,12 +18,13 @@ O usuário respondeu “vamos” à recomendação de especificar a primeira ent
 | D06 | Como representar a prioridade? | “Lista fixa Baixa/Média/Alta” | Prioridade opcional com valores Baixa, Média ou Alta; não é campo de texto livre. |
 | D07 | Qual é o estado inicial da demanda? | “Usar ‘Recebida’ (Recomendado)” | Demandas novas iniciam em Recebida; transições posteriores permanecem fora desta entrega. |
 | D08 | Como funciona a credencial inicial da equipe? | “Senha temporária e troca obrigatória (Recomendado)” | Administrador define credencial temporária, entrega fora do sistema e usuário troca no primeiro acesso antes de acessar a operação; sem envio automático de e-mail. |
+| D09 | Quais dados de endereço compõem o cadastro do cliente e são obrigatórios? | “deveria ter os dados de localidade, cidade, estado e endereço”; “Opcionais (Recomendado)” | O cliente mantém endereço principal com endereço, localidade, cidade e estado; os quatro campos são opcionais. Os locais de atendimento continuam registros separados associados ao cliente. |
 
-As respostas D01–D03 foram recebidas em 04/11/2026; D04–D08 foram confirmadas em 05/11/2026 antes das tarefas dependentes. Os perfis-base e o direito da operação de criar/editar demandas já estavam documentados no escopo.
+As respostas D01–D03 foram recebidas em 04/11/2026; D04–D09 foram confirmadas em 05/11/2026 antes das tarefas dependentes. Os perfis-base e o direito da operação de criar/editar demandas já estavam documentados no escopo.
 
 ## Aprovação do escopo
 
-Em 05/11/2026, após ser apresentada como direção a implementação da primeira entrega operacional, o usuário aprovou o escopo especificado com a resposta literal “aprovo”. Isso autoriza a implementação local da funcionalidade como primeira entrega. D04–D08 confirmam os detalhes de cadastro, prioridade, estado inicial e credencial descritos acima. Não autoriza commit, push, publicação ou alterações em ambientes externos.
+Em 05/11/2026, após ser apresentada como direção a implementação da primeira entrega operacional, o usuário aprovou o escopo especificado com a resposta literal “aprovo”. Isso autoriza a implementação local da funcionalidade como primeira entrega. D04–D09 confirmam os detalhes de cadastro, prioridade, estado inicial, credencial e endereço principal do cliente descritos acima. Não autoriza commit, push, publicação ou alterações em ambientes externos.
 
 ## Limites de interpretação
 

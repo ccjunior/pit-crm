@@ -95,4 +95,4 @@ Depois de provisionar, inicie a API e o Angular conforme as instruções acima e
 
 ## Estado atual
 
-O escopo da primeira entrega foi aprovado em 05/11/2026. T01–T17 foram implementadas localmente; a interface de equipe e senha inicial está em T19. Consulte [.specs/STATE.md](.specs/STATE.md) para andamento por tarefa. As regras do levantamento vêm das respostas do responsável pela operação; decisões ainda abertas continuam identificadas como propostas ou perguntas.
+O escopo da primeira entrega foi aprovado em 05/11/2026. T01–T17 e T24 foram implementadas localmente; a interface de equipe e senha inicial está em T19. Consulte [.specs/STATE.md](.specs/STATE.md) para andamento por tarefa. As regras do levantamento vêm das respostas do responsável pela operação; decisões ainda abertas continuam identificadas como propostas ou perguntas.

@@ -62,6 +62,10 @@ public sealed class PersistenceCustomerStore(PitCrmDbContext dbContext) : ICusto
                 customer.Name,
                 customer.Document,
                 customer.Instructions,
+                customer.Address,
+                customer.Locality,
+                customer.City,
+                customer.State,
                 customer.CreatedAtUtc,
                 customer.UpdatedAtUtc))
             .ToListAsync(cancellationToken);

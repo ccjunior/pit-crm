@@ -1,6 +1,6 @@
 # Primeira entrega operacional — plano de tarefas
 
-**Estado:** escopo aprovado para implementação em 05/11/2026; T01–T17 concluídas; T18 é a próxima.
+**Estado:** escopo aprovado e ampliado por D09 em 05/11/2026; T01–T17 concluídas e T24 implementada/build verificada; T18 é a próxima.
 **Fontes:** [spec.md](spec.md), [design.md](design.md) e decisões confirmadas em [context.md](context.md).
 **Autorização atual:** implementação local aprovada em 05/11/2026; o usuário solicitou inicializar Git e enviar para `ccjunior/pit-crm` em 05/11/2026.
 **Approved**: 2026-11-05 - user: "aprovo"
@@ -57,6 +57,8 @@ flowchart TD
     T21 --> T23
     T22 --> T23
     T03 --> T23
+    T08 --> T24
+    T10 --> T24
 ```
 
 ## Tarefas e critérios de conclusão
@@ -88,8 +90,9 @@ Cada linha identifica um resultado verificável, uma área responsável e depend
 | T21 | Listagem e detalhe de demandas — frontend | T06, T18 | PEO-17, PEO-18, PEO-21, PEO-24, PEO-26 | Interface integra busca, filtros e páginas da API; detalhe mostra os dados persistidos e atividade; trata vazio, falha e recurso inexistente |
 | T22 | Edição dos dados básicos de demanda — frontend | T20, T21, T12, T14 | PEO-16, PEO-19, PEO-20, PEO-23, PEO-24, PEO-26 | Reutiliza o formulário de demanda; integra responsáveis elegíveis; respeita versão e vínculos; mantém preenchimento no erro e orienta recarga em conflito |
 | T23 | Demonstração integrada e consolidação de evidências — integração | T11, T14, T19, T21, T22, T03 | PEO-01, PEO-02, PEO-04, PEO-05, PEO-08, PEO-11, PEO-13, PEO-17, PEO-18, PEO-19, PEO-20, PEO-21, PEO-23, PEO-24, PEO-25, PEO-26 | Executa as suítes reais das tarefas e o cenário com três perfis e duas organizações; testa recarga e edição entre sessões; consolida resultados, limitações e instruções no README e na verificação |
+| T24 | Endereço principal opcional do cliente — backend e frontend | T08, T10 | PEO-08, PEO-09, PEO-21, PEO-27 | Criar/editar/listar/detalhar preserva endereço, localidade, cidade e estado opcionais; endereço do cliente permanece distinto dos locais de atendimento |
 
-**Andamento:** T01–T17 concluídas em 05/11/2026; T18–T23 pendentes. Nenhuma linha concluída significa apenas “arquivo criado”; a condição é o resultado e sua verificação.
+**Andamento:** T01–T17 concluídas; T24 implementada e build verificada; T18–T23 pendentes. Nenhuma linha concluída significa apenas “arquivo criado”; a condição é o resultado e sua verificação.
 
 ### Evidência de T01
 
@@ -201,9 +204,17 @@ Cada linha identifica um resultado verificável, uma área responsável e depend
 - A alteração bloqueia a linha da organização com `FOR UPDATE` dentro da transação antes de avaliar administradores ativos. Tentativa de desativar o único Administrador recebe 409; duas reduções concorrentes deixam exatamente um Administrador ativo.
 - `dotnet test backend/PitCrm.sln --configuration Debug` com `PITCRM_TEST_CONNECTION` e `PITCRM_CONNECTION_STRING`: 7 aprovados, 0 falhas.
 
+### Evidência de T24
+
+- Cliente aceita endereço principal opcional (endereço, localidade, cidade e estado) na criação/edição; os campos são persistidos e retornados nas consultas. Valores em branco são normalizados para nulo.
+- Os locais de atendimento continuam cadastrados separadamente e associados ao cliente. A tela de nova demanda continua carregando os locais pelo cliente selecionado.
+- Migração `AddCustomerMainAddress` aplicada no PostgreSQL local `pitcrm_dev`.
+- `dotnet build backend/PitCrm.sln --configuration Debug --no-restore`: aprovado, 0 avisos e 0 erros. `npm run build`: aprovado sem avisos.
+- Testes automatizados não foram executados nesta alteração.
+
 ## Matriz de cobertura planejada
 
-Derivada de `AGENTS.md`, das skills locais e da especificação. Ainda não existe aplicação ou suíte de testes de onde extrair comandos.
+Matriz definida durante a especificação; os comandos e evidências executados por tarefa estão registrados acima. As linhas com “Inexistente” são o estado histórico quando o plano foi escrito, não o estado atual do repositório.
 
 | Camada | Verificação planejada | Cobertura esperada | Comando atual |
 | --- | --- | --- | --- |
@@ -245,18 +256,19 @@ Testes de isolamento devem usar organizações A e B com registros distintos, al
 | PEO-24 | T06, T10, T11, T14, T19, T21, T22, T23 |
 | PEO-25 | T04, T05, T06, T16, T23 |
 | PEO-26 | T06, T10, T11, T14, T19, T21, T22, T23 |
+| PEO-27 | T24 |
 
 ## Critérios para iniciar e para concluir
 
 Antes de T01, obter o direcionamento do usuário sobre a proposta pronta e a autorização de implementação. Resolver alterações solicitadas nos documentos; as respostas D01–D03 já são válidas e não devem ser perguntadas novamente.
 
-T01 registra as ferramentas, versões suportadas, variáveis e comandos reais de execução e verificação. D04–D08 confirmam os campos opcionais, a prioridade, o status inicial e a senha temporária; os limites técnicos de texto continuam identificados como proposta. A configuração visual pode ser refinada com esboços executáveis quando o trabalho de interface for autorizado.
+T01 registra as ferramentas, versões suportadas, variáveis e comandos reais de execução e verificação. D04–D09 confirmam campos opcionais, endereço principal do cliente, prioridade, status inicial e senha temporária; os limites técnicos de texto continuam identificados como proposta. A configuração visual pode ser refinada com esboços executáveis quando o trabalho de interface for autorizado.
 
-Após as tarefas, conferir PEO-01 a PEO-26 e atualizar [verification.md](verification.md) com evidências reais. O perfil local é utilizado: validadores originais dependentes de Git, commits e outros pré-requisitos não são considerados aprovados por esta preparação documental.
+Após as tarefas, conferir PEO-01 a PEO-27 e atualizar [verification.md](verification.md) com evidências reais. O perfil local é utilizado: validadores originais dependentes de Git, commits e outros pré-requisitos não são considerados aprovados por esta preparação documental.
 
 ## Handoff
 
-- T01–T17 concluídas localmente. D04–D08 foram aplicadas; interface da equipe e troca obrigatória continuam em T19.
+- T01–T17 concluídas e T24 implementada/build verificada localmente. D04–D09 foram aplicadas; interface da equipe e troca obrigatória continuam em T19.
 - O escopo da funcionalidade foi aprovado em 05/11/2026; D01–D03 permanecem confirmadas e os detalhamentos condicionais continuam como proposta até serem necessários.
 - Nenhum agente foi delegado. Commits `99f9d7f`, `4e529d8` e `f989039` enviados para `origin/main` conforme solicitação do usuário; deploy não autorizado.
 - Próximo trabalho: T18 (busca paginada e detalhe de demandas). T12 foi entregue antecipadamente por ser independente.

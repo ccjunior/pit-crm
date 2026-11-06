@@ -39,6 +39,7 @@ Empresa piloto com serviços principalmente de civil e ar-condicionado, contrato
 Detalhamento confirmado pelo usuário em 04/11/2026 para a primeira entrega: **Administrador e Gestor** podem cadastrar e editar clientes e locais; **Operador** consulta esses cadastros e mantém o direito de criar/editar demandas. A organização e seu primeiro administrador serão criados de forma controlada; o administrador cadastra a equipe. O registro das respostas está no [contexto da primeira entrega](../.specs/features/primeira-entrega-operacional/context.md).
 
 - Cadastro de clientes, contatos e locais de atendimento.
+- O cadastro do cliente inclui endereço principal opcional: endereço, localidade, cidade e estado (D09). Esse endereço não substitui os locais de atendimento, que permanecem associados ao cliente.
 - Referências e instruções específicas por cliente/local.
 - Histórico consolidado das demandas e faturamento.
 

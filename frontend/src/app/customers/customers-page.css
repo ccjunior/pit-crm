@@ -55,6 +55,10 @@ button:disabled { opacity:.55; cursor:wait; }
 .customer-form label { margin-top:.45rem; color:#344d68; font-size:.8rem; font-weight:750; }
 .customer-form label span,.field-error { color:#a43333; }
 .customer-form label small { color:#8090a2; font-weight:500; }
+.address-fields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:.5rem .75rem; margin:.5rem 0 0; border:1px solid #e0e8ef; border-radius:.6rem; padding:.75rem; }
+.address-fields legend { padding:0 .3rem; color:#344d68; font-size:.82rem; font-weight:750; }
+.address-fields label { margin:0; }
+.address-wide { grid-column:1/-1; }
 textarea { resize:vertical; }
 .form-actions { display:flex; justify-content:flex-end; gap:.6rem; margin-top:.8rem; }
 .notice,.error-banner { border-radius:.45rem; padding:.65rem .8rem; font-size:.8rem; }

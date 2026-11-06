@@ -50,16 +50,16 @@ describe('CustomersPage', () => {
     http.expectOne('/api/customers?page=1&pageSize=20').flush({ items: [], page: 1, pageSize: 20, totalCount: 0 });
     const page = fixture.componentInstance;
     page.startCreate();
-    page.form.setValue({ name: 'Cliente Alfa', document: '', instructions: '' });
+    page.form.setValue({ name: 'Cliente Alfa', document: '', instructions: '', address: '', locality: '', city: '', state: '' });
     page.save();
     const create = http.expectOne('/api/customers');
     expect(create.request.method).toBe('POST');
     expect(create.request.headers.get('X-CSRF-TOKEN')).toBe('csrf-value');
-    create.flush({ id: 'customer-a', name: 'Cliente Alfa', document: null, instructions: null,
+    create.flush({ id: 'customer-a', name: 'Cliente Alfa', document: null, instructions: null, address: null, locality: null, city: null, state: null,
       createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z' });
     http.expectOne('/api/customers/customer-a/locations').flush([]);
     http.expectOne('/api/customers?page=1&pageSize=20').flush({
-      items: [{ id: 'customer-a', name: 'Cliente Alfa', document: null, instructions: null,
+      items: [{ id: 'customer-a', name: 'Cliente Alfa', document: null, instructions: null, address: null, locality: null, city: null, state: null,
         createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z' }],
       page: 1, pageSize: 20, totalCount: 1,
     });
@@ -70,7 +70,7 @@ describe('CustomersPage', () => {
   it('hides customer write controls from an operator', () => {
     session.set({ id: 'user-o', displayName: 'Operador', email: 'op@example.invalid',
       organization: { id: 'org-a', name: 'Empresa A' }, roles: ['Operador'] });
-    const customer = { id: 'customer-a', name: 'Cliente Alfa', document: null, instructions: null,
+    const customer = { id: 'customer-a', name: 'Cliente Alfa', document: null, instructions: null, address: null, locality: null, city: null, state: null,
       createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z' };
     http.expectOne('/api/customers?page=1&pageSize=20').flush({ items: [customer], page: 1, pageSize: 20, totalCount: 1 });
     fixture.componentInstance.select(customer);
@@ -90,7 +90,7 @@ describe('CustomersPage', () => {
   });
 
   it('lists and creates locations only within the selected customer', () => {
-    const customer = { id: 'customer-a', name: 'Cliente Alfa', document: null, instructions: null,
+    const customer = { id: 'customer-a', name: 'Cliente Alfa', document: null, instructions: null, address: null, locality: null, city: null, state: null,
       createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z' };
     http.expectOne('/api/customers?page=1&pageSize=20').flush({ items: [customer], page: 1, pageSize: 20, totalCount: 1 });
     const page = fixture.componentInstance;
@@ -103,7 +103,7 @@ describe('CustomersPage', () => {
     expect(create.request.method).toBe('POST');
     expect(create.request.headers.get('X-CSRF-TOKEN')).toBe('csrf-value');
     create.flush({ id: 'location-a', customerId: 'customer-a', name: 'Unidade Central',
-      address: 'Rua das Flores, 100', instructions: null,
+      address: 'Rua das Flores, 100', instructions: null, address: null, locality: null, city: null, state: null,
       createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z' });
     http.expectOne('/api/customers/customer-a/locations').flush([{
       id: 'location-a', customerId: 'customer-a', name: 'Unidade Central', address: 'Rua das Flores, 100',

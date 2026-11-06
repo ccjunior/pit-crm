@@ -7,6 +7,10 @@ export interface Customer {
   name: string;
   document: string | null;
   instructions: string | null;
+  address: string | null;
+  locality: string | null;
+  city: string | null;
+  state: string | null;
   createdAtUtc: string;
   updatedAtUtc: string;
 }
@@ -22,6 +26,10 @@ export interface CustomerInput {
   name: string;
   document: string | null;
   instructions: string | null;
+  address: string | null;
+  locality: string | null;
+  city: string | null;
+  state: string | null;
 }
 
 export interface CustomerLocation {

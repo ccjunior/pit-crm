@@ -13,6 +13,10 @@ public sealed class Customer
         string name,
         string? document,
         string? instructions,
+        string? address,
+        string? locality,
+        string? city,
+        string? state,
         DateTimeOffset now)
     {
         if (id == Guid.Empty) throw new ArgumentException("Customer ID cannot be empty.", nameof(id));
@@ -25,6 +29,10 @@ public sealed class Customer
         Name = NormalizeRequired(name);
         Document = NormalizeOptional(document);
         Instructions = NormalizeOptional(instructions);
+        Address = NormalizeOptional(address);
+        Locality = NormalizeOptional(locality);
+        City = NormalizeOptional(city);
+        State = NormalizeOptional(state);
         if (Document is { Length: > 30 })
         {
             throw new ArgumentOutOfRangeException(nameof(document), "Customer document is limited to 30 characters.");
@@ -33,6 +41,7 @@ public sealed class Customer
         {
             throw new ArgumentOutOfRangeException(nameof(instructions), "Customer instructions are limited to 2000 characters.");
         }
+        ValidateAddressDetails(Address, Locality, City, State);
         CreatedAtUtc = NormalizeTimestamp(now);
         UpdatedAtUtc = NormalizeTimestamp(now);
         UpdatedByUserId = createdByUserId;
@@ -48,6 +57,14 @@ public sealed class Customer
 
     public string? Instructions { get; private set; }
 
+    public string? Address { get; private set; }
+
+    public string? Locality { get; private set; }
+
+    public string? City { get; private set; }
+
+    public string? State { get; private set; }
+
     public Guid CreatedByUserId { get; private set; }
 
     public DateTimeOffset CreatedAtUtc { get; private set; }
@@ -61,6 +78,10 @@ public sealed class Customer
         string name,
         string? document,
         string? instructions,
+        string? address,
+        string? locality,
+        string? city,
+        string? state,
         DateTimeOffset now)
     {
         if (updatedByUserId == Guid.Empty)
@@ -70,6 +91,10 @@ public sealed class Customer
 
         var normalizedDocument = NormalizeOptional(document);
         var normalizedInstructions = NormalizeOptional(instructions);
+        var normalizedAddress = NormalizeOptional(address);
+        var normalizedLocality = NormalizeOptional(locality);
+        var normalizedCity = NormalizeOptional(city);
+        var normalizedState = NormalizeOptional(state);
         if (normalizedDocument is { Length: > 30 })
         {
             throw new ArgumentOutOfRangeException(nameof(document), "Customer document is limited to 30 characters.");
@@ -78,10 +103,15 @@ public sealed class Customer
         {
             throw new ArgumentOutOfRangeException(nameof(instructions), "Customer instructions are limited to 2000 characters.");
         }
+        ValidateAddressDetails(normalizedAddress, normalizedLocality, normalizedCity, normalizedState);
 
         Name = NormalizeRequired(name);
         Document = normalizedDocument;
         Instructions = normalizedInstructions;
+        Address = normalizedAddress;
+        Locality = normalizedLocality;
+        City = normalizedCity;
+        State = normalizedState;
         UpdatedByUserId = updatedByUserId;
         UpdatedAtUtc = NormalizeTimestamp(now);
     }
@@ -104,6 +134,14 @@ public sealed class Customer
 
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static void ValidateAddressDetails(string? address, string? locality, string? city, string? state)
+    {
+        if (address is { Length: > 500 }) throw new ArgumentOutOfRangeException(nameof(address), "Customer address is limited to 500 characters.");
+        if (locality is { Length: > 200 }) throw new ArgumentOutOfRangeException(nameof(locality), "Customer locality is limited to 200 characters.");
+        if (city is { Length: > 200 }) throw new ArgumentOutOfRangeException(nameof(city), "Customer city is limited to 200 characters.");
+        if (state is { Length: > 200 }) throw new ArgumentOutOfRangeException(nameof(state), "Customer state is limited to 200 characters.");
+    }
 
     private static DateTimeOffset NormalizeTimestamp(DateTimeOffset value)
     {
