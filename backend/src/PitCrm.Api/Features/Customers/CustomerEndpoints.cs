@@ -6,6 +6,11 @@ namespace PitCrm.Api.Features.Customers;
 
 public static class CustomerEndpoints
 {
+    private static readonly HashSet<string> BrazilianStateCodes = [
+        "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG",
+        "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO",
+    ];
+
     public static void Map(WebApplication app)
     {
         var customers = app.MapGroup("/api/customers");
@@ -23,6 +28,9 @@ public static class CustomerEndpoints
 
     private static async Task<IResult> SearchAsync(
         string? q,
+        string? city,
+        string? sortBy,
+        bool? descending,
         int? page,
         int? pageSize,
         ICurrentOrganizationContext organizationContext,
@@ -30,7 +38,8 @@ public static class CustomerEndpoints
         CancellationToken cancellationToken)
     {
         var currentPage = page ?? 1;
-        var currentPageSize = pageSize ?? 20;
+        var currentPageSize = pageSize ?? 12;
+        var currentSort = string.IsNullOrWhiteSpace(sortBy) ? "name" : sortBy.Trim().ToLowerInvariant();
         var errors = new Dictionary<string, string[]>();
         if (currentPage < 1 || (long)(currentPage - 1) * currentPageSize > int.MaxValue)
         {
@@ -40,11 +49,15 @@ public static class CustomerEndpoints
         {
             errors["pageSize"] = ["O tamanho da página deve estar entre 1 e 100."];
         }
+        if (currentSort is not ("name" or "city")) errors["sortBy"] = ["A ordenação aceita name ou city."];
         if (errors.Count > 0) return Results.ValidationProblem(errors);
 
         var result = await customerStore.SearchAsync(
             organizationContext.OrganizationId,
             q,
+            city,
+            currentSort,
+            descending ?? false,
             currentPage,
             currentPageSize,
             cancellationToken);
@@ -78,6 +91,7 @@ public static class CustomerEndpoints
             request.Name!,
             request.Document,
             request.Instructions,
+            request.PostalCode,
             request.Address,
             request.Locality,
             request.City,
@@ -96,7 +110,7 @@ public static class CustomerEndpoints
         CancellationToken cancellationToken)
     {
         var errors = Validate(new CreateCustomerRequest(request.Name, request.Document, request.Instructions,
-            request.Address, request.Locality, request.City, request.State));
+            request.PostalCode, request.Address, request.Locality, request.City, request.State));
         if (errors.Count > 0) return Results.ValidationProblem(errors);
 
         var customer = await customerStore.FindForUpdateAsync(
@@ -110,6 +124,7 @@ public static class CustomerEndpoints
             request.Name!,
             request.Document,
             request.Instructions,
+            request.PostalCode,
             request.Address,
             request.Locality,
             request.City,
@@ -131,17 +146,21 @@ public static class CustomerEndpoints
             errors[nameof(request.Name)] = ["O nome do cliente deve ter até 200 caracteres."];
         }
         if (request.Document?.Trim().Length > 30)
-        {
             errors[nameof(request.Document)] = ["O documento deve ter até 30 caracteres."];
-        }
+        else if (!CustomerDocument.TryNormalize(request.Document, out _))
+            errors[nameof(request.Document)] = ["Informe um CPF ou CNPJ numérico válido. Digite apenas números e pontuação usual."];
         if (request.Instructions?.Trim().Length > 2000)
         {
             errors[nameof(request.Instructions)] = ["As instruções devem ter até 2000 caracteres."];
         }
+        if (!string.IsNullOrWhiteSpace(request.PostalCode) && new string(request.PostalCode.Where(char.IsDigit).ToArray()).Length != 8)
+            errors[nameof(request.PostalCode)] = ["Informe um CEP com 8 dígitos."];
         if (request.Address?.Trim().Length > 500) errors[nameof(request.Address)] = ["O endereço principal deve ter até 500 caracteres."];
         if (request.Locality?.Trim().Length > 200) errors[nameof(request.Locality)] = ["A localidade deve ter até 200 caracteres."];
         if (request.City?.Trim().Length > 200) errors[nameof(request.City)] = ["A cidade deve ter até 200 caracteres."];
         if (request.State?.Trim().Length > 200) errors[nameof(request.State)] = ["O estado deve ter até 200 caracteres."];
+        else if (!string.IsNullOrWhiteSpace(request.State) && !BrazilianStateCodes.Contains(request.State.Trim().ToUpperInvariant()))
+            errors[nameof(request.State)] = ["Informe uma UF brasileira válida com duas letras."];
 
         return errors;
     }
@@ -151,15 +170,22 @@ public static class CustomerEndpoints
         customer.Name,
         customer.Document,
         customer.Instructions,
+        customer.PostalCode,
         customer.Address,
         customer.Locality,
         customer.City,
         customer.State,
+        0,
+        0,
+        0,
+        0,
+        null,
+        null,
         customer.CreatedAtUtc,
         customer.UpdatedAtUtc);
 
-    public sealed record CreateCustomerRequest(string? Name, string? Document, string? Instructions,
+    public sealed record CreateCustomerRequest(string? Name, string? Document, string? Instructions, string? PostalCode,
         string? Address, string? Locality, string? City, string? State);
-    public sealed record UpdateCustomerRequest(string? Name, string? Document, string? Instructions,
+    public sealed record UpdateCustomerRequest(string? Name, string? Document, string? Instructions, string? PostalCode,
         string? Address, string? Locality, string? City, string? State);
 }

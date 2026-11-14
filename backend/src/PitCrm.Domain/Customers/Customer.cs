@@ -13,6 +13,7 @@ public sealed class Customer
         string name,
         string? document,
         string? instructions,
+        string? postalCode,
         string? address,
         string? locality,
         string? city,
@@ -27,21 +28,18 @@ public sealed class Customer
         OrganizationId = organizationId;
         CreatedByUserId = createdByUserId;
         Name = NormalizeRequired(name);
-        Document = NormalizeOptional(document);
+        Document = CustomerDocument.Normalize(document);
         Instructions = NormalizeOptional(instructions);
+        PostalCode = NormalizePostalCode(postalCode);
         Address = NormalizeOptional(address);
         Locality = NormalizeOptional(locality);
         City = NormalizeOptional(city);
-        State = NormalizeOptional(state);
-        if (Document is { Length: > 30 })
-        {
-            throw new ArgumentOutOfRangeException(nameof(document), "Customer document is limited to 30 characters.");
-        }
+        State = NormalizeState(state);
         if (Instructions is { Length: > 2000 })
         {
             throw new ArgumentOutOfRangeException(nameof(instructions), "Customer instructions are limited to 2000 characters.");
         }
-        ValidateAddressDetails(Address, Locality, City, State);
+        ValidateAddressDetails(PostalCode, Address, Locality, City, State);
         CreatedAtUtc = NormalizeTimestamp(now);
         UpdatedAtUtc = NormalizeTimestamp(now);
         UpdatedByUserId = createdByUserId;
@@ -56,6 +54,8 @@ public sealed class Customer
     public string? Document { get; private set; }
 
     public string? Instructions { get; private set; }
+
+    public string? PostalCode { get; private set; }
 
     public string? Address { get; private set; }
 
@@ -78,6 +78,7 @@ public sealed class Customer
         string name,
         string? document,
         string? instructions,
+        string? postalCode,
         string? address,
         string? locality,
         string? city,
@@ -89,25 +90,23 @@ public sealed class Customer
             throw new ArgumentException("Updating user ID cannot be empty.", nameof(updatedByUserId));
         }
 
-        var normalizedDocument = NormalizeOptional(document);
+        var normalizedDocument = CustomerDocument.Normalize(document);
         var normalizedInstructions = NormalizeOptional(instructions);
+        var normalizedPostalCode = NormalizePostalCode(postalCode);
         var normalizedAddress = NormalizeOptional(address);
         var normalizedLocality = NormalizeOptional(locality);
         var normalizedCity = NormalizeOptional(city);
-        var normalizedState = NormalizeOptional(state);
-        if (normalizedDocument is { Length: > 30 })
-        {
-            throw new ArgumentOutOfRangeException(nameof(document), "Customer document is limited to 30 characters.");
-        }
+        var normalizedState = NormalizeState(state);
         if (normalizedInstructions is { Length: > 2000 })
         {
             throw new ArgumentOutOfRangeException(nameof(instructions), "Customer instructions are limited to 2000 characters.");
         }
-        ValidateAddressDetails(normalizedAddress, normalizedLocality, normalizedCity, normalizedState);
+        ValidateAddressDetails(normalizedPostalCode, normalizedAddress, normalizedLocality, normalizedCity, normalizedState);
 
         Name = NormalizeRequired(name);
         Document = normalizedDocument;
         Instructions = normalizedInstructions;
+        PostalCode = normalizedPostalCode;
         Address = normalizedAddress;
         Locality = normalizedLocality;
         City = normalizedCity;
@@ -135,8 +134,19 @@ public sealed class Customer
     private static string? NormalizeOptional(string? value) =>
         string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static void ValidateAddressDetails(string? address, string? locality, string? city, string? state)
+    private static string? NormalizePostalCode(string? value)
     {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        var digits = new string(value.Where(char.IsDigit).ToArray());
+        if (digits.Length != 8) throw new ArgumentException("Postal code must contain exactly 8 digits.", nameof(value));
+        return digits;
+    }
+
+    private static string? NormalizeState(string? value) => NormalizeOptional(value)?.ToUpperInvariant();
+
+    private static void ValidateAddressDetails(string? postalCode, string? address, string? locality, string? city, string? state)
+    {
+        if (postalCode is { Length: > 8 }) throw new ArgumentOutOfRangeException(nameof(postalCode), "Customer postal code is limited to 8 digits.");
         if (address is { Length: > 500 }) throw new ArgumentOutOfRangeException(nameof(address), "Customer address is limited to 500 characters.");
         if (locality is { Length: > 200 }) throw new ArgumentOutOfRangeException(nameof(locality), "Customer locality is limited to 200 characters.");
         if (city is { Length: > 200 }) throw new ArgumentOutOfRangeException(nameof(city), "Customer city is limited to 200 characters.");

@@ -15,6 +15,9 @@ public interface ICustomerStore
     Task<CustomerSearchResult> SearchAsync(
         Guid organizationId,
         string? searchTerm,
+        string? city,
+        string sortBy,
+        bool descending,
         int page,
         int pageSize,
         CancellationToken cancellationToken);

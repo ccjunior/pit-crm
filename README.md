@@ -1,6 +1,6 @@
-# PIT-CRM
+# PIT Obras
 
-Plataforma de gestão comercial e operacional para empresas de serviços. O primeiro caso de validação é uma empresa de serviços e reformas empresariais, com foco em chamados, execução em campo, faturamento e recebimentos.
+Produto da Project IT para gestão comercial e operacional de empresas de construção civil e reformas. PIT-CRM permanece como nome interno do projeto e do repositório.
 
 ## Documentação
 
@@ -43,6 +43,14 @@ dotnet run --project src/PitCrm.Api
 ```
 
 O arquivo `.env` é lido pelo Docker Compose para configurar o container PostgreSQL; a API .NET e os comandos do Entity Framework **não** leem esse arquivo. As variáveis `$env:PITCRM_CONNECTION_STRING` e `$env:PITCRM_TEST_CONNECTION` acima são definidas no processo do PowerShell e valem apenas naquele terminal. Mantenha a connection string coerente com `PITCRM_DB_NAME`, `PITCRM_DB_USER`, `PITCRM_DB_PASSWORD` e `PITCRM_DB_PORT` do `.env`. Com os valores padrão do `.env.example`, a porta publicada é `5433`.
+
+Para guardar a connection string localmente, sem incluí-la no repositório, configure o .NET User Secrets uma vez, a partir da raiz:
+
+```powershell
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<sua connection string local>" --project backend/src/PitCrm.Api
+```
+
+O perfil `http` de desenvolvimento carrega esse valor automaticamente ao executar `dotnet run --project backend/src/PitCrm.Api`. `PITCRM_CONNECTION_STRING`, quando definida no ambiente do processo, tem precedência.
 
 Se você usar um PostgreSQL instalado diretamente no computador, não inicie o serviço `postgres` do Compose; defina `PITCRM_CONNECTION_STRING` com a porta, o banco e as credenciais dessa instalação. A porta padrão de uma instalação local costuma ser `5432`; use as credenciais reais dela.
 

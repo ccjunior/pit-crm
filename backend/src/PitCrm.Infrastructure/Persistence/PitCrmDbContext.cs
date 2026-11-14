@@ -17,6 +17,7 @@ public sealed class PitCrmDbContext(
 
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerLocation> CustomerLocations => Set<CustomerLocation>();
+    public DbSet<CustomerContact> CustomerContacts => Set<CustomerContact>();
     public DbSet<Demand> Demands => Set<Demand>();
     public DbSet<DemandActivity> DemandActivities => Set<DemandActivity>();
 
@@ -43,6 +44,7 @@ public sealed class PitCrmDbContext(
             customer.Property(value => value.Name).HasMaxLength(200).IsRequired();
             customer.Property(value => value.Document).HasMaxLength(30);
             customer.Property(value => value.Instructions).HasMaxLength(2000);
+            customer.Property(value => value.PostalCode).HasMaxLength(8);
             customer.Property(value => value.Address).HasMaxLength(500);
             customer.Property(value => value.Locality).HasMaxLength(200);
             customer.Property(value => value.City).HasMaxLength(200);
@@ -76,6 +78,10 @@ public sealed class PitCrmDbContext(
             location.HasKey(value => value.Id);
             location.Property(value => value.Name).HasMaxLength(200).IsRequired();
             location.Property(value => value.Address).HasMaxLength(500).IsRequired();
+            location.Property(value => value.Neighborhood).HasMaxLength(200);
+            location.Property(value => value.City).HasMaxLength(200);
+            location.Property(value => value.MapUrl).HasMaxLength(2000);
+            location.Property(value => value.Status).HasConversion<string>().HasMaxLength(20).HasDefaultValue(CustomerLocationStatus.Active).IsRequired();
             location.Property(value => value.Instructions).HasMaxLength(2000);
             location.Property(value => value.CreatedAtUtc).IsRequired();
             location.Property(value => value.UpdatedAtUtc).IsRequired();
@@ -90,8 +96,40 @@ public sealed class PitCrmDbContext(
                 .IsRequired().OnDelete(DeleteBehavior.Restrict);
             location.HasIndex(value => new { value.OrganizationId, value.CustomerId, value.Name });
             location.HasAlternateKey(value => new { value.OrganizationId, value.CustomerId, value.Id });
+            location.HasOne<CustomerContact>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CustomerId, value.ResponsibleContactId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.CustomerId, value.Id }).OnDelete(DeleteBehavior.Restrict);
+            location.HasIndex(value => new { value.OrganizationId, value.CustomerId, value.ResponsibleContactId });
             location.HasIndex(value => value.CreatedByUserId);
             location.HasIndex(value => value.UpdatedByUserId);
+        });
+
+        builder.Entity<CustomerContact>(contact =>
+        {
+            contact.ToTable("CustomerContacts");
+            contact.HasKey(value => value.Id);
+            contact.HasAlternateKey(value => new { value.OrganizationId, value.CustomerId, value.Id });
+            contact.Property(value => value.Name).HasMaxLength(200).IsRequired();
+            contact.Property(value => value.Role).HasMaxLength(200);
+            contact.Property(value => value.Phone).HasMaxLength(40);
+            contact.Property(value => value.Email).HasMaxLength(254);
+            contact.Property(value => value.IsPrimary).HasDefaultValue(false).IsRequired();
+            contact.Property(value => value.CreatedAtUtc).IsRequired();
+            contact.Property(value => value.UpdatedAtUtc).IsRequired();
+            contact.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
+                .IsRequired().OnDelete(DeleteBehavior.Restrict);
+            contact.HasOne<Customer>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CustomerId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            contact.HasOne<CustomerLocation>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CustomerId, value.LocationId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.CustomerId, value.Id }).OnDelete(DeleteBehavior.Restrict);
+            contact.HasOne<ApplicationUser>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CreatedByUserId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            contact.HasOne<ApplicationUser>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.UpdatedByUserId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            contact.HasIndex(value => new { value.OrganizationId, value.CustomerId, value.LocationId });
+            contact.HasIndex(value => new { value.OrganizationId, value.CustomerId }).IsUnique()
+                .HasFilter("\"IsPrimary\" = TRUE AND \"LocationId\" IS NULL");
+            contact.HasIndex(value => new { value.OrganizationId, value.CustomerId, value.LocationId }).IsUnique()
+                .HasFilter("\"IsPrimary\" = TRUE AND \"LocationId\" IS NOT NULL");
         });
 
         builder.Entity<Demand>(demand =>

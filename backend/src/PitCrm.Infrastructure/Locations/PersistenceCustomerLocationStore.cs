@@ -10,6 +10,11 @@ public sealed class PersistenceCustomerLocationStore(PitCrmDbContext dbContext) 
     public Task<bool> CustomerExistsAsync(Guid organizationId, Guid customerId, CancellationToken cancellationToken) =>
         dbContext.Customers.AnyAsync(customer => customer.OrganizationId == organizationId && customer.Id == customerId, cancellationToken);
 
+    public Task<bool> ResponsibleContactExistsAsync(Guid organizationId, Guid customerId, Guid? locationId, Guid contactId,
+        CancellationToken cancellationToken) =>
+        dbContext.CustomerContacts.AnyAsync(contact => contact.OrganizationId == organizationId && contact.CustomerId == customerId
+            && contact.Id == contactId && (contact.LocationId == null || (locationId != null && contact.LocationId == locationId)), cancellationToken);
+
     public Task<CustomerLocation?> FindAsync(Guid organizationId, Guid customerId, Guid locationId, CancellationToken cancellationToken) =>
         dbContext.CustomerLocations.SingleOrDefaultAsync(location => location.OrganizationId == organizationId
             && location.CustomerId == customerId && location.Id == locationId, cancellationToken);
@@ -19,7 +24,14 @@ public sealed class PersistenceCustomerLocationStore(PitCrmDbContext dbContext) 
             .Where(location => location.OrganizationId == organizationId && location.CustomerId == customerId)
             .OrderBy(location => location.Name).ThenBy(location => location.Id)
             .Select(location => new CustomerLocationDto(location.Id, location.CustomerId, location.Name, location.Address,
-                location.Instructions, location.CreatedAtUtc, location.UpdatedAtUtc))
+                location.Neighborhood, location.City, location.Status.ToString(), location.Instructions, location.MapUrl, location.ResponsibleContactId,
+                dbContext.CustomerContacts.Where(contact => contact.OrganizationId == location.OrganizationId
+                    && contact.CustomerId == location.CustomerId && contact.Id == location.ResponsibleContactId).Select(contact => contact.Name).FirstOrDefault(),
+                dbContext.CustomerContacts.Where(contact => contact.OrganizationId == location.OrganizationId
+                    && contact.CustomerId == location.CustomerId && contact.Id == location.ResponsibleContactId).Select(contact => contact.Role).FirstOrDefault(),
+                dbContext.CustomerContacts.Where(contact => contact.OrganizationId == location.OrganizationId
+                    && contact.CustomerId == location.CustomerId && contact.Id == location.ResponsibleContactId).Select(contact => contact.Phone).FirstOrDefault(),
+                location.CreatedAtUtc, location.UpdatedAtUtc))
             .ToListAsync(cancellationToken);
 
     public async Task AddAsync(CustomerLocation location, CancellationToken cancellationToken)

@@ -1,0 +1,20 @@
+# Tarefas: clientes, locais e contatos
+
+- [x] T01 — Auditar modelos, contratos e filtros multi-tenant atuais. Área: backend/frontend. Critérios: AC-02–AC-07. Verificação: código de domínio, stores e endpoints lidos.
+- [x] T02 — Implementar modelos, contratos e migração de CEP, local/status e contatos com chaves multi-tenant. Área: domínio/persistência. Depende: T01. Critérios: AC-02–AC-05. Evidência: migração aditiva gerada; build Release da solution.
+- [x] T03 — Implementar endpoints e regras de acesso/validação para locais e contatos; normalizar consulta de documento conforme decisão D-01; proteger exclusão de contato. Área: API. Depende: T02. Critérios: AC-03–AC-07. Evidência: API compila em Release.
+- [x] T04 — Integrar ViaCEP e campos de cliente/local/contato, grade de cards baseada na referência visual e exclusão confirmada na tela Angular. Área: frontend. Depende: T02–T03. Critérios: AC-01–AC-04, AC-08–AC-09. Evidência: `npm run build`.
+- [x] T05 — Gerar evidências por critério e atualizar estado/documentação. Área: integração. Depende: T02–T04. Critérios: AC-01–AC-09. Builds e migrações locais aplicadas; verificações não executadas estão descritas em `verification.md`.
+- [x] T06 — Adicionar contato principal único por cliente/local, API, formulário e migração. Área: domínio/API/persistência/frontend. Depende: T04. Critérios: AC-10. Verificação: build Release da solution e migração gerada.
+- [x] T07 — Ajustar o diretório às melhorias priorizadas: cards/tabela, debounce, cidade/ordenação, contadores, drawer, apresentação e paginação. Área: frontend/API. Depende: T06. Critérios: AC-11–AC-12. Verificação: build Angular.
+- [x] T08 — Atualizar especificação, estado e evidências, incluindo limites dos filtros ainda sem modelo. Área: integração. Depende: T06–T07. Verificação: consistência documental.
+- [x] T09 — Corrigir contagens tenant-scoped e estados de erro/vazio dos contatos; suportar todos os escopos. Área: backend/frontend. Critérios: AC-13, AC-16. Verificação: builds e inspeção da rota ativa.
+- [x] T10 — Máscaras/validação de documentos, CEP e UF; responsável/mapa dos locais; fechamento, menu e legibilidade. Área: backend/frontend. Critérios: AC-14–AC-17. Verificação: builds Release e Angular; suíte disponível.
+- [x] T11 — Ampliar cards no desktop, destacar ações Locais/Contatos e separar a paginação da grade após revisão visual do usuário. Área: frontend. Verificação: build Angular e inspeção do CSS responsivo.
+- [x] T12 — Corrigir proporção após esclarecimento: reduzir quantidade de colunas em desktop amplo e distribuir mais espaço no eixo vertical. Área: frontend. Verificação: build Angular.
+- [x] T13 — Refinar significado visual de ações, métricas e documentos e confirmar abertura do card. Área: frontend. Critérios: AC-18. Verificação: build Angular.
+- [x] T14 — Validar documento na entrada, preservar valor legado com alerta, omitir documento vazio e explicitar ação de abrir cadastro/locais ativos. Área: frontend. Verificação: `npm run build` e inspeção do endpoint de contatos ativo.
+- [x] T15 — Ajustar explicação do alerta, posição do atalho do cadastro, rótulo do chevron e contraste; revisar abas acionadas pelos botões do card. Área: frontend. Verificação: build Angular e inspeção do fluxo de seleção.
+- [x] T16 — Separar identificação/endereço na aba Cadastro, resumir endereço com Maps, destacar instruções e estados vazios, contextualizar edição e exibir metadados disponíveis; garantir retorno de foco ao acionador do drawer. Área: frontend. Verificação: build Angular e inspeção do diálogo nativo.
+- [x] T17 — Compactar lista de locais, distinguir status, eliminar endereço duplicado, exibir responsável/WhatsApp e salvar link manual de Google Maps. Área: backend/frontend/persistência. Verificação: migração aplicada ao banco local e builds Release/Angular.
+- [x] T18 — Exibir totais nos chips de contato, rolar vínculos longos, contextualizar o estado vazio e pré-selecionar vínculo; aprimorar função/telefone/WhatsApp do formulário. Área: frontend. Verificação: `npm run build` e inspeção do fluxo de escopos.

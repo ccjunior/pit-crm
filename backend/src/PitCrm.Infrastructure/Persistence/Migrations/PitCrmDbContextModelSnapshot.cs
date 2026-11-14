@@ -192,6 +192,10 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
+                    b.Property<string>("PostalCode")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
                     b.Property<string>("State")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -211,6 +215,72 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrganizationId", "Name");
 
                     b.ToTable("Customers", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Customers.CustomerContact", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Email")
+                        .HasMaxLength(254)
+                        .HasColumnType("character varying(254)");
+
+                    b.Property<bool>("IsPrimary")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<Guid?>("LocationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("Role")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UpdatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "CreatedByUserId");
+
+                    b.HasIndex("OrganizationId", "CustomerId")
+                        .IsUnique()
+                        .HasFilter("\"IsPrimary\" = TRUE AND \"LocationId\" IS NULL");
+
+                    b.HasIndex("OrganizationId", "UpdatedByUserId");
+
+                    b.HasIndex("OrganizationId", "CustomerId", "LocationId")
+                        .IsUnique()
+                        .HasFilter("\"IsPrimary\" = TRUE AND \"LocationId\" IS NOT NULL");
+
+                    b.ToTable("CustomerContacts", (string)null);
                 });
 
             modelBuilder.Entity("PitCrm.Domain.Demands.Demand", b =>
@@ -329,6 +399,10 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
+                    b.Property<string>("City")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
@@ -342,13 +416,31 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
 
+                    b.Property<string>("MapUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
+                    b.Property<string>("Neighborhood")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ResponsibleContactId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Active");
 
                     b.Property<DateTimeOffset>("UpdatedAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -363,6 +455,8 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.HasIndex("UpdatedByUserId");
 
                     b.HasIndex("OrganizationId", "CustomerId", "Name");
+
+                    b.HasIndex("OrganizationId", "CustomerId", "ResponsibleContactId");
 
                     b.ToTable("CustomerLocations", (string)null);
                 });
@@ -546,6 +640,42 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("PitCrm.Domain.Customers.CustomerContact", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "CreatedByUserId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Domain.Customers.Customer", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "CustomerId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "UpdatedByUserId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Domain.Locations.CustomerLocation", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "CustomerId", "LocationId")
+                        .HasPrincipalKey("OrganizationId", "CustomerId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("PitCrm.Domain.Demands.Demand", b =>
                 {
                     b.HasOne("PitCrm.Domain.Organizations.Organization", null)
@@ -625,6 +755,12 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
+
+                    b.HasOne("PitCrm.Domain.Customers.CustomerContact", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "CustomerId", "ResponsibleContactId")
+                        .HasPrincipalKey("OrganizationId", "CustomerId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
                 });
 
             modelBuilder.Entity("PitCrm.Infrastructure.Identity.ApplicationUser", b =>

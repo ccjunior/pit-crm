@@ -1,112 +1,188 @@
 <section class="customers-page" aria-labelledby="customers-title">
-  <div class="page-heading">
+  <header class="page-heading">
     <div>
       <p class="eyebrow">Cadastros</p>
-      <h1 id="customers-title">Clientes</h1>
-      <p class="intro">Consulte e mantenha os clientes da sua organização.</p>
+      <h1 id="customers-title">Clientes e locais</h1>
+      <p class="intro">Mantenha em um só lugar os clientes e os endereços de atendimento.</p>
     </div>
     @if (canManage()) {
-      <button class="primary-button" type="button" (click)="startCreate()">+ Novo cliente</button>
+      <button class="primary-button" type="button" (click)="startCreate()"><span aria-hidden="true">＋</span> Novo cliente</button>
     }
-  </div>
+  </header>
 
-  <div class="customer-layout">
-    <section class="list-card" aria-label="Lista de clientes">
-      <form class="search-form" (ngSubmit)="search()">
+  <section class="customer-directory" aria-label="Lista de clientes">
+    <div class="list-card-heading">
+      <div><p class="eyebrow">Cadastros da organização</p><h2>Clientes</h2></div>
+    </div>
+    <div class="directory-toolbar">
+      <div class="directory-filters">
+      <div class="search-form">
         <label class="sr-only" for="customer-search">Buscar cliente por nome ou documento</label>
-        <input id="customer-search" [formControl]="query" placeholder="Nome ou documento" />
-        <button class="secondary-button" type="submit" [disabled]="loading()">Buscar</button>
-      </form>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
+        <input id="customer-search" type="search" [formControl]="query" placeholder="Nome ou documento" />
+      </div>
+      <label class="city-filter" for="customer-city-filter"><span>Cidade</span><input id="customer-city-filter" [formControl]="cityFilter" placeholder="Filtrar cidade" /></label>
+      </div>
+      <div class="view-toggle" role="group" aria-label="Forma de exibição">
+        <button type="button" [class.active]="viewMode() === 'cards'" [attr.aria-pressed]="viewMode() === 'cards'" (click)="viewMode.set('cards')">Cards</button>
+        <button type="button" [class.active]="viewMode() === 'table'" [attr.aria-pressed]="viewMode() === 'table'" (click)="viewMode.set('table')">Tabela</button>
+      </div>
+    </div>
       @if (error() && customers().length > 0) { <p class="error-banner list-error" role="alert">{{ error() }}</p> }
       @if (loading()) {
         <div class="message" role="status">Carregando clientes…</div>
       } @else if (error() && customers().length === 0) {
-        <div class="message error" role="alert">{{ error() }} <button type="button" class="text-button" (click)="load()">Tentar novamente</button></div>
+        <div class="empty-state error-state" role="alert"><span class="empty-icon" aria-hidden="true">!</span><h3>Não foi possível carregar</h3><p>{{ error() }}</p><button type="button" class="text-button" (click)="load()">Tentar novamente</button></div>
       } @else if (customers().length === 0) {
         <div class="empty-state" role="status">
-          <span class="empty-icon" aria-hidden="true">◇</span>
-          <h2>{{ query.value ? 'Nenhum resultado' : 'Ainda não há clientes' }}</h2>
-          <p>{{ query.value ? 'Tente outro nome ou documento.' : 'Os clientes cadastrados aparecerão nesta lista.' }}</p>
+          <span class="empty-icon" aria-hidden="true">⌕</span>
+          <h3>{{ query.value || cityFilter.value ? 'Nenhum resultado para essa busca' : 'Nenhum cliente cadastrado ainda' }}</h3>
+          <p>{{ query.value || cityFilter.value ? 'Ajuste ou limpe os filtros e tente novamente.' : 'Cadastre o primeiro cliente para começar.' }}</p>
+          @if (query.value || cityFilter.value) { <button class="secondary-button" type="button" (click)="clearFilters()">Limpar filtros</button> }
+          @else if (canManage()) { <button class="primary-button" type="button" (click)="startCreate()">＋ Novo cliente</button> }
         </div>
       } @else {
-        <ul class="customer-list">
-          @for (customer of customers(); track trackCustomer($index, customer)) {
-            <li>
-              <button type="button" class="customer-row" [class.selected]="selected()?.id === customer.id" (click)="select(customer)">
-                <span class="customer-avatar" aria-hidden="true">{{ customer.name.slice(0, 1).toLocaleUpperCase() }}</span>
-                <span class="customer-copy"><strong>{{ customer.name }}</strong><small>{{ customer.document || 'Sem documento informado' }}</small></span>
-                <span class="chevron" aria-hidden="true">›</span>
-              </button>
-            </li>
-          }
-        </ul>
+        @if (viewMode() === 'cards') {
+          <ul class="customer-grid">
+            @for (customer of customers(); track trackCustomer($index, customer)) {
+              <li>
+                <article class="customer-card">
+                  <button type="button" class="customer-card-main" (click)="select(customer)" [attr.aria-label]="'Abrir cadastro de ' + customer.name">
+                    <span class="customer-card-header">
+                      <span class="customer-avatar" aria-hidden="true" [style.background]="avatarBackground(customer.name)" [style.color]="avatarForeground(customer.name)">{{ customer.name.slice(0, 1).toLocaleUpperCase() }}</span>
+                      <span class="customer-card-title"><strong>{{ customer.name }}</strong>@if (hasDocument(customer.document)) { <span class="customer-document" [class.is-invalid-document]="!isValidDocument(customer.document)">@if (!isValidDocument(customer.document)) { <span class="document-warning" title="Formato de documento não reconhecido como CPF/CNPJ. Revise o cadastro." aria-label="Formato de documento não reconhecido como CPF ou CNPJ">⚠</span> }{{ formatDocument(customer.document) }}</span> }</span>
+                    </span>
+                    <span class="customer-card-address">
+                      @if (customer.address) { <span>{{ customer.address }}</span> }
+                      @if (customer.locality || customer.city || customer.state) { <span>{{ customer.locality }}{{ customer.locality && customer.city ? ', ' : '' }}{{ customer.city }}{{ customer.state ? ' - ' + customer.state : '' }}</span> }
+                      @if (!customer.address && !customer.city && !customer.locality) { <span class="muted">Endereço não informado</span> }
+                    </span>
+                    @if (customer.primaryContactName) { <span class="primary-contact-summary"><strong>{{ customer.primaryContactName }}</strong>@if (customer.primaryContactPhone) { <span>{{ customer.primaryContactPhone }}</span> }</span> }
+                    <span class="customer-stat-row"><span class="active-locations-stat"><b>{{ customer.activeLocationCount ?? 0 }}</b> locais ativos</span><span class="demand-stat" [attr.data-count]="customer.receivedDemandCount ?? 0">Demandas recebidas <b>{{ customer.receivedDemandCount ?? 0 }}</b></span><span class="card-open-hint">Ver cadastro <span aria-hidden="true">›</span></span></span>
+                  </button>
+                  <div class="customer-card-actions">
+                    <button type="button" class="secondary-button" (click)="showCustomerSection(customer, 'locations')">Locais ({{ customer.locationCount ?? 0 }})</button>
+                    <button type="button" class="secondary-button" [class.is-empty]="(customer.contactCount ?? 0) === 0" (click)="showCustomerSection(customer, 'contacts')">Contatos ({{ customer.contactCount ?? 0 }})</button>
+                    @if (whatsappUrl(customer.primaryContactPhone); as whatsapp) { <a class="whatsapp-shortcut" [href]="whatsapp" target="_blank" rel="noopener noreferrer" [attr.aria-label]="'Abrir WhatsApp de ' + customer.primaryContactName">WhatsApp</a> }
+                    @if (canManage()) { <details class="customer-card-menu"><summary [attr.aria-label]="'Mais ações para ' + customer.name">⋮</summary><div><button type="button" (click)="editCustomer(customer)">Editar</button></div></details> }
+                  </div>
+                </article>
+              </li>
+            }
+          </ul>
+        } @else {
+          <div class="customer-table-scroll"><table class="customer-table"><thead><tr>
+            <th scope="col"><button type="button" (click)="setSort('name')">Cliente {{ sortBy() === 'name' ? (descending() ? '↓' : '↑') : '' }}</button></th>
+            <th scope="col">Documento</th><th scope="col"><button type="button" (click)="setSort('city')">Cidade {{ sortBy() === 'city' ? (descending() ? '↓' : '↑') : '' }}</button></th>
+            <th scope="col">Locais</th><th scope="col">Contatos</th><th scope="col">Ações</th>
+          </tr></thead><tbody>
+            @for (customer of customers(); track trackCustomer($index, customer)) {
+              <tr><td><button type="button" class="customer-table-name" (click)="select(customer)">{{ customer.name }}</button><small>{{ customer.address || 'Endereço não informado' }}</small></td>
+                <td>@if (hasDocument(customer.document)) { <span [class.is-invalid-document]="!isValidDocument(customer.document)">@if (!isValidDocument(customer.document)) { <span class="document-warning" title="Formato de documento não reconhecido como CPF/CNPJ. Revise o cadastro." aria-label="Formato de documento não reconhecido como CPF ou CNPJ">⚠</span> }{{ formatDocument(customer.document) }}</span> }</td><td>{{ customer.city || '—' }}</td>
+                <td>{{ customer.locationCount ?? 0 }} <small>({{ customer.activeLocationCount ?? 0 }} ativos)</small></td><td>{{ customer.contactCount ?? 0 }}</td>
+                <td><div class="table-actions"><button type="button" (click)="showCustomerSection(customer, 'locations')">Locais</button><button type="button" (click)="showCustomerSection(customer, 'contacts')">Contatos</button>@if (canManage()) { <details class="table-action-menu"><summary [attr.aria-label]="'Mais ações para ' + customer.name">⋮</summary><button type="button" (click)="editCustomer(customer)">Editar</button></details> }</div></td>
+              </tr>
+            }
+          </tbody></table></div>
+        }
         <div class="pagination">
-          <span>{{ totalCount() }} {{ totalCount() === 1 ? 'cliente' : 'clientes' }}</span>
-          <div><button type="button" (click)="previousPage()" [disabled]="page() === 1 || loading()" aria-label="Página anterior">‹</button>
+          <span>Mostrando {{ rangeStart() }}–{{ rangeEnd() }} de {{ totalCount() }}</span>
+          <div class="pagination-controls"><label for="customer-page-size">Por página</label><select id="customer-page-size" [value]="pageSize()" (change)="setPageSize($any($event.target).value)"><option value="12">12</option><option value="24">24</option><option value="48">48</option><option value="96">96</option></select>
+          <button type="button" (click)="previousPage()" [disabled]="page() === 1 || loading()" aria-label="Página anterior">‹</button>
           <span>Página {{ page() }}</span>
-          <button type="button" (click)="nextPage()" [disabled]="page() * 20 >= totalCount() || loading()" aria-label="Próxima página">›</button></div>
+          <button type="button" (click)="nextPage()" [disabled]="page() * pageSize() >= totalCount() || loading()" aria-label="Próxima página">›</button></div>
         </div>
       }
     </section>
 
+    <dialog #customerDialog class="customer-dialog" aria-labelledby="customer-dialog-title"
+      (cancel)="handleDialogCancel($event)" (click)="handleDialogBackdropClick($event)" (close)="onCustomerDialogClose()">
     <section class="detail-card" aria-label="Detalhes do cliente">
       @if (notice()) { <p class="notice" role="status">{{ notice() }}</p> }
       @if (error() && (customers().length > 0 || selected())) { <p class="error-banner" role="alert">{{ error() }}</p> }
       @if (editing()) {
-        <div class="detail-heading"><div><p class="eyebrow">{{ selected() ? 'Editar cadastro' : 'Novo cadastro' }}</p><h2>{{ selected() ? 'Editar cliente' : 'Novo cliente' }}</h2></div></div>
-        <form class="customer-form" (ngSubmit)="save()" novalidate>
-          <label for="customer-name">Nome <span>*</span></label>
-          <input id="customer-name" formControlName="name" maxlength="200" autocomplete="organization" />
-          @if (form.controls.name.touched && form.controls.name.invalid) { <small class="field-error">Informe o nome (até 200 caracteres).</small> }
-          <label for="customer-document">Documento <small>opcional</small></label>
-          <input id="customer-document" formControlName="document" maxlength="30" />
-          @if (form.controls.document.touched && form.controls.document.invalid) { <small class="field-error">Use até 30 caracteres.</small> }
-          <label for="customer-instructions">Instruções <small>opcional</small></label>
-          <textarea id="customer-instructions" formControlName="instructions" rows="4" maxlength="2000"></textarea>
-          @if (form.controls.instructions.touched && form.controls.instructions.invalid) { <small class="field-error">Use até 2.000 caracteres.</small> }
+        <div class="detail-heading"><div><p class="eyebrow">{{ selected() ? 'Editar cadastro' : 'Novo cadastro' }}</p><h2 id="customer-dialog-title">{{ selected() ? 'Editar cliente' : 'Novo cliente' }}</h2></div><button class="dialog-close" type="button" aria-label="Fechar detalhes do cliente" (click)="closeCustomerDialog()">×</button></div>
+        <form class="customer-form" [formGroup]="form" (ngSubmit)="save()" novalidate>
+          <div class="form-grid">
+            <label class="field field-wide" for="customer-name"><span>Nome <b>*</b></span><input id="customer-name" formControlName="name" maxlength="200" autocomplete="organization" /></label>
+            @if (form.controls.name.touched && form.controls.name.invalid) { <small class="field-error field-wide">Informe o nome (até 200 caracteres).</small> }
+            <label class="field" for="customer-document"><span>CPF/CNPJ <small>Opcional</small></span><input id="customer-document" formControlName="document" maxlength="40" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" /></label>
+            @if (form.controls.document.touched && form.controls.document.invalid) { <small class="field-error">{{ documentValidationMessage() }}</small> }
+            <label class="field field-wide" for="customer-instructions"><span>Instruções <small>Opcional</small></span><textarea id="customer-instructions" formControlName="instructions" rows="3" maxlength="2000"></textarea></label>
+            @if (form.controls.instructions.touched && form.controls.instructions.invalid) { <small class="field-error field-wide">Use até 2.000 caracteres.</small> }
+          </div>
           <fieldset class="address-fields">
-            <legend>Endereço principal <small>opcional</small></legend>
-            <label class="address-wide" for="customer-address">Endereço</label>
-            <input class="address-wide" id="customer-address" formControlName="address" maxlength="500" autocomplete="street-address" />
-            @if (form.controls.address.touched && form.controls.address.invalid) { <small class="field-error address-wide">Use até 500 caracteres.</small> }
-            <label for="customer-locality">Localidade</label>
-            <input id="customer-locality" formControlName="locality" maxlength="200" />
-            @if (form.controls.locality.touched && form.controls.locality.invalid) { <small class="field-error">Use até 200 caracteres.</small> }
-            <label for="customer-city">Cidade</label>
-            <input id="customer-city" formControlName="city" maxlength="200" autocomplete="address-level2" />
-            @if (form.controls.city.touched && form.controls.city.invalid) { <small class="field-error">Use até 200 caracteres.</small> }
-            <label for="customer-state">Estado</label>
-            <input id="customer-state" formControlName="state" maxlength="200" autocomplete="address-level1" />
-            @if (form.controls.state.touched && form.controls.state.invalid) { <small class="field-error">Use até 200 caracteres.</small> }
+            <legend><span>Endereço principal</span><small>Opcional</small></legend>
+            <div class="form-grid address-grid">
+              <label class="field" for="customer-postal-code"><span>CEP</span><input id="customer-postal-code" formControlName="postalCode" maxlength="9" inputmode="numeric" autocomplete="postal-code" placeholder="00000-000" /></label>
+              <div class="field postal-code-action"><span aria-hidden="true">&nbsp;</span><button class="secondary-button" type="button" (click)="lookupPostalCode()" [disabled]="!canLookupPostalCode()">{{ postalCodeLoading() ? 'Consultando…' : 'Buscar CEP' }}</button></div>
+              @if (postalCodeError()) { <small class="field-error field-wide" role="alert">{{ postalCodeError() }}</small> }
+              <label class="field field-wide" for="customer-address"><span>Endereço</span><input id="customer-address" formControlName="address" maxlength="500" autocomplete="street-address" /></label>
+              @if (form.controls.address.touched && form.controls.address.invalid) { <small class="field-error field-wide">Use até 500 caracteres.</small> }
+              <label class="field" for="customer-locality"><span>Bairro</span><input id="customer-locality" formControlName="locality" maxlength="200" autocomplete="address-level3" /></label>
+              @if (form.controls.locality.touched && form.controls.locality.invalid) { <small class="field-error">Use até 200 caracteres.</small> }
+              <label class="field" for="customer-city"><span>Cidade</span><input id="customer-city" formControlName="city" maxlength="200" autocomplete="address-level2" /></label>
+              @if (form.controls.city.touched && form.controls.city.invalid) { <small class="field-error">Use até 200 caracteres.</small> }
+              <label class="field field-wide" for="customer-state"><span>Estado (UF)</span><select id="customer-state" formControlName="state" autocomplete="address-level1"><option value="">Selecione a UF</option>@for (state of brazilianStates; track state.code) { <option [value]="state.code">{{ state.code }} — {{ state.name }}</option> }</select></label>
+              @if (form.controls.state.touched && form.controls.state.invalid) { <small class="field-error field-wide">Selecione uma UF válida.</small> }
+            </div>
           </fieldset>
           <div class="form-actions"><button class="secondary-button" type="button" (click)="cancelEdit()" [disabled]="saving()">Cancelar</button>
             <button class="primary-button" type="submit" [disabled]="saving()">{{ saving() ? 'Salvando…' : 'Salvar cliente' }}</button></div>
         </form>
       } @else if (selected(); as customer) {
-        <div class="detail-heading"><div><p class="eyebrow">Cadastro do cliente</p><h2>{{ customer.name }}</h2></div>
-          @if (canManage()) { <button class="secondary-button" type="button" (click)="startEdit()">Editar</button> }
+        <div class="detail-heading"><div><p class="eyebrow">Cadastro do cliente</p><h2 id="customer-dialog-title">{{ customer.name }}</h2></div>
+          <div class="detail-heading-actions">
+          @if (canManage() && detailsTab() === 'overview') { <button class="secondary-button" type="button" (click)="startEdit()">Editar cadastro</button> }
+          <button class="dialog-close" type="button" aria-label="Fechar detalhes do cliente" (click)="closeCustomerDialog()">×</button>
+          </div>
         </div>
-        <dl class="detail-list"><div><dt>Documento</dt><dd>{{ customer.document || 'Não informado' }}</dd></div>
-          <div><dt>Endereço principal</dt><dd>{{ customer.address || 'Não informado' }}</dd></div>
-          <div><dt>Localidade</dt><dd>{{ customer.locality || 'Não informada' }}</dd></div>
-          <div><dt>Cidade</dt><dd>{{ customer.city || 'Não informada' }}</dd></div>
-          <div><dt>Estado</dt><dd>{{ customer.state || 'Não informado' }}</dd></div>
-          <div><dt>Instruções</dt><dd>{{ customer.instructions || 'Nenhuma instrução registrada.' }}</dd></div></dl>
+        <nav class="customer-detail-tabs" aria-label="Detalhes relacionados ao cliente">
+          <button type="button" [class.active]="detailsTab() === 'overview'" (click)="detailsTab.set('overview')">Cadastro</button>
+          <button type="button" [class.active]="detailsTab() === 'locations'" (click)="detailsTab.set('locations')">Locais</button>
+          <button type="button" [class.active]="detailsTab() === 'contacts'" (click)="detailsTab.set('contacts')">Contatos</button>
+        </nav>
+        @if (detailsTab() === 'overview') {
+        <section class="detail-section" aria-labelledby="customer-identity-title">
+          <h3 id="customer-identity-title">Identificação</h3>
+          <dl class="detail-list">
+            <div><dt>Documento</dt>@if (hasDocument(customer.document)) { <dd [class.is-invalid-document]="!isValidDocument(customer.document)">{{ formatDocument(customer.document) }}</dd>@if (!isValidDocument(customer.document)) { <small class="document-detail-warning">⚠ Formato não reconhecido como CPF/CNPJ. Edite o cadastro para corrigir.</small> } } @else { <dd class="detail-muted">Sem documento</dd> }</div>
+          </dl>
+        </section>
+        <section class="detail-section" aria-labelledby="customer-address-title">
+          <h3 id="customer-address-title">Endereço</h3>
+          <div class="customer-address-summary"><p>{{ customerAddressSummary(customer) }}</p>@if (customerMapsUrl(customer); as mapsUrl) { <a class="secondary-button" [href]="mapsUrl" target="_blank" rel="noopener noreferrer">Abrir no Maps</a> }</div>
+          <dl class="detail-list">
+            <div><dt>CEP</dt><dd [class.detail-muted]="!customer.postalCode">{{ customer.postalCode || 'Não informado' }}</dd></div>
+          </dl>
+          <div class="customer-instructions-note"><span aria-hidden="true">▤</span><div><strong>Instruções</strong><p [class.detail-muted]="!customer.instructions">{{ customer.instructions || 'Nenhuma instrução registrada.' }}</p></div></div>
+        </section>
+        <section class="detail-section customer-activity-summary" aria-labelledby="customer-activity-title">
+          <h3 id="customer-activity-title">Resumo do cadastro</h3>
+          <dl class="detail-list">
+            <div><dt>Criado em</dt><dd>{{ formatCustomerDate(customer.createdAtUtc) }}</dd></div>
+            <div><dt>Atualizado em</dt><dd>{{ formatCustomerDate(customer.updatedAtUtc) }}</dd></div>
+            <div><dt>Demandas recebidas</dt><dd>{{ customer.receivedDemandCount ?? 0 }}</dd></div>
+          </dl>
+        </section>
+        }
+        @if (detailsTab() === 'locations') {
         <section class="locations-section" aria-labelledby="locations-title">
           <div class="locations-heading"><div><p class="eyebrow">Atendimento</p><h3 id="locations-title">Locais</h3></div>
-            @if (canManage() && editingLocationId() === null) { <button type="button" class="secondary-button" (click)="startCreateLocation()">+ Adicionar local</button> }
+            @if (canManage() && editingLocationId() === null) { <button type="button" class="secondary-button" (click)="startCreateLocation()"><span aria-hidden="true">＋</span> Adicionar local</button> }
           </div>
           @if (locationNotice()) { <p class="notice" role="status">{{ locationNotice() }}</p> }
-          @if (locationError()) { <p class="error-banner" role="alert">{{ locationError() }} <button type="button" class="text-button" (click)="loadLocations(customer.id)">Tentar novamente</button></p> }
+          @if (locationError()) { <p class="error-banner" role="alert">{{ locationError() }} <button class="text-button" type="button" (click)="loadLocations(customer.id)">Tentar novamente</button></p> }
           @if (locationsLoading()) { <p class="message" role="status">Carregando locais…</p> }
           @else if (locations().length === 0 && editingLocationId() !== 'new') {
-            <div class="no-locations" role="status"><span class="empty-icon" aria-hidden="true">⌖</span><p>Nenhum local cadastrado para este cliente.</p></div>
+            <div class="no-locations" role="status"><span class="empty-icon" aria-hidden="true">⌖</span><p>Nenhum local cadastrado para este cliente.</p>@if (canManage()) { <button type="button" class="secondary-button" (click)="startCreateLocation()">Adicionar primeiro local</button> }</div>
           }
           @if (locations().length > 0) {
             <ul class="location-list">
               @for (location of locations(); track location.id) {
-                <li class="location-item"><div><strong>{{ location.name }}</strong><p>{{ location.address }}</p>@if (location.instructions) { <small>{{ location.instructions }}</small> }</div>
-                  @if (canManage() && editingLocationId() === null) { <button class="text-button" type="button" (click)="startEditLocation(location)" [attr.aria-label]="'Editar ' + location.name">Editar</button> }
+                <li class="location-item"><span class="location-mark" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"></path><circle cx="12" cy="10" r="2.5"></circle></svg></span><div class="location-copy"><div class="location-title-row"><strong>{{ location.name }}</strong><small class="status-pill" [attr.data-status]="location.status">{{ location.status === 'Active' ? 'Ativo' : location.status === 'Paused' ? 'Pausado' : 'Concluído' }}</small></div>@if (locationAddressSummary(location); as summary) { <p>{{ summary }}</p> }@if (location.responsibleContactName) { <small class="location-responsible">Resp.: {{ location.responsibleContactName }}@if (location.responsibleContactRole) { <span> ({{ location.responsibleContactRole }})</span> }@if (location.responsibleContactPhone) { <span> · {{ location.responsibleContactPhone }}</span> }</small> }@if (location.instructions) { <small>{{ location.instructions }}</small> }
+                  @if (whatsappUrl(location.responsibleContactPhone); as responsibleWhatsapp) { <a class="location-whatsapp" [href]="responsibleWhatsapp" target="_blank" rel="noopener noreferrer">WhatsApp do responsável</a> }</div>
+                  <div class="location-actions"><a class="location-map-link" [href]="mapsUrl(location)" target="_blank" rel="noopener noreferrer" [attr.aria-label]="'Abrir ' + location.name + ' no Maps'" title="Abrir no Maps"><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"></path><circle cx="12" cy="10" r="2.5"></circle></svg></a>@if (canManage() && editingLocationId() === null) { <button class="secondary-button location-edit-button" type="button" (click)="startEditLocation(location)" [attr.aria-label]="'Editar ' + location.name">Editar</button> }</div>
                 </li>
               }
             </ul>
@@ -114,18 +190,58 @@
           @if (editingLocationId() !== null) {
             <form class="location-form" [formGroup]="locationForm" (ngSubmit)="saveLocation()" novalidate>
               <h4>{{ editingLocationId() === 'new' ? 'Novo local' : 'Editar local' }}</h4>
-              <label for="location-name">Nome <span>*</span></label><input id="location-name" formControlName="name" maxlength="200" />
-              @if (locationForm.controls.name.touched && locationForm.controls.name.invalid) { <small class="field-error">Informe o nome (até 200 caracteres).</small> }
-              <label for="location-address">Endereço <span>*</span></label><input id="location-address" formControlName="address" maxlength="500" autocomplete="street-address" />
-              @if (locationForm.controls.address.touched && locationForm.controls.address.invalid) { <small class="field-error">Informe o endereço (até 500 caracteres).</small> }
-              <label for="location-instructions">Instruções <small>opcional</small></label><textarea id="location-instructions" formControlName="instructions" rows="3" maxlength="2000"></textarea>
+              <div class="form-grid">
+                <label class="field" for="location-name"><span>Nome do local <b>*</b></span><input id="location-name" formControlName="name" maxlength="200" /></label>
+                @if (locationForm.controls.name.touched && locationForm.controls.name.invalid) { <small class="field-error">Informe o nome (até 200 caracteres).</small> }
+                <label class="field field-wide" for="location-address"><span>Endereço <b>*</b></span><input id="location-address" formControlName="address" maxlength="500" autocomplete="street-address" /></label>
+                @if (locationForm.controls.address.touched && locationForm.controls.address.invalid) { <small class="field-error field-wide">Informe o endereço (até 500 caracteres).</small> }
+                <label class="field" for="location-neighborhood"><span>Bairro</span><input id="location-neighborhood" formControlName="neighborhood" maxlength="200" autocomplete="address-level3" /></label>
+                <label class="field" for="location-city"><span>Cidade</span><input id="location-city" formControlName="city" maxlength="200" autocomplete="address-level2" /></label>
+                <label class="field field-wide" for="location-map-url"><span>Link do Google Maps <small>Opcional</small></span><input id="location-map-url" formControlName="mapUrl" type="url" maxlength="2000" inputmode="url" placeholder="https://maps.app.goo.gl/..." /></label>
+                @if (locationForm.controls.mapUrl.touched && locationForm.controls.mapUrl.invalid) { <small class="field-error field-wide">Informe um link HTTPS válido do Google Maps.</small> }
+                <label class="field" for="location-status"><span>Status</span><select id="location-status" formControlName="status"><option value="Active">Ativo</option><option value="Paused">Pausado</option><option value="Completed">Concluído</option></select></label>
+                <label class="field field-wide" for="location-responsible-contact"><span>Contato responsável <small>Opcional</small></span><select id="location-responsible-contact" formControlName="responsibleContactId"><option value="">Sem responsável</option>@for (contact of availableResponsibleContacts(); track contact.id) { <option [value]="contact.id">{{ contact.name }} · {{ contact.locationId ? 'deste local' : 'cliente' }}</option> }</select></label>
+                <label class="field field-wide" for="location-instructions"><span>Instruções <small>Opcional</small></span><textarea id="location-instructions" formControlName="instructions" rows="3" maxlength="2000"></textarea></label>
+              </div>
               <div class="form-actions"><button class="secondary-button" type="button" (click)="cancelLocationEdit()" [disabled]="locationSaving()">Cancelar</button><button class="primary-button" type="submit" [disabled]="locationSaving()">{{ locationSaving() ? 'Salvando…' : 'Salvar local' }}</button></div>
             </form>
           }
         </section>
+        }
+        @if (detailsTab() === 'contacts') {
+          <section class="contacts-section" aria-labelledby="contacts-title">
+            <div class="locations-heading"><div><p class="eyebrow">Pessoas de referência</p><h3 id="contacts-title">Contatos</h3></div>
+              @if (canManage() && editingContactId() === null) { <button type="button" class="secondary-button" (click)="startCreateContact()">＋ Adicionar contato</button> }
+            </div>
+            <div class="contact-scope-filters" role="group" aria-label="Filtrar contatos por vínculo">
+              <button type="button" [class.active]="contactFilterScope() === 'all'" [attr.aria-pressed]="contactFilterScope() === 'all'" (click)="changeContactScope('all')"><span>Todos</span>@if (contactCounts(); as counts) { <span>({{ counts['all'] }})</span> }</button>
+              <button type="button" [class.active]="contactFilterScope() === 'client'" [attr.aria-pressed]="contactFilterScope() === 'client'" (click)="changeContactScope('client')"><span>Cliente</span>@if (contactCounts(); as counts) { <span>({{ counts['client'] }})</span> }</button>
+              @for (location of locations(); track location.id) { <button type="button" [class.active]="contactFilterScope() === location.id" [attr.aria-pressed]="contactFilterScope() === location.id" (click)="changeContactScope(location.id)"><span class="contact-scope-name" [title]="location.name">{{ location.name }}</span>@if (contactCounts(); as counts) { <span>({{ counts[location.id] ?? 0 }})</span> }</button> }
+            </div>
+            @if (contactNotice()) { <p class="notice" role="status">{{ contactNotice() }}</p> }
+            @if (contactsLoading()) { <p class="message" role="status">Carregando contatos…</p> }
+            @else if (contactError()) { <p class="error-banner" role="alert">{{ contactError() }} <button class="text-button" type="button" (click)="loadContacts()">Tentar novamente</button></p> }
+            @else if (contacts().length === 0 && editingContactId() !== 'new') { <div class="no-contacts-empty" role="status"><p>{{ contactEmptyMessage() }}</p>@if (canManage()) { <button type="button" class="secondary-button" (click)="startCreateContact()">＋ Adicionar contato</button> }</div> }
+            @if (contacts().length > 0) { <ul class="contact-list">@for (contact of contacts(); track contact.id) { <li><div><strong>{{ contact.name }}</strong>@if (contact.isPrimary) { <span class="primary-badge">Principal</span> }<small class="contact-origin">{{ contact.locationId ? locations().find(location => location.id === contact.locationId)?.name || 'Local de atendimento' : 'Cliente' }}</small><p>{{ contact.role || 'Cargo não informado' }} · {{ contact.phone || 'Telefone não informado' }} · {{ contact.email || 'E-mail não informado' }}</p></div>@if (canManage()) { <div class="contact-actions"><button class="text-button" type="button" (click)="startEditContact(contact)">Editar</button><button class="text-button destructive" type="button" (click)="deleteContact(contact)" [disabled]="deletingContactId() === contact.id">{{ deletingContactId() === contact.id ? 'Excluindo…' : 'Excluir' }}</button></div> }</li> }</ul> }
+            @if (editingContactId() !== null) {
+              <form class="location-form" [formGroup]="contactForm" (ngSubmit)="saveContact()" novalidate>
+                <h4>{{ editingContactId() === 'new' ? 'Novo contato' : 'Editar contato' }}</h4>
+                <p class="contact-form-scope">Vinculado a <strong>{{ contactScopeLabel() }}</strong></p>
+                <div class="form-grid">
+                  <label class="field" for="contact-name"><span>Nome <b>*</b></span><input id="contact-name" formControlName="name" maxlength="200" autocomplete="name" /></label>
+                  <label class="field" for="contact-role"><span>Função</span><input id="contact-role" formControlName="role" maxlength="200" list="contact-role-options" placeholder="Ex.: Engenheiro" /></label><datalist id="contact-role-options"><option value="Engenheiro"></option><option value="Mestre de obras"></option><option value="Financeiro"></option><option value="Proprietário"></option></datalist>
+                  <div class="field"><label class="contact-form-phone-label" for="contact-phone"><span>Telefone</span></label><input id="contact-phone" type="tel" formControlName="phone" maxlength="20" inputmode="tel" autocomplete="tel" placeholder="(71) 99999-9999" />@if (whatsappUrl(contactForm.controls.phone.value); as contactWhatsapp) { <a class="whatsapp-shortcut contact-whatsapp-action" [href]="contactWhatsapp" target="_blank" rel="noopener noreferrer">Abrir WhatsApp</a> }</div>
+                  <label class="field" for="contact-email"><span>E-mail</span><input id="contact-email" type="email" formControlName="email" maxlength="254" autocomplete="email" /></label>
+                  <label class="primary-toggle field-wide"><input type="checkbox" formControlName="isPrimary" /><span>Contato principal {{ contactLocationId() ? 'deste local' : 'deste cliente' }}</span></label>
+                </div>
+                <div class="form-actions"><button class="secondary-button" type="button" (click)="cancelContactEdit()" [disabled]="contactSaving()">Cancelar</button><button class="primary-button" type="submit" [disabled]="contactSaving()">{{ contactSaving() ? 'Salvando…' : 'Salvar contato' }}</button></div>
+              </form>
+            }
+          </section>
+        }
       } @else {
-        <div class="detail-empty"><span class="empty-icon" aria-hidden="true">↖</span><h2>Selecione um cliente</h2><p>Os dados do cadastro aparecerão neste painel.</p></div>
+        <div class="detail-empty"><span class="empty-icon" aria-hidden="true">⌖</span><p class="eyebrow">Detalhes do cadastro</p><h2>Selecione um cliente</h2><p>Os dados do cadastro e os locais de atendimento aparecerão aqui.</p></div>
       }
     </section>
-  </div>
+    </dialog>
 </section>

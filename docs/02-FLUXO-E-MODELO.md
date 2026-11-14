@@ -39,11 +39,13 @@ As definições abaixo foram informadas pela operação piloto. O desenho final 
 
 ## Entidades conceituais
 
-- **Organização:** empresa cliente do PIT-CRM e fronteira de isolamento dos dados.
+- **Organização:** empresa cliente do PIT Obras e fronteira de isolamento dos dados.
 - **Usuário e papel:** pessoa que acessa a organização. Perfis iniciais: Administrador (acesso completo e gestão de usuários/configurações), Gestor (operação, indicadores e dados financeiros conforme permissão) e Operador (criar/alterar demandas, programação e evidências). Permissões podem ser ajustadas por organização/usuário.
 - **Perfis opcionais/futuros:** Financeiro (custos, cálculo LL, notas e recebimentos); Prestador (somente demandas atribuídas, atualizações e evidências); Cliente (acompanhar/autorizar demandas próprias, fora do MVP até confirmar necessidade).
-- **Cliente e contato:** empresa atendida, seus responsáveis e endereço principal opcional (endereço, localidade, cidade e estado; D09).
-- **Local de atendimento:** loja, unidade ou endereço de execução, registrado separadamente e associado ao cliente; a demanda seleciona um desses locais.
+- **Cliente e contato:** empresa atendida, endereço principal opcional (CEP, endereço, bairro, cidade e estado; D09) e contatos identificados por nome, cargo/função, telefone e e-mail.
+- **Contato de cliente/local:** pessoa de referência vinculada ao cliente ou a um local específico desse cliente; contatos locais não podem apontar para locais de outra organização ou cliente. Pode haver um único contato principal por vínculo cliente ou local. Um local pode também indicar um contato responsável, que deve ser do cliente ou desse próprio local.
+- **Local de atendimento:** loja, unidade ou endereço de execução, associado ao cliente; inclui nome, endereço, bairro, cidade e status (Ativo, Pausado ou Concluído); a demanda seleciona um desses locais.
+- **Documento de cliente:** CPF/CNPJ numérico, validado pelos dígitos verificadores, aceitando pontuação apenas na entrada e persistindo sem máscara. CNPJ com letras não é aceito por decisão do usuário em 14/11/2026.
 - **Demanda/ordem de serviço:** unidade principal do trabalho, com ID interno, origem, descrição, responsável e referências externas.
 - **Referência externa:** chamado/ticket, ordem de compra ou código do sistema do cliente. Pode haver mais de uma e não substitui o ID interno.
 - **Orçamento e revisão:** valor proposto, versões, aprovação, retificação e aditivo.
@@ -62,4 +64,4 @@ As definições abaixo foram informadas pela operação piloto. O desenho final 
 - “Autorizado” para orçamento e autorização para emitir NF após execução são aprovações diferentes.
 - “Aditivo” muda escopo/valor; “ADD” é adiantamento financeiro.
 - Na planilha LL, o custo estimado é digitado manualmente; imposto/administração é considerado fixo em 28% pela empresa piloto. O resultado chamado LL significa Lucro Líquido, e a meta mínima é 20%. Pela fórmula atual, o percentual é LL dividido pelo valor aprovado.
-- Ari aprovou incorporar o cálculo ao PIT-CRM. Os parâmetros são da empresa piloto e devem ser configuráveis por organização; os nomes dos itens de custo ainda precisam ser definidos.
+- Ari aprovou incorporar o cálculo ao PIT Obras. Os parâmetros são da empresa piloto e devem ser configuráveis por organização; os nomes dos itens de custo ainda precisam ser definidos.

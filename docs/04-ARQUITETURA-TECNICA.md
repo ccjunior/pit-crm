@@ -54,7 +54,15 @@ Registradas em 05/11/2026 durante T01. A compatibilidade do Angular foi conferid
 | EF Core Design | 10.0.14 | Referência privada no projeto de inicialização API; CLI local em `backend/dotnet-tools.json` |
 | ASP.NET Core Identity EF | 10.0.14 | Usuários, papéis e vínculos persistidos pelo `PitCrmDbContext` |
 | Provedor EF Core para PostgreSQL | Npgsql.EntityFrameworkCore.PostgreSQL 10.0.3 | Versão estável disponível para EF Core 10 |
-| UI Angular | CSS da plataforma, sem biblioteca de componentes | Nenhuma identidade visual ou biblioteca foi aprovada |
+| UI Angular | CSS da plataforma, sem biblioteca de componentes | Tokens visuais próprios alinhados à identidade Project IT; sem biblioteca de componentes |
+
+## Identidade visual do front-end
+
+O sistema usa CSS próprio do Angular, sem adicionar biblioteca de componentes. A imagem de referência enviada para o PIT Obras orienta a composição do painel, a navegação lateral, os cartões, as listas e a disposição dos formulários. O conteúdo e as funções fictícias de RH da imagem não são requisitos do produto.
+
+A paleta foi conferida no site da Project IT em 14/11/2026. O dourado `#E6B033` é a cor primária e `#E0C585` é uma variação de apoio. A interface mantém superfície clara e texto carvão para leitura, com o dourado em ações principais, foco e destaques. Estados de sucesso e erro preservam cores semânticas próprias.
+
+O shell tem navegação lateral em desktop e navegação compacta em dispositivos móveis. As telas de clientes/locais e criação de demanda mantêm os campos, permissões e estados definidos nas fontes de produto; a restilização não introduz métricas ou dados ilustrativos sem origem na API.
 
 O Compose destina-se apenas ao desenvolvimento local. A senha padrão é de conveniência local e não é configuração de produção. A persistência de dados usa o volume `pitcrm_postgres_data`.
 

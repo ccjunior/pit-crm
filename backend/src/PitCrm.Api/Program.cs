@@ -132,6 +132,7 @@ builder.Services.AddScoped<IOrganizationProvisioner, OrganizationProvisioner>();
 builder.Services.AddScoped<IEligibleAssigneeQuery, EligibleAssigneeQuery>();
 builder.Services.AddScoped<ICustomerStore, PersistenceCustomerStore>();
 builder.Services.AddScoped<ICustomerLocationStore, PersistenceCustomerLocationStore>();
+builder.Services.AddScoped<ICustomerContactStore, PersistenceCustomerContactStore>();
 builder.Services.AddScoped<IDemandStore, PersistenceDemandStore>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentOrganizationContext, HttpCurrentOrganizationContext>();
@@ -291,6 +292,7 @@ app.MapPost("/api/auth/change-password", async (
 
 CustomerEndpoints.Map(app);
 CustomerLocationEndpoints.Map(app);
+CustomerContactEndpoints.Map(app);
 DemandEndpoints.Map(app);
 TeamEndpoints.Map(app);
 

@@ -2,9 +2,9 @@
 
 ## Objetivo
 
-Construir uma plataforma para organizar o trabalho de empresas de serviços, começando por serviços de campo, manutenção e reformas empresariais. O produto deve acompanhar uma demanda desde a entrada até a execução, faturamento e recebimento.
+O produto chama-se **PIT Obras** e é desenvolvido pela Project IT. Ele organiza o trabalho de empresas de construção civil e reformas, acompanhando uma demanda desde a entrada até a execução, o faturamento e o recebimento.
 
-A estratégia é focar o primeiro produto nesse tipo de operação e manter os conceitos comuns configuráveis para outros segmentos de serviços. A plataforma não começa como um ERP genérico.
+O posicionamento do produto é específico para empresas de construção civil e reformas. A plataforma não começa como um ERP genérico.
 
 ## Público inicial
 
@@ -20,7 +20,7 @@ Empresa piloto com serviços principalmente de civil e ar-condicionado, contrato
 - O histórico do serviço, das alterações, das evidências e do faturamento precisa permanecer consultável.
 - A separação entre empresas deve ser garantida no backend; dados nunca dependem apenas de filtros de interface.
 - O acesso deve aceitar permissões específicas por perfil; a equipe operacional pode criar e alterar demandas, e outros perfis recebem apenas as ações necessárias.
-- O usuário aprovou trazer o cálculo LL para o PIT-CRM. O custo será informado manualmente; para a empresa piloto, imposto/administração é 28% e a meta mínima de LL é 20%. Parâmetros devem ser configuráveis por organização.
+- O usuário aprovou trazer o cálculo LL para o PIT Obras. O custo será informado manualmente; para a empresa piloto, imposto/administração é 28% e a meta mínima de LL é 20%. Parâmetros devem ser configuráveis por organização.
 
 ## Escopo proposto para o MVP
 
@@ -39,7 +39,9 @@ Empresa piloto com serviços principalmente de civil e ar-condicionado, contrato
 Detalhamento confirmado pelo usuário em 04/11/2026 para a primeira entrega: **Administrador e Gestor** podem cadastrar e editar clientes e locais; **Operador** consulta esses cadastros e mantém o direito de criar/editar demandas. A organização e seu primeiro administrador serão criados de forma controlada; o administrador cadastra a equipe. O registro das respostas está no [contexto da primeira entrega](../.specs/features/primeira-entrega-operacional/context.md).
 
 - Cadastro de clientes, contatos e locais de atendimento.
-- O cadastro do cliente inclui endereço principal opcional: endereço, localidade, cidade e estado (D09). Esse endereço não substitui os locais de atendimento, que permanecem associados ao cliente.
+- O cadastro do cliente inclui endereço principal opcional: CEP, endereço, bairro, cidade e estado (D09), com consulta assistida por CEP. Esse endereço não substitui os locais de atendimento, que permanecem associados ao cliente.
+- Contatos possuem nome, cargo/função, telefone e e-mail, associados ao cliente ou a um local dele. Local de atendimento possui nome, endereço, bairro, cidade e status Ativo, Pausado ou Concluído.
+- CPF/CNPJ deve ser numérico, válido e armazenado sem pontuação. CNPJ alfanumérico fica rejeitado conforme decisão do usuário em 14/11/2026.
 - Referências e instruções específicas por cliente/local.
 - Histórico consolidado das demandas e faturamento.
 
@@ -64,7 +66,7 @@ Detalhamento confirmado pelo usuário em 04/11/2026 para a primeira entrega: **A
 
 - Valor fechado de prestador, normalmente como pacote total.
 - Despesas de material ligadas à demanda.
-- Cálculo LL dentro do PIT-CRM: custo estimado digitado manualmente por itens; imposto/administração de 28% para a empresa piloto; LL em valor e percentual, com meta mínima de 20% do valor aprovado.
+- Cálculo LL dentro do PIT Obras: custo estimado digitado manualmente por itens; imposto/administração de 28% para a empresa piloto; LL em valor e percentual, com meta mínima de 20% do valor aprovado.
 - Confirmar os nomes/categorias dos itens do custo. Não presumir que sejam os mesmos componentes do pacote contratado de prestador.
 - Não incluir no MVP uma contabilidade completa nem presumir que o pacote de prestador precisa ser decomposto em mão de obra, deslocamento e material.
 

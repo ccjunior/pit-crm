@@ -5,6 +5,7 @@ namespace PitCrm.Application.Locations;
 public interface ICustomerLocationStore
 {
     Task<bool> CustomerExistsAsync(Guid organizationId, Guid customerId, CancellationToken cancellationToken);
+    Task<bool> ResponsibleContactExistsAsync(Guid organizationId, Guid customerId, Guid? locationId, Guid contactId, CancellationToken cancellationToken);
     Task<CustomerLocation?> FindAsync(Guid organizationId, Guid customerId, Guid locationId, CancellationToken cancellationToken);
     Task<IReadOnlyList<CustomerLocationDto>> ListAsync(Guid organizationId, Guid customerId, CancellationToken cancellationToken);
     Task AddAsync(CustomerLocation location, CancellationToken cancellationToken);
