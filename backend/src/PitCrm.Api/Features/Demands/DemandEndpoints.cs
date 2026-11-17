@@ -8,9 +8,48 @@ public static class DemandEndpoints
 {
     public static void Map(WebApplication app)
     {
+        app.MapGet("/api/demands", SearchAsync)
+            .RequireAuthorization(AuthorizationPolicies.OperateDemands);
+        app.MapGet("/api/demands/{id:guid}", FindAsync)
+            .RequireAuthorization(AuthorizationPolicies.OperateDemands);
         app.MapPost("/api/demands", CreateAsync)
             .AddEndpointFilter<Security.AntiforgeryEndpointFilter>()
             .RequireAuthorization(AuthorizationPolicies.OperateDemands);
+    }
+
+    private static async Task<IResult> SearchAsync(string? q, Guid? customerId, Guid? locationId,
+        Guid? assignedToUserId, string? status, string? priority, string? sortBy,
+        int? page, int? pageSize, ICurrentOrganizationContext context,
+        IDemandStore store, CancellationToken cancellationToken)
+    {
+        var currentPage = page ?? 1;
+        var currentPageSize = pageSize ?? 20;
+        var errors = new Dictionary<string, string[]>();
+        if (currentPage < 1 || (long)(currentPage - 1) * currentPageSize > int.MaxValue)
+            errors[nameof(page)] = ["A página deve ser positiva e estar dentro do limite permitido."];
+        if (currentPageSize is < 1 or > 100) errors[nameof(pageSize)] = ["O tamanho da página deve estar entre 1 e 100."];
+        if (!string.IsNullOrWhiteSpace(status) && !Demand.Statuses.Contains(status.Trim(), StringComparer.OrdinalIgnoreCase))
+            errors[nameof(status)] = ["O status informado não é válido."];
+        if (!string.IsNullOrWhiteSpace(priority) && !Demand.Priorities.Contains(priority.Trim(), StringComparer.OrdinalIgnoreCase))
+            errors[nameof(priority)] = ["A prioridade informada não é válida."];
+        var order = string.IsNullOrWhiteSpace(sortBy) ? "createdAt" : sortBy.Trim();
+        if (order is not ("createdAt" or "priority")) errors[nameof(sortBy)] = ["A ordenação deve ser createdAt ou priority."];
+        if (errors.Count > 0) return Results.ValidationProblem(errors);
+
+        var normalizedStatus = string.IsNullOrWhiteSpace(status) ? null
+            : Demand.Statuses.Single(value => string.Equals(value, status.Trim(), StringComparison.OrdinalIgnoreCase));
+        var normalizedPriority = string.IsNullOrWhiteSpace(priority) ? null
+            : Demand.Priorities.Single(value => string.Equals(value, priority.Trim(), StringComparison.OrdinalIgnoreCase));
+        var result = await store.SearchAsync(context.OrganizationId, q, customerId, locationId,
+            assignedToUserId, normalizedStatus, normalizedPriority, order, currentPage, currentPageSize, cancellationToken);
+        return Results.Ok(new DemandPageResponse(result.Items, currentPage, currentPageSize, result.TotalCount));
+    }
+
+    private static async Task<IResult> FindAsync(Guid id, ICurrentOrganizationContext context,
+        IDemandStore store, CancellationToken cancellationToken)
+    {
+        var demand = await store.FindAsync(context.OrganizationId, id, cancellationToken);
+        return demand is null ? Results.NotFound() : Results.Ok(demand);
     }
 
     private static async Task<IResult> CreateAsync(CreateDemandRequest request, ICurrentOrganizationContext context,
@@ -45,8 +84,8 @@ public static class DemandEndpoints
             return Results.ValidationProblem(new Dictionary<string, string[]> { [field] = [message] });
         }
 
-        return Results.Created($"/api/demands/{demand.Id}", new DemandCreatedDto(demand.Id, demand.CustomerId,
-            demand.LocationId, demand.Description, demand.Origin, demand.Priority, demand.Status,
+        return Results.Created($"/api/demands/{demand.Id}", new DemandCreatedDto(demand.Id, demand.ReferenceNumber,
+            demand.CustomerId, demand.LocationId, demand.Description, demand.Origin, demand.Priority, demand.Status,
             demand.TicketReference, demand.PurchaseOrderReference, demand.AssignedToUserId, demand.CreatedAtUtc));
     }
 
@@ -68,7 +107,8 @@ public static class DemandEndpoints
 
     public sealed record CreateDemandRequest(Guid CustomerId, Guid LocationId, string? Description, string? Origin,
         Guid? AssignedToUserId, string? TicketReference, string? PurchaseOrderReference, string? Priority);
-    public sealed record DemandCreatedDto(Guid Id, Guid CustomerId, Guid LocationId, string Description, string Origin,
+    public sealed record DemandCreatedDto(Guid Id, int ReferenceNumber, Guid CustomerId, Guid LocationId, string Description, string Origin,
         string? Priority, string Status, string? TicketReference, string? PurchaseOrderReference,
         Guid? AssignedToUserId, DateTimeOffset CreatedAtUtc);
+    public sealed record DemandPageResponse(IReadOnlyList<DemandListItemDto> Items, int Page, int PageSize, int TotalCount);
 }

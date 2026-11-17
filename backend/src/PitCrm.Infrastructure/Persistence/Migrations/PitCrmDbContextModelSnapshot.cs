@@ -317,6 +317,9 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
+                    b.Property<int>("ReferenceNumber")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Priority")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
@@ -345,6 +348,9 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrganizationId", "CustomerId");
 
                     b.HasIndex("OrganizationId", "LocationId");
+
+                    b.HasIndex("OrganizationId", "ReferenceNumber")
+                        .IsUnique();
 
                     b.HasIndex("OrganizationId", "CustomerId", "LocationId");
 

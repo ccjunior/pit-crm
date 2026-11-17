@@ -1,16 +1,21 @@
-<section class="new-demand-page" aria-labelledby="new-demand-title">
-  <a class="back-link" routerLink="/demandas"><span aria-hidden="true">←</span> Voltar à visão geral</a>
+<section class="new-demand-page" [class.embedded]="embedded" aria-labelledby="new-demand-title">
+  @if (!embedded) { <a class="back-link" routerLink="/demandas"><span aria-hidden="true">←</span> Voltar à visão geral</a> }
   <header class="page-heading">
-    <div><p class="eyebrow">Registro de serviço</p><h1 id="new-demand-title">Nova demanda</h1>
-      <p class="intro">Registre a solicitação recebida. Chamado, ordem de compra e responsável podem ser informados depois.</p></div>
+    <div>
+      <p class="eyebrow">Registro de serviço</p>
+      <h1 id="new-demand-title">Nova demanda</h1>
+      <p class="intro">Registre a solicitação recebida. Chamado, ordem de compra e responsável podem ser informados depois.</p>
+    </div>
+    @if (embedded) { <button class="dialog-close" type="button" aria-label="Fechar cadastro de demanda" (click)="cancelled.emit()">×</button> }
   </header>
 
-  @if (pageError()) { <div class="error-banner page-error" role="alert">{{ pageError() }} <button class="text-button" type="button" (click)="searchCustomers()">Recarregar clientes</button></div> }
+  @if (pageError()) {
+    <div class="error-banner page-error" role="alert">{{ pageError() }} <button class="text-button" type="button" (click)="searchCustomers()">Recarregar clientes</button></div>
+  }
   @if (created(); as demand) {
     <section class="success-card" aria-live="polite" role="status">
       <span class="success-icon" aria-hidden="true">✓</span>
-      <div><p class="eyebrow">Demanda registrada</p><h2>{{ demand.id }}</h2><p>Status inicial: <strong>{{ demand.status }}</strong></p>
-        <p>Guarde este identificador para localizar a demanda.</p></div>
+      <div><p class="eyebrow">Demanda registrada</p><h2>{{ demand.id }}</h2><p>Status inicial: <strong>{{ demand.status }}</strong></p><p>Guarde este identificador para localizar a demanda.</p></div>
       <a class="secondary-button" routerLink="/demandas">Voltar à visão geral</a>
     </section>
   } @else {
@@ -20,58 +25,95 @@
 
         <section class="form-section" aria-labelledby="reference-title">
           <div class="section-heading"><span class="section-number">01</span><div><h2 id="reference-title">Cliente e local</h2><p>Escolha a empresa e o endereço onde o serviço será realizado.</p></div></div>
-          <div class="customer-search">
-            <label for="customer-search">Buscar cliente</label>
-            <div><input id="customer-search" [formControl]="customerSearch" placeholder="Nome ou documento" (keydown.enter)="$event.preventDefault(); searchCustomers()" /><button class="secondary-button" type="button" (click)="searchCustomers()" [disabled]="searchingCustomers()">{{ searchingCustomers() ? 'Buscando…' : 'Buscar' }}</button></div>
-          </div>
-          <div class="field-grid">
-            <div class="field"><label for="customer-id">Cliente <b>*</b></label><select id="customer-id" formControlName="customerId" (change)="onCustomerChange()"><option value="">Selecione o cliente</option>@for (customer of customers(); track customer.id) { <option [value]="customer.id">{{ customer.name }}{{ customer.document ? ' · ' + customer.document : '' }}</option> }</select>
-              @if (form.controls.customerId.touched && form.controls.customerId.invalid) { <small class="field-error">Selecione um cliente.</small> }
-              @if (fieldError('CustomerId')) { <small class="field-error">{{ fieldError('CustomerId') }}</small> }</div>
-            <div class="field"><label for="location-id">Local <b>*</b></label><select id="location-id" formControlName="locationId" [disabled]="!form.controls.customerId.value || loadingLocations()"><option value="">{{ loadingLocations() ? 'Carregando locais…' : 'Selecione o local' }}</option>@for (location of locations(); track location.id) { <option [value]="location.id">{{ location.name }} — {{ location.address }}</option> }</select>
-              @if (form.controls.locationId.touched && form.controls.locationId.invalid) { <small class="field-error">Selecione um local deste cliente.</small> }
-              @if (fieldError('LocationId')) { <small class="field-error">{{ fieldError('LocationId') }}</small> }</div>
+          <div class="form-grid">
+            <div class="field">
+              <label for="customer-search"><span>Cliente <b>*</b></span></label>
+              <div class="search-form customer-combobox">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8" /><path d="m16 16 4.5 4.5" /></svg>
+                <input id="customer-search" type="search" [formControl]="customerSearch" role="combobox" aria-autocomplete="list" aria-haspopup="listbox" aria-controls="customer-options" [attr.aria-expanded]="customerPickerOpen() && customerSearch.value.trim().length > 0" [attr.aria-activedescendant]="customerPickerOpen() && customers().length ? 'customer-option-' + customers()[activeCustomerIndex()].id : null" [attr.aria-invalid]="showFieldError('customerId') || fieldError('CustomerId') ? 'true' : null" [attr.aria-describedby]="showFieldError('customerId') || fieldError('CustomerId') ? 'customer-error' : 'customer-help'" autocomplete="off" placeholder="Nome ou documento" (focus)="openCustomerPicker()" (blur)="closeCustomerPicker()" (input)="onCustomerSearchInput()" (keydown)="onCustomerKeydown($event)" />
+                @if (customerPickerOpen() && customerSearch.value.trim().length > 0) {
+                  <div class="customer-options" id="customer-options" role="listbox" aria-label="Resultados de clientes">
+                    @if (searchingCustomers()) { <div class="customer-search-status" role="option" aria-disabled="true" aria-selected="false">Buscando clientes…</div> }
+                    @for (customer of customers(); track customer.id; let index = $index) {
+                      <div class="customer-option" [id]="'customer-option-' + customer.id" role="option" [attr.aria-selected]="customer.id === form.controls.customerId.value" [class.active]="index === activeCustomerIndex()" (mousedown)="$event.preventDefault()" (click)="selectCustomer(customer)">
+                        <span>{{ customer.name }}</span>@if (customer.document) { <small>{{ customer.document }}</small> }
+                      </div>
+                    } @empty {
+                      @if (!searchingCustomers()) { <div class="customer-search-status" role="option" aria-disabled="true" aria-selected="false">Nenhum cliente encontrado.</div> }
+                    }
+                  </div>
+                }
+              </div>
+              <small class="field-hint" id="customer-help">Digite para buscar pelo nome ou documento.</small>
+              @if (customerPickerOpen() && totalCustomerMatches() > customers().length) { <small class="field-hint">Mostrando {{ customers().length }} de {{ totalCustomerMatches() }}. Refine a busca para encontrar outros clientes.</small> }
+              @if (fieldError('CustomerId'); as error) { <small class="field-error" id="customer-error">{{ error }}</small> }
+              @else if (showFieldError('customerId')) { <small class="field-error" id="customer-error">Selecione um cliente.</small> }
+            </div>
+            <div class="field">
+              <label for="location-id"><span>Local <b>*</b></span></label>
+              <select id="location-id" formControlName="locationId" [attr.aria-invalid]="showFieldError('locationId') || fieldError('LocationId') ? 'true' : null" [attr.aria-describedby]="showFieldError('locationId') || fieldError('LocationId') ? 'location-error' : null"><option value="">{{ locationPlaceholder() }}</option>@for (location of locations(); track location.id) { <option [value]="location.id">{{ location.name }} — {{ location.address }}</option> }</select>
+              @if (fieldError('LocationId'); as error) { <small class="field-error" id="location-error">{{ error }}</small> }
+              @else if (showFieldError('locationId')) { <small class="field-error" id="location-error">Selecione um local deste cliente.</small> }
+            </div>
           </div>
           @if (form.controls.customerId.value && !loadingLocations() && locations().length === 0) { <p class="inline-hint" role="status">Este cliente ainda não possui locais cadastrados.</p> }
+          @else if (form.controls.customerId.value && locations().length === 1) { <p class="inline-hint" role="status">Selecionamos o único local cadastrado para este cliente.</p> }
         </section>
 
         <section class="form-section" aria-labelledby="request-title">
           <div class="section-heading"><span class="section-number">02</span><div><h2 id="request-title">Detalhes do serviço</h2><p>Descreva o pedido e registre por qual canal ele chegou.</p></div></div>
-          <div class="field-grid">
-            <div class="field field-wide"><label for="description">Descrição <b>*</b></label><textarea id="description" formControlName="description" rows="5" maxlength="4000" placeholder="Descreva o serviço solicitado pelo cliente"></textarea>
-              @if (form.controls.description.touched && form.controls.description.invalid) { <small class="field-error">A descrição é obrigatória e deve ter até 4.000 caracteres.</small> }
-              @if (fieldError('Description')) { <small class="field-error">{{ fieldError('Description') }}</small> }</div>
-            <div class="field"><label for="origin">Origem do pedido <b>*</b></label><select id="origin" formControlName="origin"><option value="">Selecione a origem</option><option value="WhatsApp">WhatsApp</option><option value="Ligação">Ligação</option><option value="E-mail">E-mail</option><option value="Outra">Outra</option></select>
-              @if (form.controls.origin.touched && form.controls.origin.invalid) { <small class="field-error">Selecione a origem.</small> }
-              @if (fieldError('Origin')) { <small class="field-error">{{ fieldError('Origin') }}</small> }</div>
+          <div class="form-grid">
+            <div class="field field-wide">
+              <label for="description"><span>Descrição <b>*</b></span></label>
+              <textarea id="description" formControlName="description" rows="5" maxlength="4000" placeholder="Descreva o serviço solicitado pelo cliente" [attr.aria-invalid]="showFieldError('description') || fieldError('Description') ? 'true' : null" [attr.aria-describedby]="showFieldError('description') || fieldError('Description') ? 'description-hint description-error' : 'description-hint'" (keydown.control.enter)="submitFromShortcut($event)"></textarea>
+              <div class="description-meta"><small class="field-hint" id="description-hint">Inclua o equipamento, o sintoma observado e a urgência percebida. Ctrl+Enter registra a demanda.</small><small class="character-count">{{ form.controls.description.value.length }} / 4.000</small></div>
+              @if (fieldError('Description'); as error) { <small class="field-error" id="description-error">{{ error }}</small> }
+              @else if (showFieldError('description')) { <small class="field-error" id="description-error">A descrição é obrigatória e deve ter até 4.000 caracteres.</small> }
+            </div>
+            <fieldset class="field field-wide origin-field" [attr.aria-invalid]="showFieldError('origin') || fieldError('Origin') ? 'true' : null" [attr.aria-describedby]="showFieldError('origin') || fieldError('Origin') ? 'origin-error' : null">
+              <legend>Origem do pedido <b>*</b></legend>
+              <div class="origin-options">
+                <label class="origin-option"><input type="radio" formControlName="origin" value="WhatsApp" /><span>WhatsApp</span></label>
+                <label class="origin-option"><input type="radio" formControlName="origin" value="Ligação" /><span>Ligação</span></label>
+                <label class="origin-option"><input type="radio" formControlName="origin" value="E-mail" /><span>E-mail</span></label>
+                <label class="origin-option"><input type="radio" formControlName="origin" value="Outra" /><span>Outra</span></label>
+              </div>
+              @if (fieldError('Origin'); as error) { <small class="field-error" id="origin-error">{{ error }}</small> }
+              @else if (showFieldError('origin')) { <small class="field-error" id="origin-error">Selecione a origem.</small> }
+            </fieldset>
           </div>
         </section>
 
         <section class="form-section optional-section" aria-labelledby="details-title">
           <div class="section-heading"><span class="section-number optional">03</span><div><h2 id="details-title">Referências e responsável</h2><p>Estas informações são opcionais e podem ser completadas depois.</p></div></div>
-          <div class="field-grid">
-            <div class="field"><label for="assignee">Responsável interno</label><select id="assignee" formControlName="assignedToUserId"><option value="">Sem responsável</option>@for (assignee of assignees(); track assignee.id) { <option [value]="assignee.id">{{ assignee.displayName }}</option> }</select></div>
-            <div class="field"><label for="priority">Prioridade</label><select id="priority" formControlName="priority"><option value="">Sem prioridade</option><option value="Baixa">Baixa</option><option value="Média">Média</option><option value="Alta">Alta</option></select></div>
-            <div class="field"><label for="ticket-reference">Chamado ou ticket</label><input id="ticket-reference" formControlName="ticketReference" maxlength="100" placeholder="Referência do cliente" /></div>
-            <div class="field"><label for="purchase-order-reference">Ordem de compra</label><input id="purchase-order-reference" formControlName="purchaseOrderReference" maxlength="100" placeholder="Número da OC" /></div>
+          <div class="form-grid">
+            <label class="field" for="assignee"><span>Responsável interno</span><select id="assignee" formControlName="assignedToUserId"><option value="">Sem responsável</option>@for (assignee of assignees(); track assignee.id) { <option [value]="assignee.id">{{ assignee.displayName }}</option> }</select></label>
+            <label class="field" for="priority"><span>Prioridade</span><select id="priority" formControlName="priority"><option value="">Sem prioridade</option><option value="Baixa">Baixa</option><option value="Média">Média</option><option value="Alta">Alta</option></select></label>
+            <label class="field" for="ticket-reference"><span>Chamado ou ticket</span><input id="ticket-reference" formControlName="ticketReference" maxlength="100" placeholder="Referência do cliente" /></label>
+            <label class="field" for="purchase-order-reference"><span>Ordem de compra</span><input id="purchase-order-reference" formControlName="purchaseOrderReference" maxlength="100" placeholder="Número da OC" /></label>
           </div>
         </section>
 
-        <div class="form-footer"><p>O status inicial será <strong>Recebida</strong>.</p><button class="primary-button" type="submit" [disabled]="submitting()"><span>{{ submitting() ? 'Enviando…' : 'Registrar demanda' }}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg></button></div>
+        <div class="form-actions">
+          <p>O status inicial será <strong>Recebida</strong>.</p>
+          <div>@if (embedded) { <button class="secondary-button" type="button" (click)="cancelled.emit()">Cancelar</button> } @else { <a class="secondary-button" routerLink="/demandas">Cancelar</a> }<button class="primary-button" type="submit" [disabled]="submitting()"><span>{{ submitting() ? 'Enviando…' : 'Registrar demanda' }}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg></button></div>
+        </div>
       </form>
 
-      <aside class="demand-aside" aria-label="Resumo do preenchimento">
+      @if (!embedded) { <aside class="demand-aside" aria-label="Resumo do preenchimento">
         <section class="aside-card required-card">
-          <span class="aside-card-number">01</span>
+          <span class="aside-card-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01" /></svg></span>
           <p class="eyebrow">Para abrir uma demanda</p>
-          <h2>Quatro dados obrigatórios</h2>
-          <ul><li>Cliente</li><li>Local de atendimento</li><li>Descrição do serviço</li><li>Origem do pedido</li></ul>
+          <h2>Checklist de abertura</h2>
+          <ul class="progress-checklist" aria-label="Progresso dos campos obrigatórios" aria-live="polite">
+            <li [class.complete]="isRequirementComplete('customerId')"><span class="checklist-mark" aria-hidden="true">{{ isRequirementComplete('customerId') ? '✓' : '•' }}</span><span>Cliente</span><span class="sr-only">{{ isRequirementComplete('customerId') ? 'Concluído' : 'Pendente' }}</span></li>
+            <li [class.complete]="isRequirementComplete('locationId')"><span class="checklist-mark" aria-hidden="true">{{ isRequirementComplete('locationId') ? '✓' : '•' }}</span><span>Local de atendimento</span><span class="sr-only">{{ isRequirementComplete('locationId') ? 'Concluído' : 'Pendente' }}</span></li>
+            <li [class.complete]="isRequirementComplete('description')"><span class="checklist-mark" aria-hidden="true">{{ isRequirementComplete('description') ? '✓' : '•' }}</span><span>Descrição do serviço</span><span class="sr-only">{{ isRequirementComplete('description') ? 'Concluído' : 'Pendente' }}</span></li>
+            <li [class.complete]="isRequirementComplete('origin')"><span class="checklist-mark" aria-hidden="true">{{ isRequirementComplete('origin') ? '✓' : '•' }}</span><span>Origem do pedido</span><span class="sr-only">{{ isRequirementComplete('origin') ? 'Concluído' : 'Pendente' }}</span></li>
+          </ul>
         </section>
-        <section class="aside-card optional-card">
-          <span class="optional-mark" aria-hidden="true">i</span>
-          <div><h3>O restante pode esperar</h3><p>Responsável, prioridade, chamado e ordem de compra são opcionais nesta abertura.</p></div>
-        </section>
-      </aside>
+        <section class="aside-card optional-card"><span class="optional-mark" aria-hidden="true">i</span><div><h3>O restante pode esperar</h3><p>Responsável, prioridade, chamado e ordem de compra são opcionais nesta abertura.</p></div></section>
+      </aside> }
     </div>
   }
 </section>

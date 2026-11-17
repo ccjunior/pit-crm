@@ -5,5 +5,6 @@ Use ADRs numerados para registrar decisões significativas e suas consequências
 | ID | Registro | Estado |
 | --- | --- | --- |
 | AD-001 | [0001-base-tecnica-aprovada.md](0001-base-tecnica-aprovada.md) | Aceita; decisão preexistente |
+| AD-002 | [0002-numeracao-sequencial-de-demandas.md](0002-numeracao-sequencial-de-demandas.md) | Aceita em 17/11/2026 |
 
 O índice em [.specs/STATE.md](../../.specs/STATE.md) aponta para estes registros. Use a skill `create-adr` e mantenha a decisão completa neste diretório.

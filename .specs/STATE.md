@@ -1,6 +1,6 @@
 # Estado do projeto
 
-Atualizado em 14/11/2026.
+Atualizado em 17/11/2026.
 
 ## Situação
 
@@ -10,13 +10,14 @@ A restilização orientada pela imagem enviada em 14/11/2026 abrange shell deskt
 
 A API passou a registrar `UserSecretsId` e README documenta `ConnectionStrings:DefaultConnection` no .NET User Secrets. A connection string local foi salva fora do repositório; `dotnet run` iniciou sem variável de ambiente e `GET /api/health` respondeu `ok`. O processo temporário foi encerrado depois da verificação.
 
-Documentação de descoberta, escopo, modelo operacional e arquitetura disponível. O usuário aprovou a primeira entrega operacional em 05/11/2026. T01–T17 estão concluídas e T24 está implementada/build verificada localmente; T18 é a próxima. Schema, provisionamento idempotente, sessão com antifalsificação, políticas iniciais, interface de entrada, clientes/locais, criação de demanda e gestão de equipe/senha inicial foram verificados. O PostgreSQL 18.4 do Compose está ativo em `127.0.0.1:5433`; as migrações da aplicação e `AddCustomerMainAddress` foram aplicadas em `pitcrm_dev`. O provisionamento inicial do Administrador falhou por senha sem maiúsculas/minúsculas e foi revertido; nenhum usuário inicial foi criado.
+Documentação de descoberta, escopo, modelo operacional e arquitetura disponível. O usuário aprovou a primeira entrega operacional em 05/11/2026. T01–T18 estão concluídas e verificadas; T24 e a interface T21 estão implementadas e build verificadas localmente; T19 continua sendo a próxima tarefa no roadmap. Schema, provisionamento idempotente, sessão com antifalsificação, políticas iniciais, interface de entrada, clientes/locais, criação, busca e detalhe de demanda e APIs de equipe/senha foram verificados. O PostgreSQL 18.4 do Compose está ativo em `127.0.0.1:5433`; as migrações da aplicação e `AddCustomerMainAddress` foram aplicadas em `pitcrm_dev`. O provisionamento inicial do Administrador falhou por senha sem maiúsculas/minúsculas e foi revertido; nenhum usuário inicial foi criado.
 
 ## Decisions
 
 | ID | Decision | Rationale | Status | Date |
 | --- | --- | --- | --- | --- |
 | AD-001 | [Base técnica aprovada](../docs/decisions/0001-base-tecnica-aprovada.md) | Consolidar a arquitetura preexistente em um registro consultável | active | 2026-11-04 |
+| AD-002 | [Código sequencial de demanda por organização](../docs/decisions/0002-numeracao-sequencial-de-demandas.md) | Tornar demandas fáceis de citar sem expor o UUID como referência pública | active | 2026-11-17 |
 
 A data é a do registro do ADR. Escopo e regras de produto continuam nos documentos 01 e 02; as pendências estão no documento 03.
 
@@ -35,6 +36,12 @@ As oito skills passaram na validação de formato. Foram conferidos os hashes do
 
 ## Trabalho atual
 
+- T18 concluída em 17/11/2026: API `GET /api/demands` com busca por ID interno exato/referências/descrição, filtros por cliente/local/responsável, paginação com total e ordenação por data/ID; `GET /api/demands/{id}` retorna dados relacionados e atividades. Sessão e organização são exigidas; IDs de outras organizações retornam 404. Build Debug passou sem avisos/erros e os 7 testes backend passaram no PostgreSQL local usando schemas temporários. Evidências em [verificação da primeira entrega](features/primeira-entrega-operacional/verification.md). Próxima tarefa: T19.
+- Refinamento da abertura de demanda em 17/11/2026, seguindo Clientes/Locais: validação só após blur/envio, busca de cliente em combobox, Local dependente e auto selecionado quando único, checklist progressivo, origem por opções segmentadas, cancelar, dica/contador/atalho e contraste de placeholders ajustado. Sidebar estende o fundo escuro até o fim da página. Teste específico (4 casos), `npm run build` e `git diff --check` passaram; contraste de placeholder calculado em 4,97:1 sobre branco. A suíte Angular completa ainda não compila devido a fixtures desatualizadas preexistentes em `customers-page.spec.ts`; nenhuma verificação visual autenticada foi feita.
+- T21 — listagem e detalhe de demandas — atualizada em 17/11/2026: código público sequencial por organização `DEM-0001` com UUID preservado como chave interna; busca também aceita o código. Migração existente atribui números por data de criação e inicializa contadores organizacionais. Filtros principais usam chips de status; cliente/local/responsável/prioridade/ordenação ficam no popover “Filtros”, com ação de limpeza quando ativa. Card destaca descrição com limite de duas linhas, mantém cliente/local em segundo plano e reduz o vazio entre conteúdo e rodapé. Os estados vazios permanecem distintos. Angular: 8 testes focados aprovados e `npm run build` aprovado. Backend: 7 testes de integração aprovados em schemas temporários do PostgreSQL. A migração ainda não foi aplicada ao `pitcrm_dev`; a inspeção autenticada no navegador segue pendente.
+- Ajuste visual posterior: paginação de Demandas agora segue Clientes, com divisor superior, respiro vertical, tamanho de controle e alinhamento mobile equivalentes. Build Angular passou; não executei testes para esse ajuste de CSS.
+- Ajuste tipográfico de Demandas: rótulos, campos, alternância Cards/Tabela, textos de cards, tabela, referências, prioridade/status e detalhe aproximados à escala de Clientes. Build Angular passou; testes não reexecutados.
+- Ajuste geométrico de Demandas: grade de cards agora usa 4/3/2/1 colunas nos mesmos breakpoints de Clientes; altura e padding do card e dimensões do seletor Cards/Tabela seguem as medidas do diretório de Clientes. Build Angular passou; testes não reexecutados.
 - Solicitação de 14/11/2026: cadastro de CEP via ViaCEP, detalhes e status do local, contatos por cliente/local, revisão multi-tenant e normalização/validação de CPF/CNPJ.
 - Funcionalidade: [clientes-locais-contatos](features/clientes-locais-contatos/spec.md); desenho: [design](features/clientes-locais-contatos/design.md); tarefas: [tasks](features/clientes-locais-contatos/tasks.md); evidências: [verification](features/clientes-locais-contatos/verification.md).
 - CEP, endereço de local, status, contatos com chave de organização e documentos numéricos com validação/normalização foram implementados. A revisão corrigiu contagens com agregações tenant-scoped; definiu local ativo como `Status == Active`; adicionou erro/retry de contatos, filtros em chips, máscara/validação de documento e CEP, seleção de UF, contato responsável/Maps e proteções de fechamento. Migrações de contato responsável e normalização de UF aplicadas ao banco local; build Release e Angular passaram.
@@ -59,7 +66,7 @@ As oito skills passaram na validação de formato. Foram conferidos os hashes do
 - Fontes de produto e roadmap atualizados com essas respostas; o restante da Etapa 0 permanece aberto.
 - Verificação desta especificação: [verification.md](features/primeira-entrega-operacional/verification.md).
 - Conferência documental original: 26 critérios, 23 tarefas e 40 dependências; D09 e T24 acrescentam endereço principal opcional do cliente e duas dependências. Os hashes dos 36 arquivos de skills foram preservados.
-- Implementação: T01–T17 concluídas e T24 implementada/build verificada localmente em 05/11/2026; T18 é a próxima. D04–D09 registrados em [context.md](features/primeira-entrega-operacional/context.md). PEO-01 verificado por teste e smoke test CLI; persistência, sessão, matriz de papéis, Angular, consulta de responsáveis, clientes/locais, criação de demandas e APIs de equipe/senha verificados; ver [verification.md](features/primeira-entrega-operacional/verification.md). Limites técnicos restantes continuam identificados como proposta.
+- Implementação: T01–T18 concluídas e T24 implementada/build verificada localmente. T19 é a próxima. D04–D09 registrados em [context.md](features/primeira-entrega-operacional/context.md). PEO-01 verificado por teste e smoke test CLI; persistência, sessão, matriz de papéis, Angular, consulta de responsáveis, clientes/locais, criação e consulta de demandas e APIs de equipe/senha verificados; ver [verification.md](features/primeira-entrega-operacional/verification.md). Limites técnicos restantes continuam identificados como proposta.
 
 ## Pendências de produto
 
@@ -67,4 +74,4 @@ Permanecem as questões da Etapa 0 em [03-ROADMAP-E-PENDENCIAS.md](../docs/03-RO
 
 ## Handoff
 
-Execução: primeira entrega aprovada; T01–T17 concluídas e T24 implementada/build verificada localmente; T18 pendente. Repositório inicializado em `ccjunior/pit-crm`; commits iniciais e checkpoint de código T14–T17 estão em `origin/main`. O Compose foi ajustado ao caminho de volume do PostgreSQL 18; serviço ativo e conexão local em 5433 confirmada. As migrações estão aplicadas; o primeiro Administrador precisa ser provisionado novamente com uma senha que inclua letras maiúsculas e minúsculas. Não declarar a Etapa 0 inteira concluída.
+Execução: primeira entrega aprovada; T01–T18 concluídas e verificadas; T24 implementada/build verificada localmente; T19–T23 pendentes. Repositório inicializado em `ccjunior/pit-crm`; commits iniciais e checkpoint de código T14–T17 estão em `origin/main`. O Compose foi ajustado ao caminho de volume do PostgreSQL 18; serviço ativo e conexão local em 5433 confirmada. As migrações estão aplicadas; o primeiro Administrador precisa ser provisionado novamente com uma senha que inclua letras maiúsculas e minúsculas. Não declarar a Etapa 0 inteira concluída.

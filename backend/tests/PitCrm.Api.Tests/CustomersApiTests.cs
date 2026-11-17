@@ -77,6 +77,8 @@ public sealed class CustomersApiTests
 
             Assert.Equal(HttpStatusCode.Unauthorized,
                 (await anonymousClient.GetAsync("/api/customers")).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized,
+                (await anonymousClient.GetAsync("/api/demands")).StatusCode);
 
             var missingCsrf = await adminClient.PostAsJsonAsync("/api/customers", new { name = "Sem token" });
             Assert.Equal(HttpStatusCode.BadRequest, missingCsrf.StatusCode);
@@ -96,7 +98,7 @@ public sealed class CustomersApiTests
             var createdResponse = await PostJsonAsync(adminClient, "/api/customers", new
             {
                 name = "Cliente Alfa",
-                document = "DOC-12345",
+                document = "529.982.247-25",
                 instructions = "Receber na portaria",
                 organizationId = organizationB,
                 createdByUserId = Guid.NewGuid()
@@ -105,7 +107,7 @@ public sealed class CustomersApiTests
             var created = await createdResponse.Content.ReadFromJsonAsync<CustomerResponse>();
             Assert.NotNull(created);
             Assert.Equal("Cliente Alfa", created.Name);
-            Assert.Equal("DOC-12345", created.Document);
+            Assert.Equal("52998224725", created.Document);
             Assert.Equal("Receber na portaria", created.Instructions);
             Assert.NotEqual(Guid.Empty, created.Id);
 
@@ -161,6 +163,27 @@ public sealed class CustomersApiTests
             Assert.Equal(HttpStatusCode.NotFound,
                 (await adminClient.GetAsync($"/api/customers/{Guid.NewGuid()}/locations")).StatusCode);
 
+            var foreignCustomerResponse = await PostJsonAsync(foreignClient, "/api/customers", new { name = "Cliente Empresa B" });
+            Assert.Equal(HttpStatusCode.Created, foreignCustomerResponse.StatusCode);
+            var foreignCustomer = await foreignCustomerResponse.Content.ReadFromJsonAsync<CustomerResponse>();
+            Assert.NotNull(foreignCustomer);
+            var foreignLocationResponse = await PostJsonAsync(foreignClient, $"/api/customers/{foreignCustomer.Id}/locations", new
+            {
+                name = "Unidade B", address = "Rua Um, 1"
+            });
+            Assert.Equal(HttpStatusCode.Created, foreignLocationResponse.StatusCode);
+            var foreignLocation = await foreignLocationResponse.Content.ReadFromJsonAsync<LocationResponse>();
+            Assert.NotNull(foreignLocation);
+            var foreignDemandResponse = await PostJsonAsync(foreignClient, "/api/demands", new
+            {
+                customerId = foreignCustomer.Id, locationId = foreignLocation.Id,
+                description = "Primeira demanda da Empresa B", origin = "Outra"
+            });
+            Assert.Equal(HttpStatusCode.Created, foreignDemandResponse.StatusCode);
+            var foreignDemand = await foreignDemandResponse.Content.ReadFromJsonAsync<DemandResponse>();
+            Assert.NotNull(foreignDemand);
+            Assert.Equal(1, foreignDemand.ReferenceNumber);
+
             var demandResponse = await PostJsonAsync(operatorClient, "/api/demands", new
             {
                 customerId = created.Id,
@@ -173,6 +196,7 @@ public sealed class CustomersApiTests
             var demand = await demandResponse.Content.ReadFromJsonAsync<DemandResponse>();
             Assert.NotNull(demand);
             Assert.NotEqual(Guid.Empty, demand.Id);
+            Assert.Equal(1, demand.ReferenceNumber);
             Assert.Equal(created.Id, demand.CustomerId);
             Assert.Equal(location.Id, demand.LocationId);
             Assert.Equal("WhatsApp", demand.Origin);
@@ -182,6 +206,29 @@ public sealed class CustomersApiTests
             Assert.Null(demand.TicketReference);
             Assert.Null(demand.PurchaseOrderReference);
 
+            Guid operatorUserId;
+            using (var scope = factory.Services.CreateScope())
+            {
+                var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+                var operatorUser = await userManager.FindByEmailAsync(users["A-" + RoleNames.Operator]);
+                Assert.NotNull(operatorUser);
+                operatorUserId = operatorUser.Id;
+            }
+
+            var assignedDemandResponse = await PostJsonAsync(operatorClient, "/api/demands", new
+            {
+                customerId = created.Id,
+                locationId = location.Id,
+                description = "Solicitação atribuída para teste",
+                origin = "Ligação",
+                assignedToUserId = operatorUserId
+            });
+            Assert.Equal(HttpStatusCode.Created, assignedDemandResponse.StatusCode);
+            var assignedDemand = await assignedDemandResponse.Content.ReadFromJsonAsync<DemandResponse>();
+            Assert.NotNull(assignedDemand);
+            Assert.Equal(2, assignedDemand.ReferenceNumber);
+
+            var expectedReferenceNumber = 3;
             foreach (var client in new[] { adminClient, managerClient })
             {
                 var duplicateReference = await PostJsonAsync(client, "/api/demands", new
@@ -197,8 +244,85 @@ public sealed class CustomersApiTests
                 var duplicateDemand = await duplicateReference.Content.ReadFromJsonAsync<DemandResponse>();
                 Assert.NotNull(duplicateDemand);
                 Assert.NotEqual(demand.Id, duplicateDemand.Id);
+                Assert.Equal(expectedReferenceNumber++, duplicateDemand.ReferenceNumber);
                 Assert.Equal("TICKET-COMPARTILHADO", duplicateDemand.TicketReference);
             }
+
+            var searchById = await adminClient.GetFromJsonAsync<DemandPageResponse>(
+                $"/api/demands?q={demand.Id}&page=1&pageSize=20");
+            Assert.NotNull(searchById);
+            Assert.Equal(1, searchById.TotalCount);
+            Assert.Equal(demand.Id, Assert.Single(searchById.Items).Id);
+
+            var searchByReference = await adminClient.GetFromJsonAsync<DemandPageResponse>(
+                "/api/demands?q=TICKET-COMPARTILHADO");
+            Assert.NotNull(searchByReference);
+            Assert.Equal(2, searchByReference.TotalCount);
+            Assert.Equal(2, searchByReference.Items.Length);
+
+            var searchByDescription = await adminClient.GetFromJsonAsync<DemandPageResponse>(
+                "/api/demands?q=manutenção%20da%20unidade");
+            Assert.NotNull(searchByDescription);
+            Assert.Equal(1, searchByDescription.TotalCount);
+            Assert.Equal(demand.Id, Assert.Single(searchByDescription.Items).Id);
+
+            var searchByShortCode = await adminClient.GetFromJsonAsync<DemandPageResponse>("/api/demands?q=DEM-0001");
+            Assert.NotNull(searchByShortCode);
+            Assert.Equal(demand.Id, Assert.Single(searchByShortCode.Items).Id);
+
+            var filteredPage = await adminClient.GetFromJsonAsync<DemandPageResponse>(
+                $"/api/demands?customerId={created.Id}&locationId={location.Id}&assignedToUserId={operatorUserId}&page=1&pageSize=1");
+            Assert.NotNull(filteredPage);
+            Assert.Equal(1, filteredPage.TotalCount);
+            var filteredItem = Assert.Single(filteredPage.Items);
+            Assert.Equal(assignedDemand.Id, filteredItem.Id);
+            Assert.Equal("Operador", filteredItem.AssignedToDisplayName);
+
+            var unassignedPage = await adminClient.GetFromJsonAsync<DemandPageResponse>(
+                $"/api/demands?q={demand.Id}");
+            Assert.NotNull(unassignedPage);
+            Assert.Null(Assert.Single(unassignedPage.Items).AssignedToUserId);
+            var unassignedDetail = await adminClient.GetFromJsonAsync<DemandDetailsResponse>(
+                $"/api/demands/{demand.Id}");
+            Assert.NotNull(unassignedDetail);
+            Assert.Equal(demand.ReferenceNumber, unassignedDetail.ReferenceNumber);
+            Assert.Equal("Cliente Alfa", unassignedDetail.CustomerName);
+            Assert.Equal("Unidade Central", unassignedDetail.LocationName);
+            Assert.Null(unassignedDetail.AssignedToUserId);
+            Assert.Null(unassignedDetail.AssignedToDisplayName);
+            Assert.Equal("Operador", unassignedDetail.CreatedByDisplayName);
+            Assert.Contains(unassignedDetail.Activities, activity => activity.EventType == "DemandCreated");
+            var assignedDetail = await adminClient.GetFromJsonAsync<DemandDetailsResponse>(
+                $"/api/demands/{assignedDemand.Id}");
+            Assert.NotNull(assignedDetail);
+            Assert.Equal(operatorUserId, assignedDetail.AssignedToUserId);
+            Assert.Equal("Operador", assignedDetail.AssignedToDisplayName);
+            Assert.Equal(HttpStatusCode.OK, (await managerClient.GetAsync($"/api/demands/{demand.Id}")).StatusCode);
+            Assert.Equal(HttpStatusCode.OK, (await operatorClient.GetAsync($"/api/demands/{demand.Id}")).StatusCode);
+
+            var secondPage = await adminClient.GetFromJsonAsync<DemandPageResponse>(
+                "/api/demands?page=2&pageSize=2");
+            Assert.NotNull(secondPage);
+            Assert.Equal(4, secondPage.TotalCount);
+            Assert.Equal(2, secondPage.Items.Length);
+            Assert.Equal(2, secondPage.Page);
+            Assert.Equal(2, secondPage.PageSize);
+
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await adminClient.GetAsync("/api/demands/TICKET-COMPARTILHADO")).StatusCode);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await foreignClient.GetAsync($"/api/demands/{demand.Id}")).StatusCode);
+            var foreignSearch = await foreignClient.GetFromJsonAsync<DemandPageResponse>(
+                "/api/demands?q=TICKET-COMPARTILHADO");
+            Assert.NotNull(foreignSearch);
+            Assert.Empty(foreignSearch.Items);
+            Assert.Equal(0, foreignSearch.TotalCount);
+            Assert.Equal(HttpStatusCode.BadRequest,
+                (await adminClient.GetAsync("/api/demands?page=0&pageSize=20")).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest,
+                (await adminClient.GetAsync("/api/demands?page=1&pageSize=101")).StatusCode);
+            Assert.Equal(HttpStatusCode.BadRequest,
+                (await adminClient.GetAsync("/api/demands?page=2147483647&pageSize=100")).StatusCode);
 
             var secondCustomerResponse = await PostJsonAsync(adminClient, "/api/customers", new { name = "Cliente Delta" });
             var secondCustomer = await secondCustomerResponse.Content.ReadFromJsonAsync<CustomerResponse>();
@@ -268,7 +392,7 @@ public sealed class CustomersApiTests
             var updatedResponse = await PutJsonAsync(adminClient, $"/api/customers/{created.Id}", new
             {
                 name = "Cliente Alfa Atualizado",
-                document = "DOC-12345",
+                document = "529.982.247-25",
                 instructions = "Entregar no balcão",
                 organizationId = organizationB
             });
@@ -298,7 +422,7 @@ public sealed class CustomersApiTests
             Assert.Equal(HttpStatusCode.Forbidden, operatorCreate.StatusCode);
 
             var search = await adminClient.GetFromJsonAsync<CustomerPageResponse>(
-                "/api/customers?q=DOC-123&page=1&pageSize=1");
+                "/api/customers?q=529.982&page=1&pageSize=1");
             Assert.NotNull(search);
             Assert.Equal(1, search.TotalCount);
             Assert.Single(search.Items);
@@ -322,8 +446,9 @@ public sealed class CustomersApiTests
                 (await foreignClient.GetAsync($"/api/customers/{created.Id}")).StatusCode);
             var foreignList = await foreignClient.GetFromJsonAsync<CustomerPageResponse>("/api/customers");
             Assert.NotNull(foreignList);
-            Assert.Empty(foreignList.Items);
-            Assert.Equal(0, foreignList.TotalCount);
+            var foreignListedCustomer = Assert.Single(foreignList.Items);
+            Assert.Equal(1, foreignList.TotalCount);
+            Assert.Equal("Cliente Empresa B", foreignListedCustomer.Name);
 
             Assert.Equal(HttpStatusCode.BadRequest,
                 (await adminClient.GetAsync("/api/customers?page=0&pageSize=20")).StatusCode);
@@ -421,7 +546,19 @@ public sealed class CustomersApiTests
     private sealed record CustomerPageResponse(CustomerListItem[] Items, int Page, int PageSize, int TotalCount);
     private sealed record LocationResponse(Guid Id, Guid CustomerId, string Name, string Address, string? Instructions,
         DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
-    private sealed record DemandResponse(Guid Id, Guid CustomerId, Guid LocationId, string Description, string Origin,
+    private sealed record DemandResponse(Guid Id, int ReferenceNumber, Guid CustomerId, Guid LocationId, string Description, string Origin,
         string? Priority, string Status, string? TicketReference, string? PurchaseOrderReference,
         Guid? AssignedToUserId, DateTimeOffset CreatedAtUtc);
+    private sealed record DemandPageResponse(DemandListItemResponse[] Items, int Page, int PageSize, int TotalCount);
+    private sealed record DemandListItemResponse(Guid Id, int ReferenceNumber, Guid CustomerId, string CustomerName, Guid LocationId,
+        string LocationName, string Description, string Origin, string? Priority, string Status,
+        string? TicketReference, string? PurchaseOrderReference, Guid? AssignedToUserId,
+        string? AssignedToDisplayName, DateTimeOffset CreatedAtUtc);
+    private sealed record DemandDetailsResponse(Guid Id, int ReferenceNumber, Guid CustomerId, string CustomerName, Guid LocationId,
+        string LocationName, string Description, string Origin, string? Priority, string Status,
+        string? TicketReference, string? PurchaseOrderReference, Guid? AssignedToUserId,
+        string? AssignedToDisplayName, Guid CreatedByUserId, string CreatedByDisplayName,
+        DateTimeOffset CreatedAtUtc, DemandActivityResponse[] Activities);
+    private sealed record DemandActivityResponse(Guid Id, Guid AuthorUserId, string AuthorDisplayName,
+        string EventType, string Description, DateTimeOffset OccurredAtUtc);
 }

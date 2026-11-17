@@ -137,6 +137,7 @@ public sealed class PitCrmDbContext(
             demand.ToTable("Demands");
             demand.HasKey(value => value.Id);
             demand.HasAlternateKey(value => new { value.OrganizationId, value.Id });
+            demand.Property(value => value.ReferenceNumber).IsRequired();
             demand.Property(value => value.Description).HasMaxLength(4000).IsRequired();
             demand.Property(value => value.Origin).HasMaxLength(30).IsRequired();
             demand.Property(value => value.Priority).HasMaxLength(20);
@@ -158,6 +159,7 @@ public sealed class PitCrmDbContext(
             demand.HasIndex(value => new { value.OrganizationId, value.CustomerId });
             demand.HasIndex(value => new { value.OrganizationId, value.LocationId });
             demand.HasIndex(value => new { value.OrganizationId, value.AssignedToUserId });
+            demand.HasIndex(value => new { value.OrganizationId, value.ReferenceNumber }).IsUnique();
         });
 
         builder.Entity<DemandActivity>(activity =>

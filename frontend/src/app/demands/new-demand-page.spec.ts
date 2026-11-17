@@ -24,7 +24,8 @@ describe('NewDemandPage', () => {
     http = TestBed.inject(HttpTestingController);
     fixture = TestBed.createComponent(NewDemandPage);
     fixture.detectChanges();
-    http.expectOne('/api/customers?page=1&pageSize=100').flush({ items: [
+    http.expectOne(request => request.url === '/api/customers'
+      && request.params.get('page') === '1' && request.params.get('pageSize') === '100').flush({ items: [
       { id: 'customer-a', name: 'Cliente Alfa', document: null, instructions: null, address: null, locality: null, city: null, state: null,
         createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z' },
     ], page: 1, pageSize: 100, totalCount: 1 });
@@ -32,6 +33,47 @@ describe('NewDemandPage', () => {
   });
 
   afterEach(() => http.verify());
+
+  it('waits for blur or submit before showing required-field errors', () => {
+    expect(fixture.nativeElement.querySelector('.field-error')).toBeNull();
+    const customerInput = fixture.nativeElement.querySelector('#customer-search') as HTMLInputElement;
+    customerInput.dispatchEvent(new Event('blur'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#customer-error')?.textContent).toContain('Selecione um cliente.');
+    fixture.componentInstance.submit();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#description-error')?.textContent).toContain('obrigatória');
+    expect(fixture.nativeElement.querySelector('.progress-checklist li.complete')).toBeNull();
+  });
+
+  it('searches and selects a customer in one combobox and selects its only location', () => {
+    const input = fixture.nativeElement.querySelector('#customer-search') as HTMLInputElement;
+    input.value = 'Alfa';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+
+    http.expectOne(request => request.url === '/api/customers' && request.params.get('q') === 'Alfa')
+      .flush({ items: [{ id: 'customer-a', name: 'Cliente Alfa', document: null }], page: 1, pageSize: 100, totalCount: 1 });
+    fixture.detectChanges();
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, cancelable: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.form.controls.customerId.value).toBe('customer-a');
+    expect((fixture.nativeElement.querySelector('#customer-search') as HTMLInputElement).value).toBe('Cliente Alfa');
+    expect(fixture.nativeElement.querySelector('#location-id').disabled).toBe(true);
+    http.expectOne('/api/customers/customer-a/locations').flush([{
+      id: 'location-a', customerId: 'customer-a', name: 'Unidade Central', address: 'Rua das Flores, 100',
+      instructions: null, createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z',
+    }]);
+    fixture.detectChanges();
+
+    expect(fixture.componentInstance.form.controls.locationId.value).toBe('location-a');
+    expect(fixture.nativeElement.querySelector('#location-id').disabled).toBe(false);
+    fixture.componentInstance.form.patchValue({ description: 'Ar condicionado não refrigera', origin: 'WhatsApp' });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.progress-checklist li.complete').length).toBe(4);
+  });
 
   it('filters locations by the selected customer and submits one CSRF-protected request', () => {
     const page = fixture.componentInstance;
@@ -54,7 +96,7 @@ describe('NewDemandPage', () => {
       customerId: 'customer-a', locationId: 'location-a', description: 'Manutenção solicitada pelo cliente',
       origin: 'WhatsApp', assignedToUserId: null, ticketReference: null, purchaseOrderReference: null, priority: 'Média',
     });
-    request.flush({ id: 'demand-a', customerId: 'customer-a', locationId: 'location-a',
+    request.flush({ id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', locationId: 'location-a',
       description: 'Manutenção solicitada pelo cliente', origin: 'WhatsApp', priority: 'Média', status: 'Recebida',
       ticketReference: null, purchaseOrderReference: null, assignedToUserId: null,
       createdAtUtc: '2026-11-05T12:00:00Z' });

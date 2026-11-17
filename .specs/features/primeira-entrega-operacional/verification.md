@@ -1,7 +1,7 @@
 # Primeira entrega operacional — verificação
 
 **Objeto:** especificação, desenho, plano de tarefas e implementação da primeira entrega operacional.
-**Estado:** T01–T17 verificadas; T24 implementada e compilada localmente em 05/11/2026. Testes automatizados da T24 não foram executados; consulta/edição de demandas e interface de equipe seguem pendentes.
+**Estado:** T01–T18 verificadas; T24 implementada e compilada localmente em 05/11/2026. Testes automatizados da T24 não foram executados; edição de demandas e interface de equipe seguem pendentes.
 
 ## Escopo da conferência
 
@@ -165,6 +165,18 @@ Não foi feita autenticação visual com conta provisionada no banco de desenvol
 | Sucesso | API retorna demanda criada | Interface confirma ID interno e estado Recebida |
 | Frontend | `npm test -- --watch=false`; `npm run build` | 4 arquivos/11 testes aprovados; build de produção sem avisos |
 
+### Refinamento visual da abertura de demanda — 17/11/2026
+
+| Verificação | Procedimento | Resultado |
+| --- | --- | --- |
+| Validação e progresso | Teste de componente sem interação, após blur e após submit | Erros não aparecem no carregamento; checklist e mensagens refletem os campos preenchidos/tentativa de envio |
+| Cliente e local | Busca por nome/documento, seleção por teclado (setas/Enter), dependência do Local e caso de um único local | Combobox pesquisa e seleciona; Local inicia desabilitado e o único resultado é pré-selecionado |
+| Ações e conteúdo | Inspeção do formulário e teste de criação | Origem por opções segmentadas; há Cancelar, dica/contador de descrição e Ctrl+Enter |
+| Contraste e shell | Cálculo de contraste do placeholder padrão contra branco; inspeção das regras do shell | 4,97:1; fundo escuro da sidebar acompanha a altura do shell |
+| Testes e build | `npm test -- --watch=false --include=src/app/demands/new-demand-page.spec.ts`; `npm run build`; `git diff --check` | 4 testes aprovados; build de produção aprovado sem avisos; diff limpo |
+| Suíte Angular completa | `npm test -- --watch=false` | Compilação geral impedida por fixtures desatualizadas preexistentes em `customers-page.spec.ts` (campos obrigatórios/duplicidade de endereço); a alteração da demanda não modifica esses testes |
+| Inspeção visual autenticada | Navegador com sessão válida | Não executada; Administrador local ainda não foi provisionado |
+
 ## Evidências de T15 a T17
 
 | Verificação | Procedimento | Resultado |
@@ -175,6 +187,43 @@ Não foi feita autenticação visual com conta provisionada no banco de desenvol
 | Proteção do último Administrador | Desativar último Administrador ativo via API | HTTP 409; conta permanece ativa |
 | Alterações concorrentes | Duas sessões Administradoras reduzem simultaneamente seus próprios perfis | Uma alteração é aceita e a outra é recusada; exatamente um Administrador ativo permanece |
 | Migração e backend | Migração `AddInitialPasswordChange`; `dotnet test backend/PitCrm.sln --configuration Debug` com `PITCRM_TEST_CONNECTION` e `PITCRM_CONNECTION_STRING` | Migração aplicada em schema de teste e `pitcrm_dev`; 7 testes aprovados, 0 falhas |
+
+## Evidências de T18 — busca paginada e detalhe de demandas
+
+| Verificação | Procedimento | Resultado |
+| --- | --- | --- |
+| Busca textual e ID interno | Consulta por UUID exato, trecho da descrição e referência de chamado compartilhada | ID e descrição retornam a demanda correspondente; referência compartilhada retorna ambas as demandas |
+| Filtros e paginação | Combinar cliente, local e responsável; consultar página 2 com tamanho 2 | Filtros limitam os registros; resposta informa total antes da paginação, página/tamanho solicitados e itens da página |
+| Detalhe e relacionamentos | Abrir demandas com e sem responsável; verificar atividade, criador, cliente e local | Nomes relacionados e atividade são retornados; responsável ausente aparece nulo, e o atribuído inclui ID e nome |
+| Autorização e isolamento | Consulta anônima, leitura pelos três perfis, ID de outra organização e referência externa no caminho de detalhe | Anônimo recebe 401; três perfis podem consultar; registro fora da organização retorna 404; referência externa não é aceita como ID de detalhe |
+| Limites de paginação | Página zero, tamanho 101 e índice cujo offset excede o limite inteiro | Todos retornam 400; padrão é página 1 com 20 itens e máximo 100 |
+| Suíte backend e build | `dotnet build backend/PitCrm.sln --configuration Debug --no-restore`; `dotnet test backend/PitCrm.sln --configuration Debug` | Build aprovado sem avisos/erros; 7 testes aprovados, 0 falhas, usando schemas temporários no PostgreSQL local |
+| Ajuste da fixture preexistente | Suíte revelou CPF de teste fictício incompatível com a validação atual do cliente; substituído por CPF válido formatado | Teste integrado voltou a executar; documento segue normalizado para dígitos conforme regra existente |
+
+## Evidências de T21 — listagem, detalhe e painel lateral de demandas
+
+| Verificação | Procedimento | Resultado |
+| --- | --- | --- |
+| Listagem e alternância | Teste de componente carrega item da API simulada, alterna entre Cards e Tabela e confere os dados | Ambas as apresentações exibem a demanda; alternância preserva o estado da listagem |
+| Busca, filtros e páginas | Inspeção dos parâmetros da chamada `GET /api/demands` | Busca textual, cliente, local, responsável, página e tamanho são enviados; paginação apresenta intervalo e total retornados |
+| Alinhamento dos filtros | Comparar os grupos Buscar, Cliente, Local e Responsável no toolbar; conferir regra responsiva | Todos têm rótulo acima do controle e os campos alinham pela base; em telas menores a busca ocupa a linha inteira |
+| Filtros adicionais e ordenação | `GET /api/demands` recebe status, prioridade e `sortBy` | Valida filtros com os valores de domínio disponíveis; prioridade filtra e ordena Alta/Média/Baixa/sem prioridade; ordem recente continua padrão |
+| Referência sequencial | Cadastrar duas demandas na API e pesquisar `DEM-0001` | API retorna referência numérica em DTO; números aumentam dentro da organização; busca pelo código localiza a demanda; UUID continua como chave interna |
+| Aviso de criação | Criar e observar a confirmação; dispensar manualmente e aguardar o timeout | Mostra código curto, ação Ver demanda e fechar; desaparece após 7 segundos e não é persistido entre navegações/recargas |
+| Escaneabilidade | Inspecionar status/prioridade/data e grade de cards | Recebida/status tem paleta própria; Alta/Média/Baixa têm cores independentes; data relativa mantém data completa no tooltip; card tem seta, hover e foco visível; em listagens pequenas, colunas sem cards ficam vazias |
+| Paginação | Comparar Clientes e Demandas em desktop e regra responsiva | Demandas usa o mesmo divisor superior, respiro, altura de controles e distribuição mobile de Clientes |
+| Filtros em larguras menores | Conferir status principal, popover de filtros secundários e limpeza | Status permanece visível; cliente/local/responsável/prioridade/ordenação ficam recolhidos; filtros ativos exibem “Limpar filtros”; controles mantêm foco de teclado |
+| Cards e estados vazios | Teste de componente com 2, 5 e 12 cards, descrição longa, lista vazia e filtro sem resultados | Contagem de cards preservada, descrição tem limite visual de duas linhas; vazio sem demandas e sem correspondências exibem mensagens e ações distintas |
+| Hierarquia e contraste | Revisar descrição, cliente/local, data relativa, código e prioridade | Descrição em destaque; cliente/local e metadados em tons secundários mais escuros; Alta em vermelho, Média em âmbar, Baixa neutra; data completa no tooltip |
+| Tipografia e dimensões | Comparar escala, grade/card/toggle entre Clientes e Demandas pelas regras CSS | Cards seguem colunas 4/3/2/1 e dimensões de Clientes; toggle mantém medidas pareadas; build Angular aprovado |
+| Detalhe e atividade | Abrir uma linha/card e responder `GET /api/demands/{id}` com cliente, local e atividade | Painel lateral exibe dados persistidos, descrição, referências, autor e linha do tempo; erro de indisponibilidade tem estado próprio |
+| Cadastro lateral | Teste de componente abre Nova demanda, confirma o formulário dentro do diálogo lateral e fecha sem trocar rota | Abertura/fechamento funcionam; criação continua usando o formulário T14 e ao salvar fecha o painel e recarrega a página 1 |
+| Navegação | Inspeção das rotas Angular e links da shell desktop/mobile | `/` mantém Visão geral; logo aponta para `/`; Demandas em ambos os menus aponta para `/demandas` e fica ativa somente na lista |
+| Testes focados e build | `npm test -- --watch=false --include=src/app/shell/demands-home.spec.ts --include=src/app/demands/new-demand-page.spec.ts`; `npm run build` | 8 testes focados aprovados; build Angular de produção aprovado |
+| Backend e migração | `dotnet test backend/tests/PitCrm.Api.Tests/PitCrm.Api.Tests.csproj --configuration Debug --no-restore` com connection string de teste e schema temporário | 7 testes aprovados; migration de numeração aplicada no schema temporário, inclusive seed e índice único; `pitcrm_dev` não foi alterado |
+| Inspeção autenticada | Abrir listagem, filtros, tabela, detalhe e cadastro em navegador com sessão válida | Não executada; Administrador local ainda não foi provisionado |
+
+O domínio disponibiliza somente o status inicial **Recebida** nesta entrega; o filtro lista esse valor e “Todas”. As transições comerciais foram explicitamente deixadas fora do escopo (D07). Atribuição rápida e alteração de status não foram criadas porque a API de edição ainda pertence a T20/T22 e as regras de transição seguem pendentes. A migração foi aplicada pela suíte de integração em schema temporário, mas ainda não no banco local `pitcrm_dev`. Inspeção autenticada continua pendente.
 
 ## Evidências de T24 — endereço principal do Cliente
 
@@ -199,7 +248,7 @@ O cadastro e a seleção dos locais de atendimento continuam no fluxo existente:
 | Administrador/Gestor mantêm clientes e locais; Operador consulta | PEO-08, PEO-09, PEO-10, PEO-11, PEO-27 | APIs e telas T07–T11 verificadas; T24 adiciona endereço principal opcional e passou nos builds; testes automatizados pendentes |
 | Criar demanda sem chamado e sem responsável | PEO-12, PEO-13, PEO-14, PEO-15 | API T13 e formulário T14 verificados; recarga/consulta integrada ainda em T23 |
 | Consultar responsáveis elegíveis; rejeitar referência incompatível na demanda | PEO-16, PEO-21 | T12 e vínculos de T13 verificados por HTTP; edição/concorrência pendentes em T20 |
-| Buscar, filtrar e abrir detalhe após nova sessão | PEO-17, PEO-18, PEO-21 | Não executado; tarefas T18 e T21 |
+| Buscar, filtrar e abrir detalhe após nova sessão | PEO-17, PEO-18, PEO-21 | API T18 verificada por HTTP para filtros, paginação, atividade e isolamento; interface T21 verificada por testes de componente com API simulada; integração autenticada e recarga entre sessões aguardam T23 |
 | Editar demanda, registrar atividade e detectar versão antiga | PEO-19, PEO-20, PEO-22 | Não executado; tarefas T20 e T22 |
 | Consultar ou gravar dados entre organizações A e B | PEO-21, PEO-25 | Não executado; tarefas T02–T23 conforme matriz de rastreabilidade |
 | Simular falha transacional, resposta perdida e estados de interface | PEO-22, PEO-23, PEO-24 | Não executado; tarefas T13–T14, T20 e T22 |
@@ -207,6 +256,6 @@ O cadastro e a seleção dos locais de atendimento continuam no fluxo existente:
 
 ## Limites
 
-Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T17 cobrem estrutura, autenticação, autorização inicial, entrada, clientes/locais, criação de demanda e APIs administrativas de equipe/senha; T24 adiciona endereço principal opcional do cliente. Interface de equipe, consulta/edição de demandas e critérios restantes seguem pendentes. Login foi inspecionado no navegador; telas de cadastros/demanda foram verificadas por testes de componentes e build, sem sessão autenticada no navegador.
+Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T18 cobrem estrutura, autenticação, autorização inicial, entrada, clientes/locais, criação/busca/detalhe de demanda e APIs administrativas de equipe/senha; T21 implementa a interface de busca/detalhe de demanda e abertura lateral de criação; T24 adiciona endereço principal opcional do cliente. Interface de equipe, edição de demandas e critérios restantes seguem pendentes. Login foi inspecionado no navegador; listagem e formulários foram verificados por testes de componentes/build, sem sessão autenticada no navegador.
 
-Revisão documental e implementação T01–T17/T24 realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.
+Revisão documental e implementação T01–T18/T24 realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.

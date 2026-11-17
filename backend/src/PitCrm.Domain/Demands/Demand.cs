@@ -29,10 +29,12 @@ public sealed class Demand
 
     public static readonly string[] Origins = ["WhatsApp", "Ligação", "E-mail", "Outra"];
     public static readonly string[] Priorities = ["Baixa", "Média", "Alta"];
+    public static readonly string[] Statuses = ["Recebida"];
     public Guid Id { get; private set; }
     public Guid OrganizationId { get; private set; }
     public Guid CustomerId { get; private set; }
     public Guid LocationId { get; private set; }
+    public int ReferenceNumber { get; private set; }
     public string Description { get; private set; } = string.Empty;
     public string Origin { get; private set; } = string.Empty;
     public string? Priority { get; private set; }
@@ -42,6 +44,13 @@ public sealed class Demand
     public Guid? AssignedToUserId { get; private set; }
     public Guid CreatedByUserId { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
+
+    public void AssignReferenceNumber(int referenceNumber)
+    {
+        if (referenceNumber < 1 || ReferenceNumber != 0)
+            throw new InvalidOperationException("A demand reference number must be assigned once and be positive.");
+        ReferenceNumber = referenceNumber;
+    }
 
     private static string Required(string value, string parameterName, int maxLength)
     {
