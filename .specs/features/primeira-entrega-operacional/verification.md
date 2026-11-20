@@ -1,7 +1,7 @@
 # Primeira entrega operacional — verificação
 
 **Objeto:** especificação, desenho, plano de tarefas e implementação da primeira entrega operacional.
-**Estado:** T01–T18 verificadas; T19 implementada com testes focados/build aprovados; T20 concluída/verificada; T21 implementada e verificada por testes focados/build; T22 implementada com testes focados/build aprovados; T24 implementada e compilada. Demonstração integrada segue pendente; inspeção autenticada e conferência de teclado/viewport das telas não foram executadas.
+**Estado:** T01–T24 verificadas nos níveis indicados nesta página. T23 executou as suítes completas, cenário local autenticado e conferência responsiva/teclado focada em edição de demandas. Os limites por cenário e os itens não exercitados estão descritos abaixo; isso não declara encerrada a Etapa 0 inteira.
 
 ## Escopo da conferência
 
@@ -253,7 +253,7 @@ O cadastro e a seleção dos locais de atendimento continuam no fluxo existente:
 | Smoke test autenticado | Usuário repetiu o cadastro de equipe após aplicação da migração | Usuário confirmou que funcionou perfeitamente; cadastro autorizado pela API concluído |
 | Build Angular | `npm run build` | Aprovado sem avisos; bundle inicial de 496,13 kB e CSS da tela dentro do orçamento |
 | Formatação do diff | `git diff --check` | Aprovado; Git reportou apenas avisos de conversão LF/CRLF da configuração local |
-| Inspeção autenticada | Abrir equipe e troca obrigatória em navegador com conta real | Pendente; esta sessão não provisionou Administrador local nem alterou credenciais |
+| Inspeção autenticada | Abrir equipe e troca obrigatória em navegador com conta local de teste | Pendente; T23 usou contas sintéticas para clientes/locais/demandas, mas não percorreu manualmente equipe nem troca obrigatória |
 
 A migração `20261120141438_SeedBaseIdentityRoles` registra Administrador, Gestor e Operador usando `NormalizedName` como chave de conflito: preserva papéis existentes e inclui somente os ausentes. O endpoint valida contra o catálogo estático e orienta aplicar migrações se o banco estiver desatualizado; não cria papéis durante cadastro/edição. A proteção do último Administrador continua sendo aplicada pela API de T17. A suíte Angular completa não foi executada; somente os quatro arquivos focados acima foram testados. A suíte completa do backend (7 testes) foi compilada e executada em saída temporária porque a API local mantinha os assemblies Debug bloqueados. As migrações pendentes foram aplicadas a `pitcrm_dev` em build Release, mantendo a API ativa; uma consulta confirmou os três perfis persistidos. O usuário confirmou sucesso no cadastro autenticado após a migração.
 
@@ -270,7 +270,7 @@ A migração `20261120141438_SeedBaseIdentityRoles` registra Administrador, Gest
 | Suíte backend | `dotnet test tests/PitCrm.Api.Tests/PitCrm.Api.Tests.csproj --configuration Debug --artifacts-path <diretório-temporário>` com `PITCRM_TEST_CONNECTION` | 7 testes aprovados, 0 falhas; saída temporária preserva os assemblies Debug bloqueados pela API local |
 | Diff | `git diff --check` | Aprovado; Git emitiu somente avisos locais de conversão LF/CRLF |
 
-O token `Demand.Version` é iniciado em 1 e mapeado como token de concorrência do EF Core. `GET /api/demands/{id}` e `POST /api/demands` expõem a versão; o PUT retorna a nova versão e salva a atividade na mesma transação. A API local em Debug não foi reiniciada e ainda não carrega o endpoint novo; reinicie o processo antes de validar o PUT manualmente pelo runtime local. A validação automatizada foi feita com PostgreSQL em schema isolado; a migração foi aplicada separadamente a `pitcrm_dev`.
+O token `Demand.Version` é iniciado em 1 e mapeado como token de concorrência do EF Core. `GET /api/demands/{id}` e `POST /api/demands` expõem a versão; o PUT retorna a nova versão e salva a atividade na mesma transação. A validação automatizada foi feita com PostgreSQL em schema isolado; a migração foi aplicada a `pitcrm_dev`. Em T23, uma API local iniciada com o código atual respondeu ao health check e a edição autenticada via interface confirmou o uso do endpoint no runtime.
 
 ## Evidências de T22 — edição de demanda no frontend
 
@@ -283,29 +283,47 @@ O token `Demand.Version` é iniciado em 1 e mapeado como token de concorrência 
 | Testes focados | `npm test -- --watch=false --include=src/app/demands/new-demand-page.spec.ts --include=src/app/shell/demands-home.spec.ts` | 2 arquivos e 11 testes aprovados |
 | Build Angular | `npm run build` | Aprovado; aviso de bundle inicial em 500,10 kB, 99 bytes acima do orçamento de 500 kB |
 | Diff | `git diff --check` | Aprovado; possíveis avisos LF/CRLF são da configuração local do Git |
-| Validação autenticada e teclado | Abrir a tela com conta real e percorrer em 390/1.280 px | Pendente para T23; não realizada nesta verificação |
+| Validação autenticada e teclado | Abrir a tela com conta local de teste e percorrer em 390/1.280 px | Feita em T23 como Administrador: edição, dimensões e foco por teclado conferidos; outros papéis não foram inspecionados manualmente |
 
-T22 reaproveita o formulário de abertura no painel de detalhes. O status e o histórico continuam fora da edição básica. Em conflito 409, os valores digitados permanecem até o usuário escolher recarregar os dados do servidor. O PUT usa a versão recebida no detalhe e a nova resposta dispara recarga da lista e do detalhe. A integração visual com a API local requer reiniciar a instância Debug, que ainda não carrega o endpoint implementado na T20.
+T22 reaproveita o formulário de abertura no painel de detalhes. O status e o histórico continuam fora da edição básica. Em conflito 409, os valores digitados permanecem até o usuário escolher recarregar os dados do servidor. O PUT usa a versão recebida no detalhe e a nova resposta dispara recarga da lista e do detalhe. Em T23, o fluxo foi exercitado em sessão autenticada contra a API local iniciada com o código atual.
+
+## Evidências de T23 — demonstração integrada
+
+| Verificação | Procedimento | Resultado |
+| --- | --- | --- |
+| Migrações e runtime | `dotnet ef migrations list` e `dotnet ef database update` contra o PostgreSQL do Compose; iniciar API e consultar `GET /api/health` | Banco `pitcrm_dev` estava atualizado; nenhuma migração pendente; API retornou `status: ok` na porta 5006. Angular iniciou em `127.0.0.1:4200` |
+| Suíte backend completa | `dotnet test backend/PitCrm.sln --configuration Debug --artifacts-path <diretório-temporário>` com `PITCRM_TEST_CONNECTION` apontando para o PostgreSQL local | 7 testes aprovados, 0 falhas. O teste integrado de clientes/demandas usa Administrador, Gestor e Operador da organização A e Administrador da organização B; cobre criação, consulta, edição pelo Operador, versão obsoleta/concorrência, vínculos inválidos e isolamento. Os testes de responsáveis verificam todos os perfis e a organização de origem |
+| Suíte Angular completa | `npm test -- --watch=false` | 8 arquivos e 29 testes aprovados. Para a suíte voltar a compilar, atualizei fixtures antigas de `customers-page.spec.ts` para os contratos atuais de cliente/local, tamanho de página 12, carregamento de contatos e texto de estado vazio |
+| Build Angular | `npm run build` | Build aprovado. Aviso de orçamento: bundle inicial 500,10 kB, 99 bytes acima do limite configurado de 500 kB |
+| Organização Alpha e fluxo operacional | Provisionar organização de teste; pela interface autenticada criar cliente e local; criar demanda sem responsável e chamado/OC | Cliente `T23 Cliente Alpha`, local `Unidade Integracao` e demanda `DEM-0001` persistiram; lista mostra estado Recebida e “Sem responsável” |
+| Recarga e edição entre sessões | Sair, autenticar novamente, abrir `DEM-0001`, alterar descrição, salvar, sair e autenticar mais uma vez | A demanda foi recuperada após cada sessão; PUT retornou ao detalhe atualizado e registrou `DemandUpdated` no histórico |
+| Isolamento visual entre organizações | Entrar no Administrador da organização Beta, consultar Demandas e Clientes/Locais | Ambas as listas apresentaram o estado vazio. Testes backend complementam a conferência visual com acessos diretos e vínculos cruzados, incluindo o ID e recursos da outra organização |
+| Viewport e teclado | Abrir edição de demanda em 390×844 e 1.280×900; observar dimensões DOM e avançar foco com Tab | `scrollWidth` igual à largura do viewport (375/390 no dispositivo estreito; 1.280/1.280 no desktop). O foco percorreu fechar, cliente, local, descrição e opções de origem; ambos os tamanhos permitiram usar o formulário |
+| Diff | `git diff --check` | Aprovado; apenas avisos locais de conversão LF/CRLF |
+
+Os Administradores Alpha e Beta e os registros sintéticos de cliente, local e demanda foram criados somente no banco local `pitcrm_dev` para esta demonstração e permanecem disponíveis para inspeção. A suíte de integração prepara os três perfis e duas organizações em schemas temporários próprios, removidos ao final dos testes. A inspeção manual autenticada da interface foi feita como Administrador; Gestor/Operador e tentativas de acesso cruzado foram exercitados pelas suítes HTTP. A perda de resposta de rede não foi injetada manualmente; o formulário preserva dados e informa falha de gravação no código, mas esse cenário específico permanece não demonstrado nesta execução. Durante o provisionamento, o EF Core emitiu aviso sobre o valor sentinela de `CustomerLocation.Status`; a operação concluiu normalmente e os testes passaram.
+
+A T23 cobriu o ciclo operacional local com persistência real e conferência visual da edição. A verificação não valida um ambiente publicado e não encerra decisões de produto ainda abertas na Etapa 0. O runtime local da API e do Angular foi encerrado ao concluir a conferência; o PostgreSQL do Compose foi mantido no estado em que já estava (saudável).
 
 ## Verificação de comportamento planejada
 
 | Cenário | Critérios principais | Estado atual |
 | --- | --- | --- |
-| Preparar organização e primeiro Administrador; repetir provisionamento | PEO-01 | Backend verificado por teste e smoke test; demonstração integrada ainda em T23 |
-| Entrar, consultar sessão e sair | PEO-02, PEO-03, PEO-04, PEO-25 | Backend T04 e integração Angular T06 verificados; interface validada em navegador |
-| Trocar credencial inicial quando exigida | PEO-06 | API T16 verificada; tela/guards T19 aprovados em testes focados e build; inspeção autenticada aguardando provisionamento local e cenário integrado T23 |
-| Administrador cadastra/edita equipe; Gestor/Operador recebem recusa | PEO-05, PEO-07 | APIs T15/T17 e proteção do último Administrador verificadas; T19 cobre interface, guarda de rota, cadastro/edição e conflito 409 em testes focados; cenário integrado T23 pendente |
-| Administrador/Gestor mantêm clientes e locais; Operador consulta | PEO-08, PEO-09, PEO-10, PEO-11, PEO-27 | APIs e telas T07–T11 verificadas; T24 adiciona endereço principal opcional e passou nos builds; testes automatizados pendentes |
-| Criar demanda sem chamado e sem responsável | PEO-12, PEO-13, PEO-14, PEO-15 | API T13 e formulário T14 verificados; recarga/consulta integrada ainda em T23 |
+| Preparar organização e primeiro Administrador; repetir provisionamento | PEO-01 | Teste backend de provisionamento idempotente aprovado; dois Administradores sintéticos foram autenticados no fluxo T23 |
+| Entrar, consultar sessão e sair | PEO-02, PEO-03, PEO-04, PEO-25 | Suíte backend completa aprovada; login e logout observados na UI para Administradores Alpha e Beta; cenários inválidos/antifalsificação cobertos por integração |
+| Trocar credencial inicial quando exigida | PEO-06 | API T16 e tela/guards T19 aprovadas em testes focados/build; troca de senha da conta sintética de teste não foi percorrida na UI T23 |
+| Administrador cadastra/edita equipe; Gestor/Operador recebem recusa | PEO-05, PEO-07 | APIs T15/T17 e proteção do último Administrador verificadas; T19 cobre interface, guarda, cadastro/edição e conflito 409 em testes; T23 repetiu a suíte completa. Inspeção manual das telas por Gestor/Operador não executada |
+| Administrador/Gestor mantêm clientes e locais; Operador consulta | PEO-08, PEO-09, PEO-10, PEO-11, PEO-27 | APIs/telas T07–T11 verificadas e testes backend completos aprovados; T24 adiciona endereço principal opcional. No T23 a UI foi percorrida como Administrador; telas dos demais perfis estão cobertas por testes e guardas, não por inspeção manual |
+| Criar demanda sem chamado e sem responsável | PEO-12, PEO-13, PEO-14, PEO-15 | API, formulário e suíte completa aprovados; na UI real foi criada demanda sem responsável, ticket ou OC e consultada depois de sair/entrar |
 | Consultar responsáveis elegíveis; rejeitar referência incompatível na demanda | PEO-16, PEO-21 | T12 e vínculos de T13/T20 verificados por HTTP; formulário T22 usa a lista elegível e preserva responsável atual indisponível para decisão explícita |
-| Buscar, filtrar e abrir detalhe após nova sessão | PEO-17, PEO-18, PEO-21 | API T18 verificada por HTTP para filtros, paginação, atividade e isolamento; interface T21 verificada por testes de componente com API simulada; integração autenticada e recarga entre sessões aguardam T23 |
-| Editar demanda, registrar atividade e detectar versão antiga | PEO-19, PEO-20, PEO-22 | API T20 verificada por integração; formulário/painel T22 verificados com 11 testes focados; demonstração autenticada segue para T23 |
-| Consultar ou gravar dados entre organizações A e B | PEO-21, PEO-25 | T20 verifica demanda e vínculos entre duas organizações; a matriz completa permanece para T23 |
-| Simular falha transacional, resposta perdida e estados de interface | PEO-22, PEO-23, PEO-24 | Rollback de gravação de demanda verificado em T13/T20; erros HTTP e conflito 409 preservam dados em T22; resposta perdida segue para T23 |
-| Percorrer as telas com teclado nas duas larguras propostas | PEO-26 | Não executado; tarefas T06, T10–T11, T14, T19 e T21–T23 |
+| Buscar, filtrar e abrir detalhe após nova sessão | PEO-17, PEO-18, PEO-21 | Suíte backend completa e testes de componente aprovados; T23 repetiu login/logout e consulta após nova sessão; Beta não recebeu dados de Alpha |
+| Editar demanda, registrar atividade e detectar versão antiga | PEO-19, PEO-20, PEO-22 | T20/T22 e suíte backend completa aprovadas; T23 atualizou uma demanda real via browser e confirmou o histórico. Versão obsoleta/concorrência exercitada pela integração HTTP |
+| Consultar ou gravar dados entre organizações A e B | PEO-21, PEO-25 | T23 validou listas vazias na UI de Beta; suíte backend completa verificou sessões dos três perfis, IDs e vínculos cruzados e recusas de sessão/permissão/CSRF |
+| Simular falha transacional, resposta perdida e estados de interface | PEO-22, PEO-23, PEO-24 | Rollback T13/T20 e erros HTTP/conflito T22 verificados; perda de resposta de rede não foi simulada manualmente em T23 |
+| Percorrer as telas com teclado nas duas larguras propostas | PEO-26 | T23 percorreu o formulário de edição de demanda com Tab e verificou scroll horizontal em 390×844 e 1.280×900; inspeção manual de todos os demais formulários/listas continua limitada |
 
 ## Limites
 
-Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T20 cobrem estrutura, autenticação, autorização inicial, entrada, clientes/locais, criação/busca/detalhe/edição de demanda e interfaces administrativas de equipe/senha; T21 implementa a interface de busca/detalhe de demanda e abertura lateral de criação; T22 integra a edição; T24 adiciona endereço principal opcional do cliente. T23 e critérios de validação integrada seguem pendentes. Login foi inspecionado no navegador; T19, T21 e T22 foram verificadas por testes de componentes/build, sem sessão autenticada no navegador. A API Debug ativa não foi reiniciada para o PUT T20; a validação automatizada desse endpoint foi feita por testes de integração.
+Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T24 foram implementadas/verificadas nos níveis descritos. A T23 usou teste HTTP para o ciclo com Administrador, Gestor e Operador em duas organizações e inspeção browser autenticada de Administrador para login, cadastro de cliente/local, demanda, edição, persistência entre sessões e isolamento visual. Inspeção manual de Gestor/Operador e dos demais formulários não foi feita. A resposta perdida não foi simulada. O build Angular mantém aviso de orçamento de 99 bytes. A validação local não comprova estado publicado ou encerra a Etapa 0.
 
-Revisão documental e implementação T01–T22/T24 realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.
+Revisão documental e implementação T01–T24, incluindo a consolidação T23, realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.
