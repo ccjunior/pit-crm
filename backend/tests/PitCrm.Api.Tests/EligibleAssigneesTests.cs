@@ -61,14 +61,11 @@ public sealed class EligibleAssigneesTests
                 await dbContext.SaveChangesAsync();
 
                 var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
-                foreach (var roleName in new[] { RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator })
-                {
-                    Assert.True((await roleManager.CreateAsync(
-                        new IdentityRole<Guid>(roleName) { Id = Guid.NewGuid() })).Succeeded);
-                }
+                foreach (var roleName in RoleNames.All)
+                    Assert.True(await roleManager.RoleExistsAsync(roleName));
 
                 var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-                foreach (var roleName in new[] { RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator })
+                foreach (var roleName in RoleNames.All)
                 {
                     var email = $"{roleName}-{organizationId:N}@example.invalid";
                     var user = new ApplicationUser

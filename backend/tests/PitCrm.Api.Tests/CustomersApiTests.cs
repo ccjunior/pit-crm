@@ -56,11 +56,8 @@ public sealed class CustomersApiTests
                 await dbContext.SaveChangesAsync();
 
                 var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
-                foreach (var roleName in new[] { RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator })
-                {
-                    Assert.True((await roleManager.CreateAsync(
-                        new IdentityRole<Guid>(roleName) { Id = Guid.NewGuid() })).Succeeded);
-                }
+                foreach (var roleName in RoleNames.All)
+                    Assert.True(await roleManager.RoleExistsAsync(roleName));
 
                 var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
                 await AddUserAsync(userManager, users, "A", organizationA, RoleNames.Administrator, password);

@@ -5,4 +5,7 @@ public static class RoleNames
     public const string Administrator = "Administrador";
     public const string Manager = "Gestor";
     public const string Operator = "Operador";
+
+    public static IReadOnlyList<string> All { get; } = Array.AsReadOnly(
+        new[] { Administrator, Manager, Operator });
 }

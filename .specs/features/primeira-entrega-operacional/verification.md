@@ -1,7 +1,7 @@
 # Primeira entrega operacional — verificação
 
 **Objeto:** especificação, desenho, plano de tarefas e implementação da primeira entrega operacional.
-**Estado:** T01–T18 verificadas; T24 implementada e compilada localmente em 05/11/2026. Testes automatizados da T24 não foram executados; edição de demandas e interface de equipe seguem pendentes.
+**Estado:** T01–T18 verificadas; T19 implementada com testes focados/build aprovados; T21 implementada e verificada por testes focados/build; T24 implementada e compilada. Edição de demandas e demonstração integrada seguem pendentes; inspeção autenticada e conferência de teclado/viewport da T19 não foram executadas.
 
 ## Escopo da conferência
 
@@ -237,14 +237,34 @@ O domínio disponibiliza somente o status inicial **Recebida** nesta entrega; o 
 
 O cadastro e a seleção dos locais de atendimento continuam no fluxo existente: o local permanece associado ao cliente e é carregado ao selecionar o cliente na abertura da demanda. A integração autenticada em runtime não foi verificada nesta alteração.
 
+## Evidências de T19 — equipe e troca obrigatória de senha
+
+| Verificação | Procedimento | Resultado |
+| --- | --- | --- |
+| Administração de equipe | Teste de componente de listagem, cadastro com papel-base e envio de senha temporária | O formulário envia `POST /api/users` com antifalsificação e, após sucesso, mostra a credencial para entrega fora do sistema; a lista é atualizada |
+| Catálogo de papéis no banco | Teste de integração aplica migrações até a anterior, grava um Administrador com ID legado e aplica a nova migração | Migração preserva o ID do Administrador existente e inclui Gestor e Operador; teste também confirma os três papéis no banco novo |
+| Edição e último Administrador | Teste de componente envia `PUT /api/users/{id}` e simula resposta 409 da API | O formulário permanece aberto e a mensagem do backend é apresentada |
+| Primeiro acesso | Testes dos guards autenticados e da tela de troca | Sessão com `mustChangePassword` é direcionada à troca e não entra na shell; rota de troca só abre enquanto a flag está ativa; nova senha e confirmação precisam coincidir |
+| Autorização da interface | Teste do guard de equipe | Apenas a sessão com perfil Administrador entra na rota; os outros perfis voltam ao início; a API continua sendo a autoridade de permissão |
+| Sessão e API | Teste do serviço de autenticação | Troca usa o token CSRF e o estado local só libera o fluxo após resposta bem-sucedida da API |
+| Testes focados | `npm test -- --watch=false --include=src/app/team/team-page.spec.ts --include=src/app/auth/initial-password-change-page.spec.ts --include=src/app/core/auth.service.spec.ts --include=src/app/core/auth.guard.spec.ts` | 4 arquivos e 12 testes aprovados |
+| Regressão backend | `dotnet test tests/PitCrm.Api.Tests/PitCrm.Api.Tests.csproj --configuration Debug --artifacts-path <diretório-temporário>` com `PITCRM_TEST_CONNECTION` e schemas temporários | Suíte completa: 7 testes aprovados, 0 falhas; migração mantém Administrador existente, semeia papéis ausentes e cadastro Operador retorna 201. Saída isolada evita sobrescrever assemblies da API local ainda em execução |
+| Banco local | `dotnet ef database update --project src/PitCrm.Infrastructure --startup-project src/PitCrm.Api --configuration Release`; consulta a `AspNetRoles` em `pitcrm_dev` | Aplicou `AddOrganizationDemandNumbers` e `SeedBaseIdentityRoles`; consulta retornou Administrador, Gestor e Operador. API em Debug permaneceu ativa |
+| Smoke test autenticado | Usuário repetiu o cadastro de equipe após aplicação da migração | Usuário confirmou que funcionou perfeitamente; cadastro autorizado pela API concluído |
+| Build Angular | `npm run build` | Aprovado sem avisos; bundle inicial de 496,13 kB e CSS da tela dentro do orçamento |
+| Formatação do diff | `git diff --check` | Aprovado; Git reportou apenas avisos de conversão LF/CRLF da configuração local |
+| Inspeção autenticada | Abrir equipe e troca obrigatória em navegador com conta real | Pendente; esta sessão não provisionou Administrador local nem alterou credenciais |
+
+A migração `20261120141438_SeedBaseIdentityRoles` registra Administrador, Gestor e Operador usando `NormalizedName` como chave de conflito: preserva papéis existentes e inclui somente os ausentes. O endpoint valida contra o catálogo estático e orienta aplicar migrações se o banco estiver desatualizado; não cria papéis durante cadastro/edição. A proteção do último Administrador continua sendo aplicada pela API de T17. A suíte Angular completa não foi executada; somente os quatro arquivos focados acima foram testados. A suíte completa do backend (7 testes) foi compilada e executada em saída temporária porque a API local mantinha os assemblies Debug bloqueados. As migrações pendentes foram aplicadas a `pitcrm_dev` em build Release, mantendo a API ativa; uma consulta confirmou os três perfis persistidos. O usuário confirmou sucesso no cadastro autenticado após a migração.
+
 ## Verificação de comportamento planejada
 
 | Cenário | Critérios principais | Estado atual |
 | --- | --- | --- |
 | Preparar organização e primeiro Administrador; repetir provisionamento | PEO-01 | Backend verificado por teste e smoke test; demonstração integrada ainda em T23 |
 | Entrar, consultar sessão e sair | PEO-02, PEO-03, PEO-04, PEO-25 | Backend T04 e integração Angular T06 verificados; interface validada em navegador |
-| Trocar credencial inicial quando exigida | PEO-06 | API T16 verificada; interface guiada ainda pendente em T19 |
-| Administrador cadastra/edita equipe; Gestor/Operador recebem recusa | PEO-05, PEO-07 | APIs T15/T17 e proteção do último Administrador verificadas; interface pendente em T19 |
+| Trocar credencial inicial quando exigida | PEO-06 | API T16 verificada; tela/guards T19 aprovados em testes focados e build; inspeção autenticada aguardando provisionamento local e cenário integrado T23 |
+| Administrador cadastra/edita equipe; Gestor/Operador recebem recusa | PEO-05, PEO-07 | APIs T15/T17 e proteção do último Administrador verificadas; T19 cobre interface, guarda de rota, cadastro/edição e conflito 409 em testes focados; cenário integrado T23 pendente |
 | Administrador/Gestor mantêm clientes e locais; Operador consulta | PEO-08, PEO-09, PEO-10, PEO-11, PEO-27 | APIs e telas T07–T11 verificadas; T24 adiciona endereço principal opcional e passou nos builds; testes automatizados pendentes |
 | Criar demanda sem chamado e sem responsável | PEO-12, PEO-13, PEO-14, PEO-15 | API T13 e formulário T14 verificados; recarga/consulta integrada ainda em T23 |
 | Consultar responsáveis elegíveis; rejeitar referência incompatível na demanda | PEO-16, PEO-21 | T12 e vínculos de T13 verificados por HTTP; edição/concorrência pendentes em T20 |
@@ -256,6 +276,6 @@ O cadastro e a seleção dos locais de atendimento continuam no fluxo existente:
 
 ## Limites
 
-Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T18 cobrem estrutura, autenticação, autorização inicial, entrada, clientes/locais, criação/busca/detalhe de demanda e APIs administrativas de equipe/senha; T21 implementa a interface de busca/detalhe de demanda e abertura lateral de criação; T24 adiciona endereço principal opcional do cliente. Interface de equipe, edição de demandas e critérios restantes seguem pendentes. Login foi inspecionado no navegador; listagem e formulários foram verificados por testes de componentes/build, sem sessão autenticada no navegador.
+Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T19 cobrem estrutura, autenticação, autorização inicial, entrada, clientes/locais, criação/busca/detalhe de demanda e interfaces administrativas de equipe/senha; T21 implementa a interface de busca/detalhe de demanda e abertura lateral de criação; T24 adiciona endereço principal opcional do cliente. Edição de demandas e critérios restantes seguem pendentes. Login foi inspecionado no navegador; T19 e outras telas foram verificadas por testes de componentes/build, sem sessão autenticada no navegador.
 
 Revisão documental e implementação T01–T18/T24 realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.

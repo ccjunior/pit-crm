@@ -18,6 +18,12 @@
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M5 12h14M5 19h14" /><circle cx="2.5" cy="5" r=".5" /><circle cx="2.5" cy="12" r=".5" /><circle cx="2.5" cy="19" r=".5" /></svg>
         Demandas
       </a>
+      @if (auth.session()?.roles?.includes('Administrador')) {
+        <a class="nav-link" routerLink="/equipe" routerLinkActive="active">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20v-1.5a5.5 5.5 0 0 1 11 0V20zM17 8h5m-2.5-2.5v5" /></svg>
+          Equipe
+        </a>
+      }
     </nav>
     <div class="sidebar-note">
       <span class="sidebar-note-mark" aria-hidden="true">✦</span>
@@ -48,6 +54,7 @@
       <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Visão geral</a>
       <a routerLink="/clientes" routerLinkActive="active">Clientes</a>
       <a routerLink="/demandas" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Demandas</a>
+      @if (auth.session()?.roles?.includes('Administrador')) { <a routerLink="/equipe" routerLinkActive="active">Equipe</a> }
     </nav>
     @if (signOutError()) {
       <p class="shell-error" role="alert">{{ signOutError() }}</p>

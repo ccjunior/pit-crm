@@ -72,11 +72,8 @@ public sealed class AuthenticationFlowTests
                 await dbContext.SaveChangesAsync();
 
                 var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
-                foreach (var roleName in new[] { RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator })
-                {
-                    var role = new IdentityRole<Guid>(roleName) { Id = Guid.NewGuid() };
-                    Assert.True((await roleManager.CreateAsync(role)).Succeeded);
-                }
+                foreach (var roleName in RoleNames.All)
+                    Assert.True(await roleManager.RoleExistsAsync(roleName));
 
                 var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
                 var user = new ApplicationUser

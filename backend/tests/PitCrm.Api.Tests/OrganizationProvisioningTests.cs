@@ -55,7 +55,19 @@ public sealed class OrganizationProvisioningTests
             using (var scope = provider.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<PitCrmDbContext>();
+                await dbContext.Database.MigrateAsync("20261117130000_AddOrganizationDemandNumbers");
+                var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+                var existingAdministratorRole = new IdentityRole<Guid>(RoleNames.Administrator)
+                {
+                    Id = Guid.NewGuid()
+                };
+                Assert.True((await roleManager.CreateAsync(existingAdministratorRole)).Succeeded);
+
                 await dbContext.Database.MigrateAsync();
+                Assert.Equal(existingAdministratorRole.Id,
+                    (await roleManager.FindByNameAsync(RoleNames.Administrator))?.Id);
+                foreach (var roleName in RoleNames.All)
+                    Assert.True(await roleManager.RoleExistsAsync(roleName));
             }
 
             var organizationId = Guid.NewGuid();
@@ -112,7 +124,7 @@ public sealed class OrganizationProvisioningTests
                 Assert.Equal("PIT-CRM Teste", (await dbContext.Organizations.SingleAsync()).Name);
                 Assert.Equal(1, await dbContext.Organizations.CountAsync());
                 Assert.Equal(1, await dbContext.Users.CountAsync());
-                Assert.Equal(1, await dbContext.Roles.CountAsync());
+                Assert.Equal(RoleNames.All.Count, await dbContext.Roles.CountAsync());
             }
         }
         finally

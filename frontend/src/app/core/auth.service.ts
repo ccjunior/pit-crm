@@ -8,6 +8,7 @@ export interface AuthSession {
   email: string;
   organization: { id: string; name: string };
   roles: string[];
+  mustChangePassword: boolean;
 }
 
 interface CsrfResponse { requestToken: string; }
@@ -63,6 +64,15 @@ export class AuthService {
       catchError((error: HttpErrorResponse) => {
         this.clearSession();
         return throwError(() => error);
+      }),
+    );
+  }
+
+  changeOwnPassword(currentPassword: string, newPassword: string): Observable<void> {
+    return this.http.post<void>('/api/auth/change-password', { currentPassword, newPassword }).pipe(
+      tap(() => {
+        const session = this.sessionState();
+        if (session) this.sessionState.set({ ...session, mustChangePassword: false });
       }),
     );
   }

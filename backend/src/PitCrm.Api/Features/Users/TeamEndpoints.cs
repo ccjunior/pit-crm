@@ -52,10 +52,11 @@ public static class TeamEndpoints
     {
         var errors = Validate(request);
         if (errors.Count > 0) return Results.ValidationProblem(errors);
-        var role = new[] { RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator }
+        var role = RoleNames.All
             .Single(value => string.Equals(value, request.Role!.Trim(), StringComparison.OrdinalIgnoreCase));
         if (!await roleManager.RoleExistsAsync(role))
-            return Results.Problem("O perfil solicitado não está configurado.", statusCode: StatusCodes.Status500InternalServerError);
+            return Results.Problem("O catálogo de perfis do sistema está incompleto. Aplique as migrações pendentes.",
+                statusCode: StatusCodes.Status500InternalServerError);
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         var email = request.Email!.Trim();
@@ -96,7 +97,7 @@ public static class TeamEndpoints
         else if (request.DisplayName.Trim().Length > 200) errors[nameof(request.DisplayName)] = ["O nome deve ter até 200 caracteres."];
         if (string.IsNullOrWhiteSpace(request.Email) || !System.Net.Mail.MailAddress.TryCreate(request.Email.Trim(), out _))
             errors[nameof(request.Email)] = ["Informe um endereço de e-mail válido."];
-        if (request.Role is null || !new[] { RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator }
+        if (request.Role is null || !RoleNames.All
                 .Contains(request.Role.Trim(), StringComparer.OrdinalIgnoreCase))
             errors[nameof(request.Role)] = ["Selecione Administrador, Gestor ou Operador."];
         if (string.IsNullOrEmpty(request.TemporaryPassword)) errors[nameof(request.TemporaryPassword)] = ["Defina uma senha temporária para entregar fora do sistema."];
@@ -106,13 +107,14 @@ public static class TeamEndpoints
     private static async Task<IResult> UpdateAsync(Guid userId, UpdateTeamMemberRequest request,
         ICurrentOrganizationContext context,
         UserManager<ApplicationUser> userManager,
+        RoleManager<IdentityRole<Guid>> roleManager,
         PitCrmDbContext dbContext,
         CancellationToken cancellationToken)
     {
         var errors = Validate(request);
         if (errors.Count > 0) return Results.ValidationProblem(errors);
 
-        var role = new[] { RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator }
+        var role = RoleNames.All
             .Single(value => string.Equals(value, request.Role!.Trim(), StringComparison.OrdinalIgnoreCase));
 
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
@@ -124,6 +126,10 @@ public static class TeamEndpoints
         var user = await dbContext.Users.SingleOrDefaultAsync(
             value => value.Id == userId && value.OrganizationId == context.OrganizationId, cancellationToken);
         if (user is null) return Results.NotFound();
+
+        if (!await roleManager.RoleExistsAsync(role))
+            return Results.Problem("O catálogo de perfis do sistema está incompleto. Aplique as migrações pendentes.",
+                statusCode: StatusCodes.Status500InternalServerError);
 
         var currentRoles = await userManager.GetRolesAsync(user);
         var remainsActiveAdministrator = request.IsActive == true && role == RoleNames.Administrator;
@@ -177,7 +183,7 @@ public static class TeamEndpoints
         else if (request.DisplayName.Trim().Length > 200) errors[nameof(request.DisplayName)] = ["O nome deve ter até 200 caracteres."];
         if (string.IsNullOrWhiteSpace(request.Email) || !System.Net.Mail.MailAddress.TryCreate(request.Email.Trim(), out _))
             errors[nameof(request.Email)] = ["Informe um endereço de e-mail válido."];
-        if (request.Role is null || !new[] { RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator }
+        if (request.Role is null || !RoleNames.All
                 .Contains(request.Role.Trim(), StringComparer.OrdinalIgnoreCase))
             errors[nameof(request.Role)] = ["Selecione Administrador, Gestor ou Operador."];
         if (request.IsActive is null) errors[nameof(request.IsActive)] = ["Informe se a conta está ativa."];

@@ -16,7 +16,7 @@ describe('CustomersPage', () => {
   beforeEach(async () => {
     session = signal<AuthSession | null>({
       id: 'user-a', displayName: 'Gestora', email: 'gestora@example.invalid',
-      organization: { id: 'org-a', name: 'Empresa A' }, roles: ['Gestor'],
+      organization: { id: 'org-a', name: 'Empresa A' }, roles: ['Gestor'], mustChangePassword: false,
     });
     await TestBed.configureTestingModule({
       imports: [CustomersPage],
@@ -69,7 +69,7 @@ describe('CustomersPage', () => {
 
   it('hides customer write controls from an operator', () => {
     session.set({ id: 'user-o', displayName: 'Operador', email: 'op@example.invalid',
-      organization: { id: 'org-a', name: 'Empresa A' }, roles: ['Operador'] });
+      organization: { id: 'org-a', name: 'Empresa A' }, roles: ['Operador'], mustChangePassword: false });
     const customer = { id: 'customer-a', name: 'Cliente Alfa', document: null, instructions: null, address: null, locality: null, city: null, state: null,
       createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z' };
     http.expectOne('/api/customers?page=1&pageSize=20').flush({ items: [customer], page: 1, pageSize: 20, totalCount: 1 });

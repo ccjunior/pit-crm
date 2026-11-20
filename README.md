@@ -19,7 +19,7 @@ Comece por [AGENTS.md](AGENTS.md) e pelo [estado atual](.specs/STATE.md). As oit
 
 ## Primeira entrega em especificação
 
-A [primeira entrega operacional](.specs/features/primeira-entrega-operacional/spec.md) reúne acesso à organização, equipe, clientes, locais e demandas. O [desenho técnico](.specs/features/primeira-entrega-operacional/design.md), o [plano de tarefas](.specs/features/primeira-entrega-operacional/tasks.md) e as [decisões confirmadas](.specs/features/primeira-entrega-operacional/context.md) estão disponíveis. As APIs de clientes e locais incluem cadastro, consulta e edição; a API de demandas inclui criação transacional. As telas de clientes/locais estão implementadas; o formulário e a consulta de demandas e a interface de equipe seguem no plano. A API de equipe permite listar, criar e editar contas, com proteção contra remoção do último Administrador ativo.
+A [primeira entrega operacional](.specs/features/primeira-entrega-operacional/spec.md) reúne acesso à organização, equipe, clientes, locais e demandas. O [desenho técnico](.specs/features/primeira-entrega-operacional/design.md), o [plano de tarefas](.specs/features/primeira-entrega-operacional/tasks.md) e as [decisões confirmadas](.specs/features/primeira-entrega-operacional/context.md) estão disponíveis. As APIs e telas de clientes/locais, abertura, listagem e detalhe de demandas e administração de equipe estão implementadas. A interface de equipe consome as APIs existentes; a troca de senha inicial é obrigatória antes do acesso à operação. A API de equipe permite listar, criar e editar contas, com proteção contra remoção do último Administrador ativo.
 
 ## Desenvolvimento local
 
@@ -67,7 +67,7 @@ npm start
 
 O Angular fica em `http://localhost:4200` e encaminha `/api` para a API local em `http://localhost:5006`. O PostgreSQL do Compose fica disponível em `localhost:5433`; a porta evita conflito com uma instalação local padrão em `5432`. Para a imagem PostgreSQL 18, o volume nomeado `pitcrm_postgres_data` é montado em `/var/lib/postgresql`, caminho que mantém o diretório de dados versionado da imagem. `docker compose down` interrompe o PostgreSQL sem remover esse volume.
 
-As ferramentas de migração ficam no manifesto local `backend/dotnet-tools.json`. O projeto inclui o `DbContext` e as migrações de organização, conta, clientes, locais, demandas e troca obrigatória de senha inicial. A configuração local acima aplica as migrações já existentes. Para **criar uma migração depois de alterar o modelo**, use o comando abaixo no mesmo terminal:
+As ferramentas de migração ficam no manifesto local `backend/dotnet-tools.json`. O projeto inclui o `DbContext` e as migrações de organização, conta, papéis-base (Administrador, Gestor e Operador), clientes, locais, demandas e troca obrigatória de senha inicial. A configuração local acima aplica as migrações já existentes. Para **criar uma migração depois de alterar o modelo**, use o comando abaixo no mesmo terminal:
 
 ```powershell
 dotnet tool restore
@@ -103,4 +103,4 @@ Depois de provisionar, inicie a API e o Angular conforme as instruções acima e
 
 ## Estado atual
 
-O escopo da primeira entrega foi aprovado em 05/11/2026. T01–T17 e T24 foram implementadas localmente; a interface de equipe e senha inicial está em T19. Consulte [.specs/STATE.md](.specs/STATE.md) para andamento por tarefa. As regras do levantamento vêm das respostas do responsável pela operação; decisões ainda abertas continuam identificadas como propostas ou perguntas.
+O escopo da primeira entrega foi aprovado em 05/11/2026. T01–T18 foram concluídas e verificadas; T19 está implementada com testes focados/build aprovados; T21 está implementada e verificada por testes focados/build; T24 foi implementada e passou no build. T20, T22 e T23 permanecem pendentes. A inspeção autenticada e a conferência de teclado/viewport das telas da T19 aguardam o provisionamento do Administrador local e a demonstração integrada T23. Consulte [.specs/STATE.md](.specs/STATE.md) para andamento e limitações por tarefa. As regras do levantamento vêm das respostas do responsável pela operação; decisões ainda abertas continuam identificadas como propostas ou perguntas.

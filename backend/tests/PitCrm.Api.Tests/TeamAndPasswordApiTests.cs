@@ -50,24 +50,21 @@ public sealed class TeamAndPasswordApiTests
                 dbContext.Organizations.AddRange(new Organization(organizationA, "Empresa A"), new Organization(organizationB, "Empresa B"));
                 await dbContext.SaveChangesAsync();
                 var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
-                foreach (var role in new[] { RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator })
-                    Assert.True((await roleManager.CreateAsync(new IdentityRole<Guid>(role) { Id = Guid.NewGuid() })).Succeeded);
+                foreach (var role in RoleNames.All)
+                    Assert.True(await roleManager.RoleExistsAsync(role));
                 var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
                 await AddUserAsync(userManager, users, "A", organizationA, RoleNames.Administrator, password);
                 await AddUserAsync(userManager, users, "A", organizationA, RoleNames.Manager, password);
-                await AddUserAsync(userManager, users, "A", organizationA, RoleNames.Operator, password);
                 await AddUserAsync(userManager, users, "B", organizationB, RoleNames.Administrator, password);
             }
 
             using var adminClient = await CreateAuthenticatedClientAsync(factory, users["A-" + RoleNames.Administrator], password);
             using var managerClient = await CreateAuthenticatedClientAsync(factory, users["A-" + RoleNames.Manager], password);
-            using var operatorClient = await CreateAuthenticatedClientAsync(factory, users["A-" + RoleNames.Operator], password);
             using var foreignClient = await CreateAuthenticatedClientAsync(factory, users["B-" + RoleNames.Administrator], password);
             using var anonymousClient = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
 
             Assert.Equal(HttpStatusCode.Unauthorized, (await anonymousClient.GetAsync("/api/users")).StatusCode);
             Assert.Equal(HttpStatusCode.Forbidden, (await managerClient.GetAsync("/api/users")).StatusCode);
-            Assert.Equal(HttpStatusCode.Forbidden, (await operatorClient.GetAsync("/api/users")).StatusCode);
 
             var invalidRole = await PostJsonAsync(adminClient, "/api/users", new
             {
@@ -93,7 +90,7 @@ public sealed class TeamAndPasswordApiTests
 
             var list = await adminClient.GetFromJsonAsync<TeamPageResponse>("/api/users?page=1&pageSize=20");
             Assert.NotNull(list);
-            Assert.Equal(4, list.TotalCount);
+            Assert.Equal(3, list.TotalCount);
             var listedMember = Assert.Single(list.Items, item => item.Id == createdId);
             Assert.True(listedMember.MustChangePassword);
             var foreignList = await foreignClient.GetFromJsonAsync<TeamPageResponse>("/api/users");
@@ -102,6 +99,7 @@ public sealed class TeamAndPasswordApiTests
             Assert.DoesNotContain(foreignList.Items, item => item.Id == createdId);
 
             using var newMemberClient = await CreateAuthenticatedClientAsync(factory, email, temporaryPassword);
+            Assert.Equal(HttpStatusCode.Forbidden, (await newMemberClient.GetAsync("/api/users")).StatusCode);
             using var protectedResponse = await newMemberClient.GetAsync("/api/customers");
             Assert.Equal(HttpStatusCode.Forbidden, protectedResponse.StatusCode);
             var me = await newMemberClient.GetFromJsonAsync<SessionResponse>("/api/auth/me");
@@ -124,6 +122,13 @@ public sealed class TeamAndPasswordApiTests
             Assert.NotNull(me);
             Assert.False(me.MustChangePassword);
             Assert.Equal(HttpStatusCode.OK, (await newMemberClient.GetAsync("/api/customers")).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await newMemberClient.GetAsync("/api/users")).StatusCode);
+
+            using (var scope = factory.Services.CreateScope())
+            {
+                var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+                Assert.True(await roleManager.RoleExistsAsync(RoleNames.Operator));
+            }
 
             using var oldPasswordClient = factory.CreateClient(new WebApplicationFactoryClientOptions { AllowAutoRedirect = false });
             var oldPasswordLogin = await LoginAsync(oldPasswordClient, email, temporaryPassword);

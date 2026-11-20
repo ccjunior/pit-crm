@@ -1,0 +1,60 @@
+<section class="team-page" aria-labelledby="team-title">
+  <header class="page-heading">
+    <div>
+      <p class="eyebrow">Administração</p>
+      <h1 id="team-title">Equipe</h1>
+      <p class="intro">Gerencie as contas e os perfis de acesso da sua organização.</p>
+    </div>
+    @if (!editorOpen()) {
+      <button class="primary-button" type="button" (click)="startCreate()"><span aria-hidden="true">＋</span> Nova conta</button>
+    }
+  </header>
+
+  @if (notice()) { <p class="notice" role="status">{{ notice() }}</p> }
+  @if (error() && members().length > 0) { <p class="error-banner" role="alert">{{ error() }}</p> }
+
+  @if (temporaryCredential(); as credential) {
+    <section class="credential-card" aria-labelledby="credential-title">
+      <div class="credential-heading"><span aria-hidden="true">✓</span><div><h2 id="credential-title">Senha temporária para {{ credential.displayName }}</h2><p>Entregue esta senha fora do PIT Obras. No primeiro acesso, será solicitada uma nova senha.</p></div></div>
+      <div class="credential-details"><span><b>Conta</b>{{ credential.email }}</span><span class="credential-password"><b>Senha temporária</b><code>{{ credential.password }}</code></span></div>
+      <button class="secondary-button" type="button" (click)="copyTemporaryPassword()">{{ copied() ? 'Senha copiada' : 'Copiar senha' }}</button>
+    </section>
+  }
+
+  @if (editorOpen()) {
+    <section class="editor-card" aria-labelledby="editor-title">
+      <header class="section-heading"><div><p class="eyebrow">{{ editingMember() ? 'Atualização de acesso' : 'Novo acesso' }}</p><h2 id="editor-title">{{ editingMember() ? 'Editar conta' : 'Cadastrar pessoa' }}</h2></div><button type="button" class="close-button" (click)="closeEditor()" [disabled]="saving()" aria-label="Fechar formulário">×</button></header>
+      <form [formGroup]="form" (ngSubmit)="save()" novalidate>
+        <div class="form-grid">
+          <label class="field" for="team-name"><span>Nome completo</span><input id="team-name" formControlName="displayName" autocomplete="name" maxlength="200" required [attr.aria-invalid]="form.controls.displayName.touched && form.controls.displayName.invalid" aria-describedby="team-name-error"><small id="team-name-error" class="field-error">@if (form.controls.displayName.touched && form.controls.displayName.hasError('required')) { Informe o nome da pessoa. } @else if (form.controls.displayName.touched && form.controls.displayName.hasError('maxlength')) { O nome deve ter até 200 caracteres. }</small></label>
+          <label class="field" for="team-email"><span>E-mail</span><input id="team-email" type="email" formControlName="email" autocomplete="email" inputmode="email" required [attr.aria-invalid]="form.controls.email.touched && form.controls.email.invalid" aria-describedby="team-email-error"><small id="team-email-error" class="field-error">@if (form.controls.email.touched && form.controls.email.hasError('required')) { Informe o e-mail. } @else if (form.controls.email.touched && form.controls.email.hasError('email')) { Informe um e-mail válido. }</small></label>
+          <label class="field" for="team-role"><span>Perfil de acesso</span><select id="team-role" formControlName="role" required>@for (role of roles; track role) { <option [value]="role">{{ role }}</option> }</select></label>
+          @if (editingMember()) {
+            <label class="active-toggle" for="team-active"><input id="team-active" type="checkbox" formControlName="isActive"><span><b>Conta ativa</b><small>Contas inativas não podem acessar o sistema.</small></span></label>
+          } @else {
+            <label class="field field-wide" for="team-temporary-password"><span>Senha temporária</span><input id="team-temporary-password" type="password" formControlName="temporaryPassword" autocomplete="new-password" minlength="6" required [attr.aria-invalid]="form.controls.temporaryPassword.touched && form.controls.temporaryPassword.invalid" aria-describedby="team-password-hint team-password-error"><small id="team-password-hint">Defina uma senha forte. Ela será pedida apenas no primeiro acesso.</small><small id="team-password-error" class="field-error">@if (form.controls.temporaryPassword.touched && form.controls.temporaryPassword.hasError('required')) { Informe a senha temporária. } @else if (form.controls.temporaryPassword.touched && form.controls.temporaryPassword.hasError('minlength')) { Use pelo menos 6 caracteres. }</small></label>
+          }
+        </div>
+        <div class="form-actions"><button class="secondary-button" type="button" (click)="closeEditor()" [disabled]="saving()">Cancelar</button><button class="primary-button" type="submit" [disabled]="saving()">{{ saving() ? 'Salvando…' : editingMember() ? 'Salvar alterações' : 'Cadastrar conta' }}</button></div>
+      </form>
+    </section>
+  }
+
+  <section class="team-directory" aria-labelledby="team-directory-title">
+    <header class="directory-heading"><div><p class="eyebrow">Acessos da organização</p><h2 id="team-directory-title">Contas cadastradas <span>{{ totalCount() }}</span></h2></div></header>
+    @if (loading()) {
+      <div class="message" role="status">Carregando equipe…</div>
+    } @else if (error() && members().length === 0) {
+      <div class="empty-state error-state" role="alert"><span class="empty-icon" aria-hidden="true">!</span><h3>Não foi possível carregar a equipe</h3><p>{{ error() }}</p><button type="button" class="text-button" (click)="load()">Tentar novamente</button></div>
+    } @else if (members().length === 0) {
+      <div class="empty-state" role="status"><span class="empty-icon" aria-hidden="true">♙</span><h3>Nenhuma conta cadastrada</h3><p>Cadastre a primeira pessoa que fará parte da equipe.</p><button class="primary-button" type="button" (click)="startCreate()">＋ Nova conta</button></div>
+    } @else {
+      <div class="table-scroll"><table><thead><tr><th scope="col">Pessoa</th><th scope="col">Perfil</th><th scope="col">Acesso</th><th scope="col">Primeiro acesso</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>
+        @for (member of members(); track member.id) {
+          <tr><td><span class="member-name">{{ member.displayName }}</span><span class="member-email">{{ member.email }}</span></td><td>{{ member.role }}</td><td><span class="status-pill" [class.inactive]="!member.isActive">{{ member.isActive ? 'Ativa' : 'Inativa' }}</span></td><td>{{ member.mustChangePassword ? 'Troca de senha pendente' : 'Concluído' }}</td><td><button class="edit-button" type="button" (click)="startEdit(member)" [attr.aria-label]="'Editar conta de ' + member.displayName">Editar</button></td></tr>
+        }
+      </tbody></table></div>
+      <footer class="pagination"><span>Mostrando {{ rangeStart() }}–{{ rangeEnd() }} de {{ totalCount() }}</span><div><button type="button" (click)="previousPage()" [disabled]="page() === 1 || loading()" aria-label="Página anterior">‹</button><span>Página {{ page() }}</span><button type="button" (click)="nextPage()" [disabled]="page() * pageSize >= totalCount() || loading()" aria-label="Próxima página">›</button></div></footer>
+    }
+  </section>
+</section>

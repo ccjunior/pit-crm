@@ -41,10 +41,12 @@ describe('AuthService', () => {
       email: 'person@example.invalid',
       organization: { id: 'organization-id', name: 'Empresa de Teste' },
       roles: ['Operador'],
+      mustChangePassword: true,
     });
 
     expect(result).toEqual(service.session());
     expect(service.session()?.organization.name).toBe('Empresa de Teste');
+    expect(service.session()?.mustChangePassword).toBe(true);
     expect(service.initialized()).toBe(true);
   });
 
@@ -67,5 +69,23 @@ describe('AuthService', () => {
     expect(logoutRequest.request.headers.get('X-CSRF-TOKEN')).toBe('csrf-token');
     logoutRequest.flush(null);
     expect(service.session()).toBeNull();
+  });
+
+  it('clears the required-password-change flag only after the server accepts the new password', () => {
+    service.login('person@example.invalid', 'temporary-value').subscribe();
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'login-csrf' });
+    http.expectOne('/api/auth/login').flush({ authenticated: true });
+    http.expectOne('/api/auth/me').flush({
+      id: 'user-id', displayName: 'Operadora de Teste', email: 'person@example.invalid',
+      organization: { id: 'organization-id', name: 'Empresa de Teste' }, roles: ['Operador'], mustChangePassword: true,
+    });
+
+    service.changeOwnPassword('temporary-value', 'changed-value').subscribe();
+    expect(service.session()?.mustChangePassword).toBe(true);
+    http.expectOne('/api/auth/csrf').flush({ requestToken: 'change-csrf' });
+    const request = http.expectOne('/api/auth/change-password');
+    expect(request.request.headers.get('X-CSRF-TOKEN')).toBe('change-csrf');
+    request.flush(null);
+    expect(service.session()?.mustChangePassword).toBe(false);
   });
 });
