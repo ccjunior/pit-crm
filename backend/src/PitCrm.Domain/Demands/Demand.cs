@@ -24,6 +24,7 @@ public sealed class Demand
         TicketReference = Optional(ticketReference, nameof(ticketReference), 100);
         PurchaseOrderReference = Optional(purchaseOrderReference, nameof(purchaseOrderReference), 100);
         Status = "Recebida";
+        Version = 1;
         CreatedAtUtc = NormalizeTimestamp(now);
     }
 
@@ -35,6 +36,7 @@ public sealed class Demand
     public Guid CustomerId { get; private set; }
     public Guid LocationId { get; private set; }
     public int ReferenceNumber { get; private set; }
+    public int Version { get; private set; }
     public string Description { get; private set; } = string.Empty;
     public string Origin { get; private set; } = string.Empty;
     public string? Priority { get; private set; }
@@ -50,6 +52,26 @@ public sealed class Demand
         if (referenceNumber < 1 || ReferenceNumber != 0)
             throw new InvalidOperationException("A demand reference number must be assigned once and be positive.");
         ReferenceNumber = referenceNumber;
+    }
+
+    public void UpdateDetails(Guid customerId, Guid locationId, Guid? assignedToUserId, string description,
+        string origin, string? priority, string? ticketReference, string? purchaseOrderReference)
+    {
+        if (customerId == Guid.Empty || locationId == Guid.Empty)
+            throw new ArgumentException("Demand customer and location cannot be empty.");
+
+        Description = Required(description, nameof(description), 4000);
+        if (!Origins.Contains(origin)) throw new ArgumentOutOfRangeException(nameof(origin));
+        if (priority is not null && !Priorities.Contains(priority)) throw new ArgumentOutOfRangeException(nameof(priority));
+
+        CustomerId = customerId;
+        LocationId = locationId;
+        AssignedToUserId = assignedToUserId;
+        Origin = origin;
+        Priority = priority;
+        TicketReference = Optional(ticketReference, nameof(ticketReference), 100);
+        PurchaseOrderReference = Optional(purchaseOrderReference, nameof(purchaseOrderReference), 100);
+        Version = checked(Version + 1);
     }
 
     private static string Required(string value, string parameterName, int maxLength)

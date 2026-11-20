@@ -7,7 +7,7 @@ public sealed record DemandListItemDto(Guid Id, int ReferenceNumber, Guid Custom
     string? TicketReference, string? PurchaseOrderReference, Guid? AssignedToUserId,
     string? AssignedToDisplayName, DateTimeOffset CreatedAtUtc);
 
-public sealed record DemandDetailsDto(Guid Id, int ReferenceNumber, Guid CustomerId, string CustomerName, Guid LocationId,
+public sealed record DemandDetailsDto(Guid Id, int ReferenceNumber, int Version, Guid CustomerId, string CustomerName, Guid LocationId,
     string LocationName, string Description, string Origin, string? Priority, string Status,
     string? TicketReference, string? PurchaseOrderReference, Guid? AssignedToUserId,
     string? AssignedToDisplayName, Guid CreatedByUserId, string CreatedByDisplayName,

@@ -15,6 +15,9 @@ public static class DemandEndpoints
         app.MapPost("/api/demands", CreateAsync)
             .AddEndpointFilter<Security.AntiforgeryEndpointFilter>()
             .RequireAuthorization(AuthorizationPolicies.OperateDemands);
+        app.MapPut("/api/demands/{id:guid}", UpdateAsync)
+            .AddEndpointFilter<Security.AntiforgeryEndpointFilter>()
+            .RequireAuthorization(AuthorizationPolicies.OperateDemands);
     }
 
     private static async Task<IResult> SearchAsync(string? q, Guid? customerId, Guid? locationId,
@@ -84,31 +87,86 @@ public static class DemandEndpoints
             return Results.ValidationProblem(new Dictionary<string, string[]> { [field] = [message] });
         }
 
-        return Results.Created($"/api/demands/{demand.Id}", new DemandCreatedDto(demand.Id, demand.ReferenceNumber,
+        return Results.Created($"/api/demands/{demand.Id}", new DemandCreatedDto(demand.Id, demand.ReferenceNumber, demand.Version,
             demand.CustomerId, demand.LocationId, demand.Description, demand.Origin, demand.Priority, demand.Status,
             demand.TicketReference, demand.PurchaseOrderReference, demand.AssignedToUserId, demand.CreatedAtUtc));
     }
 
-    private static Dictionary<string, string[]> Validate(CreateDemandRequest request)
+    private static async Task<IResult> UpdateAsync(Guid id, UpdateDemandRequest request,
+        ICurrentOrganizationContext context, IDemandStore store, CancellationToken cancellationToken)
+    {
+        var errors = Validate(request);
+        if (request.Version < 1) errors[nameof(request.Version)] = ["A versão da demanda deve ser positiva."];
+        if (errors.Count > 0) return Results.ValidationProblem(errors);
+
+        var origin = Demand.Origins.Single(value => string.Equals(value, request.Origin!.Trim(), StringComparison.OrdinalIgnoreCase));
+        var priority = request.Priority is null ? null
+            : Demand.Priorities.Single(value => string.Equals(value, request.Priority.Trim(), StringComparison.OrdinalIgnoreCase));
+        var update = new DemandUpdateData(request.Version, request.CustomerId, request.LocationId,
+            request.Description!, origin, priority, request.TicketReference, request.PurchaseOrderReference,
+            request.AssignedToUserId);
+        var result = await store.UpdateAsync(context.OrganizationId, id, context.UserId, update,
+            DateTimeOffset.UtcNow, cancellationToken);
+        if (result.Failure == DemandUpdateFailure.DemandNotFound) return Results.NotFound();
+        if (result.Failure == DemandUpdateFailure.VersionConflict)
+            return Results.Conflict(new { error = "A demanda foi alterada por outra pessoa. Recarregue os dados atuais antes de salvar." });
+        if (result.Failure != DemandUpdateFailure.None)
+        {
+            var field = result.Failure switch
+            {
+                DemandUpdateFailure.CustomerNotFound => nameof(request.CustomerId),
+                DemandUpdateFailure.LocationNotFound => nameof(request.LocationId),
+                _ => nameof(request.AssignedToUserId),
+            };
+            var message = result.Failure switch
+            {
+                DemandUpdateFailure.CustomerNotFound => "O cliente não foi encontrado na organização atual.",
+                DemandUpdateFailure.LocationNotFound => "O local não pertence ao cliente informado ou não existe.",
+                _ => "O responsável deve ser um usuário ativo da organização atual.",
+            };
+            return Results.ValidationProblem(new Dictionary<string, string[]> { [field] = [message] });
+        }
+
+        var demand = result.Demand!;
+        return Results.Ok(new DemandUpdatedDto(demand.Id, demand.ReferenceNumber, demand.Version,
+            demand.CustomerId, demand.LocationId, demand.Description, demand.Origin, demand.Priority,
+            demand.Status, demand.TicketReference, demand.PurchaseOrderReference, demand.AssignedToUserId));
+    }
+
+    private static Dictionary<string, string[]> Validate(CreateDemandRequest request) =>
+        ValidateDemandData(request.CustomerId, request.LocationId, request.Description, request.Origin,
+            request.Priority, request.TicketReference, request.PurchaseOrderReference);
+
+    private static Dictionary<string, string[]> Validate(UpdateDemandRequest request) =>
+        ValidateDemandData(request.CustomerId, request.LocationId, request.Description, request.Origin,
+            request.Priority, request.TicketReference, request.PurchaseOrderReference);
+
+    private static Dictionary<string, string[]> ValidateDemandData(Guid customerId, Guid locationId,
+        string? description, string? origin, string? priority, string? ticketReference, string? purchaseOrderReference)
     {
         var errors = new Dictionary<string, string[]>();
-        if (request.CustomerId == Guid.Empty) errors[nameof(request.CustomerId)] = ["Selecione o cliente."];
-        if (request.LocationId == Guid.Empty) errors[nameof(request.LocationId)] = ["Selecione o local."];
-        if (string.IsNullOrWhiteSpace(request.Description)) errors[nameof(request.Description)] = ["Informe a descrição da demanda."];
-        else if (request.Description.Trim().Length > 4000) errors[nameof(request.Description)] = ["A descrição deve ter até 4.000 caracteres."];
-        if (request.Origin is null || !Demand.Origins.Contains(request.Origin.Trim(), StringComparer.OrdinalIgnoreCase))
-            errors[nameof(request.Origin)] = ["Selecione uma origem válida: WhatsApp, Ligação, E-mail ou Outra."];
-        if (request.Priority is not null && !Demand.Priorities.Contains(request.Priority.Trim(), StringComparer.OrdinalIgnoreCase))
-            errors[nameof(request.Priority)] = ["A prioridade deve ser Baixa, Média ou Alta."];
-        if (request.TicketReference?.Trim().Length > 100) errors[nameof(request.TicketReference)] = ["O chamado deve ter até 100 caracteres."];
-        if (request.PurchaseOrderReference?.Trim().Length > 100) errors[nameof(request.PurchaseOrderReference)] = ["A ordem de compra deve ter até 100 caracteres."];
+        if (customerId == Guid.Empty) errors[nameof(CreateDemandRequest.CustomerId)] = ["Selecione o cliente."];
+        if (locationId == Guid.Empty) errors[nameof(CreateDemandRequest.LocationId)] = ["Selecione o local."];
+        if (string.IsNullOrWhiteSpace(description)) errors[nameof(CreateDemandRequest.Description)] = ["Informe a descrição da demanda."];
+        else if (description.Trim().Length > 4000) errors[nameof(CreateDemandRequest.Description)] = ["A descrição deve ter até 4.000 caracteres."];
+        if (origin is null || !Demand.Origins.Contains(origin.Trim(), StringComparer.OrdinalIgnoreCase))
+            errors[nameof(CreateDemandRequest.Origin)] = ["Selecione uma origem válida: WhatsApp, Ligação, E-mail ou Outra."];
+        if (priority is not null && !Demand.Priorities.Contains(priority.Trim(), StringComparer.OrdinalIgnoreCase))
+            errors[nameof(CreateDemandRequest.Priority)] = ["A prioridade deve ser Baixa, Média ou Alta."];
+        if (ticketReference?.Trim().Length > 100) errors[nameof(CreateDemandRequest.TicketReference)] = ["O chamado deve ter até 100 caracteres."];
+        if (purchaseOrderReference?.Trim().Length > 100) errors[nameof(CreateDemandRequest.PurchaseOrderReference)] = ["A ordem de compra deve ter até 100 caracteres."];
         return errors;
     }
 
     public sealed record CreateDemandRequest(Guid CustomerId, Guid LocationId, string? Description, string? Origin,
         Guid? AssignedToUserId, string? TicketReference, string? PurchaseOrderReference, string? Priority);
-    public sealed record DemandCreatedDto(Guid Id, int ReferenceNumber, Guid CustomerId, Guid LocationId, string Description, string Origin,
+    public sealed record UpdateDemandRequest(int Version, Guid CustomerId, Guid LocationId, string? Description, string? Origin,
+        Guid? AssignedToUserId, string? TicketReference, string? PurchaseOrderReference, string? Priority);
+    public sealed record DemandCreatedDto(Guid Id, int ReferenceNumber, int Version, Guid CustomerId, Guid LocationId, string Description, string Origin,
         string? Priority, string Status, string? TicketReference, string? PurchaseOrderReference,
         Guid? AssignedToUserId, DateTimeOffset CreatedAtUtc);
+    public sealed record DemandUpdatedDto(Guid Id, int ReferenceNumber, int Version, Guid CustomerId, Guid LocationId,
+        string Description, string Origin, string? Priority, string Status, string? TicketReference,
+        string? PurchaseOrderReference, Guid? AssignedToUserId);
     public sealed record DemandPageResponse(IReadOnlyList<DemandListItemDto> Items, int Page, int PageSize, int TotalCount);
 }

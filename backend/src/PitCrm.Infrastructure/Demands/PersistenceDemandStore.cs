@@ -40,6 +40,43 @@ public sealed class PersistenceDemandStore(PitCrmDbContext dbContext) : IDemandS
         return new DemandCreateResult(demand, DemandCreateFailure.None);
     }
 
+    public async Task<DemandUpdateResult> UpdateAsync(Guid organizationId, Guid demandId, Guid updatedByUserId,
+        DemandUpdateData update, DateTimeOffset occurredAtUtc, CancellationToken cancellationToken)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var demand = await dbContext.Demands.SingleOrDefaultAsync(
+            item => item.OrganizationId == organizationId && item.Id == demandId, cancellationToken);
+        if (demand is null) return new DemandUpdateResult(null, DemandUpdateFailure.DemandNotFound);
+        if (demand.Version != update.Version) return new DemandUpdateResult(null, DemandUpdateFailure.VersionConflict);
+
+        if (!await dbContext.Customers.AnyAsync(customer => customer.OrganizationId == organizationId
+                && customer.Id == update.CustomerId, cancellationToken))
+            return new DemandUpdateResult(null, DemandUpdateFailure.CustomerNotFound);
+        if (!await dbContext.CustomerLocations.AnyAsync(location => location.OrganizationId == organizationId
+                && location.CustomerId == update.CustomerId && location.Id == update.LocationId, cancellationToken))
+            return new DemandUpdateResult(null, DemandUpdateFailure.LocationNotFound);
+        if (update.AssignedToUserId is { } assigneeId && !await dbContext.Users.AnyAsync(user =>
+                user.OrganizationId == organizationId && user.Id == assigneeId && user.IsActive, cancellationToken))
+            return new DemandUpdateResult(null, DemandUpdateFailure.AssigneeNotEligible);
+
+        demand.UpdateDetails(update.CustomerId, update.LocationId, update.AssignedToUserId,
+            update.Description, update.Origin, update.Priority, update.TicketReference, update.PurchaseOrderReference);
+        dbContext.DemandActivities.Add(new DemandActivity(Guid.NewGuid(), organizationId, demandId,
+            updatedByUserId, "DemandUpdated", "Dados básicos da demanda atualizados.", occurredAtUtc));
+
+        try
+        {
+            await dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return new DemandUpdateResult(null, DemandUpdateFailure.VersionConflict);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
+        return new DemandUpdateResult(demand, DemandUpdateFailure.None);
+    }
+
     public async Task<DemandSearchResult> SearchAsync(Guid organizationId, string? searchTerm, Guid? customerId,
         Guid? locationId, Guid? assignedToUserId, string? status, string? priority, string sortBy,
         int page, int pageSize, CancellationToken cancellationToken)
@@ -105,7 +142,7 @@ public sealed class PersistenceDemandStore(PitCrmDbContext dbContext) : IDemandS
             .Where(item => item.OrganizationId == organizationId && item.Id == demandId)
             .Select(item => new
             {
-                item.Id, item.ReferenceNumber, item.CustomerId, item.LocationId, item.Description, item.Origin, item.Priority,
+                item.Id, item.ReferenceNumber, item.Version, item.CustomerId, item.LocationId, item.Description, item.Origin, item.Priority,
                 item.Status, item.TicketReference, item.PurchaseOrderReference, item.AssignedToUserId,
                 item.CreatedByUserId, item.CreatedAtUtc
             })
@@ -141,7 +178,7 @@ public sealed class PersistenceDemandStore(PitCrmDbContext dbContext) : IDemandS
                 activity.EventType, activity.Description, activity.OccurredAtUtc))
             .ToListAsync(cancellationToken);
 
-        return new DemandDetailsDto(demand.Id, demand.ReferenceNumber, demand.CustomerId, customerName, demand.LocationId,
+        return new DemandDetailsDto(demand.Id, demand.ReferenceNumber, demand.Version, demand.CustomerId, customerName, demand.LocationId,
             locationName, demand.Description, demand.Origin, demand.Priority, demand.Status,
             demand.TicketReference, demand.PurchaseOrderReference, demand.AssignedToUserId,
             assignedToDisplayName, demand.CreatedByUserId, createdByDisplayName, demand.CreatedAtUtc, activities);

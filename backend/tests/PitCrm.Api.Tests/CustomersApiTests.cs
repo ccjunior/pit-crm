@@ -194,6 +194,7 @@ public sealed class CustomersApiTests
             Assert.NotNull(demand);
             Assert.NotEqual(Guid.Empty, demand.Id);
             Assert.Equal(1, demand.ReferenceNumber);
+            Assert.Equal(1, demand.Version);
             Assert.Equal(created.Id, demand.CustomerId);
             Assert.Equal(location.Id, demand.LocationId);
             Assert.Equal("WhatsApp", demand.Origin);
@@ -204,12 +205,16 @@ public sealed class CustomersApiTests
             Assert.Null(demand.PurchaseOrderReference);
 
             Guid operatorUserId;
+            Guid foreignAdminUserId;
             using (var scope = factory.Services.CreateScope())
             {
                 var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
                 var operatorUser = await userManager.FindByEmailAsync(users["A-" + RoleNames.Operator]);
                 Assert.NotNull(operatorUser);
                 operatorUserId = operatorUser.Id;
+                var foreignAdmin = await userManager.FindByEmailAsync(users["B-" + RoleNames.Administrator]);
+                Assert.NotNull(foreignAdmin);
+                foreignAdminUserId = foreignAdmin.Id;
             }
 
             var assignedDemandResponse = await PostJsonAsync(operatorClient, "/api/demands", new
@@ -289,6 +294,152 @@ public sealed class CustomersApiTests
             Assert.Null(unassignedDetail.AssignedToDisplayName);
             Assert.Equal("Operador", unassignedDetail.CreatedByDisplayName);
             Assert.Contains(unassignedDetail.Activities, activity => activity.EventType == "DemandCreated");
+
+            var secondCustomerResponse = await PostJsonAsync(adminClient, "/api/customers", new { name = "Cliente Delta" });
+            Assert.Equal(HttpStatusCode.Created, secondCustomerResponse.StatusCode);
+            var secondCustomer = await secondCustomerResponse.Content.ReadFromJsonAsync<CustomerResponse>();
+            Assert.NotNull(secondCustomer);
+            var secondCustomerLocationResponse = await PostJsonAsync(adminClient,
+                $"/api/customers/{secondCustomer.Id}/locations", new { name = "Unidade Delta", address = "Rua Delta, 1" });
+            Assert.Equal(HttpStatusCode.Created, secondCustomerLocationResponse.StatusCode);
+            var secondCustomerLocation = await secondCustomerLocationResponse.Content.ReadFromJsonAsync<LocationResponse>();
+            Assert.NotNull(secondCustomerLocation);
+
+            var firstUpdate = await PutJsonAsync(operatorClient, $"/api/demands/{demand.Id}", new
+            {
+                version = unassignedDetail.Version,
+                customerId = demand.CustomerId,
+                locationId = demand.LocationId,
+                description = "Descrição atualizada pelo Operador",
+                origin = "E-mail",
+                priority = "Alta",
+                ticketReference = "TICKET-ATUALIZADO",
+                purchaseOrderReference = "OC-ATUALIZADA",
+                assignedToUserId = operatorUserId
+            });
+            Assert.Equal(HttpStatusCode.OK, firstUpdate.StatusCode);
+            var firstUpdatedDemand = await firstUpdate.Content.ReadFromJsonAsync<DemandUpdateResponse>();
+            Assert.NotNull(firstUpdatedDemand);
+            Assert.Equal(demand.Id, firstUpdatedDemand.Id);
+            Assert.Equal(demand.ReferenceNumber, firstUpdatedDemand.ReferenceNumber);
+            Assert.Equal(2, firstUpdatedDemand.Version);
+            Assert.Equal("Descrição atualizada pelo Operador", firstUpdatedDemand.Description);
+            Assert.Equal("E-mail", firstUpdatedDemand.Origin);
+            Assert.Equal("Alta", firstUpdatedDemand.Priority);
+            Assert.Equal("TICKET-ATUALIZADO", firstUpdatedDemand.TicketReference);
+            Assert.Equal("OC-ATUALIZADA", firstUpdatedDemand.PurchaseOrderReference);
+            Assert.Equal(operatorUserId, firstUpdatedDemand.AssignedToUserId);
+            Assert.Equal("Recebida", firstUpdatedDemand.Status);
+
+            var missingUpdateCsrf = await adminClient.PutAsJsonAsync($"/api/demands/{demand.Id}", new
+            {
+                version = firstUpdatedDemand.Version, customerId = demand.CustomerId,
+                locationId = demand.LocationId, description = "Sem antifalsificação", origin = "Outra"
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, missingUpdateCsrf.StatusCode);
+            var invalidVersion = await PutJsonAsync(adminClient, $"/api/demands/{demand.Id}", new
+            {
+                version = 0, customerId = demand.CustomerId, locationId = demand.LocationId,
+                description = "Versão inválida", origin = "Outra"
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, invalidVersion.StatusCode);
+            Assert.Contains("Version", await invalidVersion.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+
+            var staleUpdate = await PutJsonAsync(managerClient, $"/api/demands/{demand.Id}", new
+            {
+                version = unassignedDetail.Version,
+                customerId = demand.CustomerId,
+                locationId = demand.LocationId,
+                description = "Essa gravação desatualizada não pode vencer",
+                origin = "WhatsApp",
+                priority = "Baixa",
+                ticketReference = (string?)null,
+                purchaseOrderReference = (string?)null,
+                assignedToUserId = (Guid?)null
+            });
+            Assert.Equal(HttpStatusCode.Conflict, staleUpdate.StatusCode);
+            Assert.Contains("Recarregue", await staleUpdate.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+
+            var concurrentVersion = firstUpdatedDemand.Version;
+            var concurrentUpdates = await Task.WhenAll(
+                PutJsonAsync(adminClient, $"/api/demands/{demand.Id}", new
+                {
+                    version = concurrentVersion,
+                    customerId = demand.CustomerId,
+                    locationId = demand.LocationId,
+                    description = "Atualização concorrente Administrador",
+                    origin = "WhatsApp",
+                    priority = "Baixa",
+                    ticketReference = "TICKET-ADMIN",
+                    purchaseOrderReference = "OC-ADMIN",
+                    assignedToUserId = operatorUserId
+                }),
+                PutJsonAsync(managerClient, $"/api/demands/{demand.Id}", new
+                {
+                    version = concurrentVersion,
+                    customerId = demand.CustomerId,
+                    locationId = demand.LocationId,
+                    description = "Atualização concorrente Gestor",
+                    origin = "Ligação",
+                    priority = "Média",
+                    ticketReference = "TICKET-GESTOR",
+                    purchaseOrderReference = "OC-GESTOR",
+                    assignedToUserId = (Guid?)null
+                }));
+            Assert.Single(concurrentUpdates, response => response.StatusCode == HttpStatusCode.OK);
+            Assert.Single(concurrentUpdates, response => response.StatusCode == HttpStatusCode.Conflict);
+            foreach (var response in concurrentUpdates) response.Dispose();
+
+            var afterConcurrency = await adminClient.GetFromJsonAsync<DemandDetailsResponse>($"/api/demands/{demand.Id}");
+            Assert.NotNull(afterConcurrency);
+            Assert.Equal(concurrentVersion + 1, afterConcurrency.Version);
+            Assert.Contains(afterConcurrency.Description,
+                new[] { "Atualização concorrente Administrador", "Atualização concorrente Gestor" });
+            Assert.Equal(2, afterConcurrency.Activities.Count(activity => activity.EventType == "DemandUpdated"));
+            var mismatchedCustomerLocation = await PutJsonAsync(adminClient, $"/api/demands/{demand.Id}", new
+            {
+                version = afterConcurrency.Version, customerId = secondCustomer.Id,
+                locationId = location.Id, description = "Local de outro cliente da mesma organização",
+                origin = "Outra", priority = (string?)null, ticketReference = (string?)null,
+                purchaseOrderReference = (string?)null, assignedToUserId = (Guid?)null
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, mismatchedCustomerLocation.StatusCode);
+            Assert.Contains("LocationId", await mismatchedCustomerLocation.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+            var foreignCustomerUpdate = await PutJsonAsync(adminClient, $"/api/demands/{demand.Id}", new
+            {
+                version = afterConcurrency.Version, customerId = foreignCustomer.Id,
+                locationId = foreignLocation.Id, description = "Cliente de outra organização",
+                origin = "Outra", priority = (string?)null, ticketReference = (string?)null,
+                purchaseOrderReference = (string?)null, assignedToUserId = (Guid?)null
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, foreignCustomerUpdate.StatusCode);
+            Assert.Contains("CustomerId", await foreignCustomerUpdate.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+            var foreignAssigneeUpdate = await PutJsonAsync(adminClient, $"/api/demands/{demand.Id}", new
+            {
+                version = afterConcurrency.Version, customerId = demand.CustomerId,
+                locationId = demand.LocationId, description = "Responsável fora da organização",
+                origin = "Outra", priority = (string?)null, ticketReference = (string?)null,
+                purchaseOrderReference = (string?)null, assignedToUserId = foreignAdminUserId
+            });
+            Assert.Equal(HttpStatusCode.BadRequest, foreignAssigneeUpdate.StatusCode);
+            Assert.Contains("AssignedToUserId", await foreignAssigneeUpdate.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
+            Assert.Equal(HttpStatusCode.NotFound,
+                (await PutJsonAsync(foreignClient, $"/api/demands/{demand.Id}", new
+                {
+                    version = afterConcurrency.Version, customerId = foreignCustomer.Id,
+                    locationId = foreignLocation.Id, description = "Demanda de outra organização",
+                    origin = "Outra", priority = (string?)null, ticketReference = (string?)null,
+                    purchaseOrderReference = (string?)null, assignedToUserId = (Guid?)null
+                })).StatusCode);
+            Assert.Equal(HttpStatusCode.Unauthorized,
+                (await PutJsonAsync(anonymousClient, $"/api/demands/{demand.Id}", new
+                {
+                    version = afterConcurrency.Version, customerId = demand.CustomerId,
+                    locationId = demand.LocationId, description = "Sem sessão",
+                    origin = "Outra", priority = (string?)null, ticketReference = (string?)null,
+                    purchaseOrderReference = (string?)null, assignedToUserId = (Guid?)null
+                })).StatusCode);
+
             var assignedDetail = await adminClient.GetFromJsonAsync<DemandDetailsResponse>(
                 $"/api/demands/{assignedDemand.Id}");
             Assert.NotNull(assignedDetail);
@@ -321,9 +472,6 @@ public sealed class CustomersApiTests
             Assert.Equal(HttpStatusCode.BadRequest,
                 (await adminClient.GetAsync("/api/demands?page=2147483647&pageSize=100")).StatusCode);
 
-            var secondCustomerResponse = await PostJsonAsync(adminClient, "/api/customers", new { name = "Cliente Delta" });
-            var secondCustomer = await secondCustomerResponse.Content.ReadFromJsonAsync<CustomerResponse>();
-            Assert.NotNull(secondCustomer);
             var mismatchedLocation = await PostJsonAsync(managerClient, "/api/demands", new
             {
                 customerId = secondCustomer.Id,
@@ -352,19 +500,13 @@ public sealed class CustomersApiTests
             Assert.Contains("Priority", invalidDemandBody, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("TicketReference", invalidDemandBody, StringComparison.OrdinalIgnoreCase);
 
-            var otherOrganizationUserId = Guid.Empty;
-            using (var scope = factory.Services.CreateScope())
-            {
-                var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
-                otherOrganizationUserId = (await userManager.FindByEmailAsync(users["B-" + RoleNames.Administrator]))!.Id;
-            }
             var foreignAssignee = await PostJsonAsync(adminClient, "/api/demands", new
             {
                 customerId = created.Id,
                 locationId = location.Id,
                 description = "Responsável de outra organização",
                 origin = "E-mail",
-                assignedToUserId = otherOrganizationUserId
+                assignedToUserId = foreignAdminUserId
             });
             Assert.Equal(HttpStatusCode.BadRequest, foreignAssignee.StatusCode);
             Assert.Contains("AssignedToUserId", await foreignAssignee.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
@@ -372,7 +514,7 @@ public sealed class CustomersApiTests
             using (var scope = factory.Services.CreateScope())
             {
                 var dbContext = scope.ServiceProvider.GetRequiredService<PitCrmDbContext>();
-                Assert.Equal(1, await dbContext.DemandActivities.CountAsync(activity => activity.DemandId == demand.Id));
+                Assert.Equal(3, await dbContext.DemandActivities.CountAsync(activity => activity.DemandId == demand.Id));
                 var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
                 var creator = await userManager.FindByEmailAsync(users["A-" + RoleNames.Administrator]);
                 Assert.NotNull(creator);
@@ -384,6 +526,28 @@ public sealed class CustomersApiTests
                 var demandStore = scope.ServiceProvider.GetRequiredService<IDemandStore>();
                 await Assert.ThrowsAsync<DbUpdateException>(() => demandStore.CreateAsync(failedDemand, invalidActivity, CancellationToken.None));
                 Assert.False(await dbContext.Demands.AsNoTracking().AnyAsync(item => item.Id == failedDemandId));
+            }
+
+            using (var scope = factory.Services.CreateScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<PitCrmDbContext>();
+                var demandStore = scope.ServiceProvider.GetRequiredService<IDemandStore>();
+                var persistedDemand = await dbContext.Demands.AsNoTracking().SingleAsync(item => item.Id == demand.Id);
+                var invalidUpdateData = new DemandUpdateData(persistedDemand.Version, persistedDemand.CustomerId,
+                    persistedDemand.LocationId, "Esta alteração deve ser revertida", persistedDemand.Origin,
+                    persistedDemand.Priority, persistedDemand.TicketReference, persistedDemand.PurchaseOrderReference,
+                    persistedDemand.AssignedToUserId);
+                await Assert.ThrowsAsync<DbUpdateException>(() => demandStore.UpdateAsync(organizationA,
+                    persistedDemand.Id, Guid.NewGuid(), invalidUpdateData, DateTimeOffset.UtcNow, CancellationToken.None));
+            }
+
+            using (var scope = factory.Services.CreateScope())
+            {
+                var dbContext = scope.ServiceProvider.GetRequiredService<PitCrmDbContext>();
+                var persistedDemand = await dbContext.Demands.AsNoTracking().SingleAsync(item => item.Id == demand.Id);
+                Assert.Equal(afterConcurrency.Version, persistedDemand.Version);
+                Assert.Equal(afterConcurrency.Description, persistedDemand.Description);
+                Assert.Equal(3, await dbContext.DemandActivities.CountAsync(activity => activity.DemandId == demand.Id));
             }
 
             var updatedResponse = await PutJsonAsync(adminClient, $"/api/customers/{created.Id}", new
@@ -543,15 +707,18 @@ public sealed class CustomersApiTests
     private sealed record CustomerPageResponse(CustomerListItem[] Items, int Page, int PageSize, int TotalCount);
     private sealed record LocationResponse(Guid Id, Guid CustomerId, string Name, string Address, string? Instructions,
         DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
-    private sealed record DemandResponse(Guid Id, int ReferenceNumber, Guid CustomerId, Guid LocationId, string Description, string Origin,
+    private sealed record DemandResponse(Guid Id, int ReferenceNumber, int Version, Guid CustomerId, Guid LocationId, string Description, string Origin,
         string? Priority, string Status, string? TicketReference, string? PurchaseOrderReference,
         Guid? AssignedToUserId, DateTimeOffset CreatedAtUtc);
+    private sealed record DemandUpdateResponse(Guid Id, int ReferenceNumber, int Version, Guid CustomerId,
+        Guid LocationId, string Description, string Origin, string? Priority, string Status,
+        string? TicketReference, string? PurchaseOrderReference, Guid? AssignedToUserId);
     private sealed record DemandPageResponse(DemandListItemResponse[] Items, int Page, int PageSize, int TotalCount);
     private sealed record DemandListItemResponse(Guid Id, int ReferenceNumber, Guid CustomerId, string CustomerName, Guid LocationId,
         string LocationName, string Description, string Origin, string? Priority, string Status,
         string? TicketReference, string? PurchaseOrderReference, Guid? AssignedToUserId,
         string? AssignedToDisplayName, DateTimeOffset CreatedAtUtc);
-    private sealed record DemandDetailsResponse(Guid Id, int ReferenceNumber, Guid CustomerId, string CustomerName, Guid LocationId,
+    private sealed record DemandDetailsResponse(Guid Id, int ReferenceNumber, int Version, Guid CustomerId, string CustomerName, Guid LocationId,
         string LocationName, string Description, string Origin, string? Priority, string Status,
         string? TicketReference, string? PurchaseOrderReference, Guid? AssignedToUserId,
         string? AssignedToDisplayName, Guid CreatedByUserId, string CreatedByDisplayName,

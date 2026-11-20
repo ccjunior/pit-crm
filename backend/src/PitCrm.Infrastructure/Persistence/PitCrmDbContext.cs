@@ -138,6 +138,7 @@ public sealed class PitCrmDbContext(
             demand.HasKey(value => value.Id);
             demand.HasAlternateKey(value => new { value.OrganizationId, value.Id });
             demand.Property(value => value.ReferenceNumber).IsRequired();
+            demand.Property(value => value.Version).IsConcurrencyToken().IsRequired();
             demand.Property(value => value.Description).HasMaxLength(4000).IsRequired();
             demand.Property(value => value.Origin).HasMaxLength(30).IsRequired();
             demand.Property(value => value.Priority).HasMaxLength(20);

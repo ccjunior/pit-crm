@@ -317,9 +317,6 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<int>("ReferenceNumber")
-                        .HasColumnType("integer");
-
                     b.Property<string>("Priority")
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
@@ -327,6 +324,9 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.Property<string>("PurchaseOrderReference")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<int>("ReferenceNumber")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -336,6 +336,10 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.Property<string>("TicketReference")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<int>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 

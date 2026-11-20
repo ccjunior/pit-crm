@@ -223,7 +223,7 @@ Não foi feita autenticação visual com conta provisionada no banco de desenvol
 | Backend e migração | `dotnet test backend/tests/PitCrm.Api.Tests/PitCrm.Api.Tests.csproj --configuration Debug --no-restore` com connection string de teste e schema temporário | 7 testes aprovados; migration de numeração aplicada no schema temporário, inclusive seed e índice único; `pitcrm_dev` não foi alterado |
 | Inspeção autenticada | Abrir listagem, filtros, tabela, detalhe e cadastro em navegador com sessão válida | Não executada; Administrador local ainda não foi provisionado |
 
-O domínio disponibiliza somente o status inicial **Recebida** nesta entrega; o filtro lista esse valor e “Todas”. As transições comerciais foram explicitamente deixadas fora do escopo (D07). Atribuição rápida e alteração de status não foram criadas porque a API de edição ainda pertence a T20/T22 e as regras de transição seguem pendentes. A migração foi aplicada pela suíte de integração em schema temporário, mas ainda não no banco local `pitcrm_dev`. Inspeção autenticada continua pendente.
+O domínio disponibiliza somente o status inicial **Recebida** nesta entrega; o filtro lista esse valor e “Todas”. As transições comerciais foram explicitamente deixadas fora do escopo (D07). A atribuição rápida e alteração de status não fazem parte da edição básica da T20; as regras de transição seguem pendentes e a interface de edição pertence à T22. A migração de numeração foi aplicada a `pitcrm_dev` em 20/11. Inspeção autenticada continua pendente para a demonstração integrada.
 
 ## Evidências de T24 — endereço principal do Cliente
 
@@ -257,6 +257,21 @@ O cadastro e a seleção dos locais de atendimento continuam no fluxo existente:
 
 A migração `20261120141438_SeedBaseIdentityRoles` registra Administrador, Gestor e Operador usando `NormalizedName` como chave de conflito: preserva papéis existentes e inclui somente os ausentes. O endpoint valida contra o catálogo estático e orienta aplicar migrações se o banco estiver desatualizado; não cria papéis durante cadastro/edição. A proteção do último Administrador continua sendo aplicada pela API de T17. A suíte Angular completa não foi executada; somente os quatro arquivos focados acima foram testados. A suíte completa do backend (7 testes) foi compilada e executada em saída temporária porque a API local mantinha os assemblies Debug bloqueados. As migrações pendentes foram aplicadas a `pitcrm_dev` em build Release, mantendo a API ativa; uma consulta confirmou os três perfis persistidos. O usuário confirmou sucesso no cadastro autenticado após a migração.
 
+## Evidências de T20 — edição concorrente de demanda
+
+| Verificação | Procedimento | Resultado |
+| --- | --- | --- |
+| Edição e preservação | Teste HTTP de `PUT /api/demands/{id}` com sessão Operador | 200; preserva ID, referência pública e status, grava campos básicos, atribui a versão seguinte e registra `DemandUpdated` |
+| Versão obsoleta e concorrência | PUT com versão anterior seguido de duas gravações simultâneas com a mesma versão atual | Versão obsoleta recebe 409; na corrida, uma requisição recebe 200 e outra 409; os dados vencedores permanecem salvos e só uma atividade é registrada |
+| Isolamento e validação de vínculos | Sessões das duas organizações alteram demanda e enviam cliente, local ou responsável de outro escopo; também é testado local de outro cliente da mesma organização | Demanda fora do escopo recebe 404; vínculos inválidos recebem 400 com campo; nenhuma gravação inválida altera os dados |
+| Autorização e antifalsificação | Teste com Administrador, Gestor, Operador e sessão anônima; PUT sem token CSRF | Os três perfis operacionais podem editar; anônimo recebe 401 e ausência de token CSRF recebe 400 |
+| Atomicidade do histórico | Teste de integração provoca falha de FK ao gravar atividade depois da atualização | Exceção de persistência; versão, dados e contagem de atividades anteriores permanecem iguais, comprovando rollback atômico |
+| Migração e dados existentes | `dotnet ef database update --project src/PitCrm.Infrastructure --startup-project src/PitCrm.Api --configuration Release`; consulta a `pitcrm_dev` | `AddDemandVersion` aplicada; coluna tem default 1 e a demanda que já existia ficou com versão 1 |
+| Suíte backend | `dotnet test tests/PitCrm.Api.Tests/PitCrm.Api.Tests.csproj --configuration Debug --artifacts-path <diretório-temporário>` com `PITCRM_TEST_CONNECTION` | 7 testes aprovados, 0 falhas; saída temporária preserva os assemblies Debug bloqueados pela API local |
+| Diff | `git diff --check` | Aprovado; Git emitiu somente avisos locais de conversão LF/CRLF |
+
+O token `Demand.Version` é iniciado em 1 e mapeado como token de concorrência do EF Core. `GET /api/demands/{id}` e `POST /api/demands` expõem a versão; o PUT retorna a nova versão e salva a atividade na mesma transação. A API local em Debug não foi reiniciada e ainda não carrega o endpoint novo; reinicie o processo antes de validar o PUT manualmente pelo runtime local. A validação automatizada foi feita com PostgreSQL em schema isolado; a migração foi aplicada separadamente a `pitcrm_dev`.
+
 ## Verificação de comportamento planejada
 
 | Cenário | Critérios principais | Estado atual |
@@ -269,13 +284,13 @@ A migração `20261120141438_SeedBaseIdentityRoles` registra Administrador, Gest
 | Criar demanda sem chamado e sem responsável | PEO-12, PEO-13, PEO-14, PEO-15 | API T13 e formulário T14 verificados; recarga/consulta integrada ainda em T23 |
 | Consultar responsáveis elegíveis; rejeitar referência incompatível na demanda | PEO-16, PEO-21 | T12 e vínculos de T13 verificados por HTTP; edição/concorrência pendentes em T20 |
 | Buscar, filtrar e abrir detalhe após nova sessão | PEO-17, PEO-18, PEO-21 | API T18 verificada por HTTP para filtros, paginação, atividade e isolamento; interface T21 verificada por testes de componente com API simulada; integração autenticada e recarga entre sessões aguardam T23 |
-| Editar demanda, registrar atividade e detectar versão antiga | PEO-19, PEO-20, PEO-22 | Não executado; tarefas T20 e T22 |
-| Consultar ou gravar dados entre organizações A e B | PEO-21, PEO-25 | Não executado; tarefas T02–T23 conforme matriz de rastreabilidade |
-| Simular falha transacional, resposta perdida e estados de interface | PEO-22, PEO-23, PEO-24 | Não executado; tarefas T13–T14, T20 e T22 |
+| Editar demanda, registrar atividade e detectar versão antiga | PEO-19, PEO-20, PEO-22 | API T20 verificada por integração; edição pela interface segue pendente em T22 |
+| Consultar ou gravar dados entre organizações A e B | PEO-21, PEO-25 | T20 verifica demanda e vínculos entre duas organizações; a matriz completa permanece para T23 |
+| Simular falha transacional, resposta perdida e estados de interface | PEO-22, PEO-23, PEO-24 | Rollback de gravação de demanda verificado em T13/T20; resposta perdida e estados de interface seguem pendentes em T14/T22 |
 | Percorrer as telas com teclado nas duas larguras propostas | PEO-26 | Não executado; tarefas T06, T10–T11, T14, T19 e T21–T23 |
 
 ## Limites
 
-Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T19 cobrem estrutura, autenticação, autorização inicial, entrada, clientes/locais, criação/busca/detalhe de demanda e interfaces administrativas de equipe/senha; T21 implementa a interface de busca/detalhe de demanda e abertura lateral de criação; T24 adiciona endereço principal opcional do cliente. Edição de demandas e critérios restantes seguem pendentes. Login foi inspecionado no navegador; T19 e outras telas foram verificadas por testes de componentes/build, sem sessão autenticada no navegador.
+Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T20 cobrem estrutura, autenticação, autorização inicial, entrada, clientes/locais, criação/busca/detalhe/edição de demanda e interfaces administrativas de equipe/senha; T21 implementa a interface de busca/detalhe de demanda e abertura lateral de criação; T24 adiciona endereço principal opcional do cliente. A edição de demanda pela interface (T22) e critérios restantes seguem pendentes. Login foi inspecionado no navegador; T19 e outras telas foram verificadas por testes de componentes/build, sem sessão autenticada no navegador. A API Debug ativa não foi reiniciada para o PUT T20; a validação desse endpoint foi feita por testes de integração.
 
-Revisão documental e implementação T01–T18/T24 realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.
+Revisão documental e implementação T01–T20/T24 realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.

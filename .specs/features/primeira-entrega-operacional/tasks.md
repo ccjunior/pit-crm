@@ -1,6 +1,6 @@
 # Primeira entrega operacional — plano de tarefas
 
-**Estado:** escopo aprovado e ampliado por D09 em 05/11/2026; T01–T18 concluídas e verificadas; T19 implementada com testes focados/build aprovados; T21 implementada e verificada por testes focados/build; T24 implementada e build verificada.
+**Estado:** escopo aprovado e ampliado por D09 em 05/11/2026; T01–T18 concluídas/verificadas; T19 implementada com testes focados/build aprovados; T20 concluída/verificada; T21 implementada e verificada por testes focados/build; T24 implementada e build verificada.
 **Fontes:** [spec.md](spec.md), [design.md](design.md) e decisões confirmadas em [context.md](context.md).
 **Autorização atual:** implementação local aprovada em 05/11/2026; o usuário solicitou inicializar Git e enviar para `ccjunior/pit-crm` em 05/11/2026.
 **Approved**: 2026-11-05 - user: "aprovo"
@@ -86,13 +86,13 @@ Cada linha identifica um resultado verificável, uma área responsável e depend
 | T17 | API de alteração de conta/perfil e proteção do último Administrador — backend | T16, T15 | PEO-05, PEO-07, PEO-21 | Edição limita-se à organização; desativação/redução do último Administrador é recusada; duas alterações concorrentes não eliminam todos os administradores |
 | T18 | API de busca paginada e detalhe de demandas — backend | T13 | PEO-17, PEO-18, PEO-21 | **Concluída:** busca por ID/referências/descrição, filtros, totais, paginação, detalhe, dados relacionados, responsável ausente/presente e isolamento verificados por integração PostgreSQL |
 | T19 | Interface de equipe e troca de senha inicial — frontend | T17, T06 | PEO-05, PEO-06, PEO-07, PEO-24, PEO-26 | **Implementada; testes focados/build aprovados:** Administrador cadastra e edita contas; senha temporária é apresentada para entrega fora do sistema; a rota exige troca no primeiro acesso; proteção de tela, erro 409 do último Administrador e catálogo persistente de perfis-base por migração foram implementados e testados. Inspeção autenticada e conferência de teclado em 390/1.280 px ficam para T23, após provisionar o Administrador local |
-| T20 | API de alteração de dados básicos da demanda com concorrência — backend | T13, T18 | PEO-16, PEO-19, PEO-20, PEO-21, PEO-22 | Alteração mantém ID, versão e atividade; vínculos inválidos e versão antiga são recusados; teste concorrente preserva a alteração confirmada |
+| T20 | API de alteração de dados básicos da demanda com concorrência — backend | T13, T18 | PEO-16, PEO-19, PEO-20, PEO-21, PEO-22 | **Implementada e verificada:** PUT valida cliente/local/responsável na organização, exige versão positiva, registra atividade atomicamente e preserva ID/referência/status; versão antiga e disputa concorrente retornam 409. Migração `AddDemandVersion` aplicada a `pitcrm_dev`; suíte backend passou |
 | T21 | Listagem e detalhe de demandas — frontend/backend | T06, T18 | PEO-17, PEO-18, PEO-21, PEO-24, PEO-26 | **Implementada; builds e testes focados aprovados:** busca, filtros, ordenação, paginação, cards/tabela e detalhe. Código `DEM-0001` sequencial por organização; busca pelo número, migração de dados existentes e alocação transacional; filtros secundários no popover; cards responsivos com descrição limitada a duas linhas e estados vazios. Migração de dados aplicada a `pitcrm_dev`; inspeção autenticada no navegador fica para T23 |
 | T22 | Edição dos dados básicos de demanda — frontend | T20, T21, T12, T14 | PEO-16, PEO-19, PEO-20, PEO-23, PEO-24, PEO-26 | Reutiliza o formulário de demanda; integra responsáveis elegíveis; respeita versão e vínculos; mantém preenchimento no erro e orienta recarga em conflito |
 | T23 | Demonstração integrada e consolidação de evidências — integração | T11, T14, T19, T21, T22, T03 | PEO-01, PEO-02, PEO-04, PEO-05, PEO-08, PEO-11, PEO-13, PEO-17, PEO-18, PEO-19, PEO-20, PEO-21, PEO-23, PEO-24, PEO-25, PEO-26 | Executa as suítes reais das tarefas e o cenário com três perfis e duas organizações; testa recarga e edição entre sessões; consolida resultados, limitações e instruções no README e na verificação |
 | T24 | Endereço principal opcional do cliente — backend e frontend | T08, T10 | PEO-08, PEO-09, PEO-21, PEO-27 | Criar/editar/listar/detalhar preserva endereço, localidade, cidade e estado opcionais; endereço do cliente permanece distinto dos locais de atendimento |
 
-**Andamento:** T01–T18 concluídas e verificadas; T19 implementada com testes focados/build aprovados; T21 implementada e verificada por testes de componente/build; T24 implementada e build verificada; T20, T22 e T23 pendentes. Nenhuma linha concluída significa apenas “arquivo criado”; a condição é o resultado e sua verificação.
+**Andamento:** T01–T18 concluídas/verificadas; T19 implementada com testes focados/build aprovados; T20 concluída/verificada; T21 implementada e verificada por testes de componente/build; T24 implementada e build verificada; T22 e T23 pendentes. Nenhuma linha concluída significa apenas “arquivo criado”; a condição é o resultado e sua verificação.
 
 ### Evidência de T01
 
@@ -268,7 +268,7 @@ Após as tarefas, conferir PEO-01 a PEO-27 e atualizar [verification.md](verific
 
 ## Handoff
 
-- T01–T18 concluídas e verificadas; T19 implementada com evidências de testes/build em `verification.md`; T24 implementada/build verificada. D04–D09 foram aplicadas.
+- T01–T18 concluídas e verificadas; T19 implementada com evidências de testes/build; T20 concluída/verificada; T24 implementada/build verificada. Evidências em `verification.md`. D04–D09 foram aplicadas.
 - O escopo da funcionalidade foi aprovado em 05/11/2026; D01–D03 permanecem confirmadas e os detalhamentos condicionais continuam como proposta até serem necessários.
 - Nenhum agente foi delegado. Commits `99f9d7f`, `4e529d8` e `f989039` enviados para `origin/main` conforme solicitação do usuário; deploy não autorizado.
-- Próximo trabalho: T20 (API de alteração dos dados básicos da demanda com concorrência); depois T22 (interface de edição) e T23 (demonstração integrada). T12 foi entregue antecipadamente por ser independente.
+- Próximo trabalho: T22 (interface de edição dos dados básicos da demanda); depois T23 (demonstração integrada). T20 (API com concorrência) está concluída. T12 foi entregue antecipadamente por ser independente.

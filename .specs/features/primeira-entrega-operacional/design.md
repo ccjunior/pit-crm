@@ -86,6 +86,14 @@ As rotas são propostas de implementação. Os DTOs respeitam os campos da spec;
 | `GET /api/demands` | `q`, cliente, local, responsável, `page`, `pageSize` | Página de demandas | Três perfis |
 | `GET /api/demands/{id}` | ID | Dados salvos e atividade da demanda | Três perfis |
 
+### Contrato concretizado na T20 — edição concorrente de demanda
+
+- `Demand.Version` é um inteiro iniciado em 1 e configurado como token de concorrência do EF Core. A migração `AddDemandVersion` preenche demandas existentes com versão 1.
+- `GET /api/demands/{id}` e `POST /api/demands` retornam a versão atual. `PUT /api/demands/{id}` recebe `version` junto com os dados básicos e retorna a nova versão após salvar.
+- O PUT substitui cliente, local, descrição, origem, prioridade, referências opcionais e responsável. ID, referência pública, status, autor e data de criação são preservados.
+- A alteração e a atividade `DemandUpdated` são salvas na mesma transação. Uma versão obsoleta ou uma corrida retorna 409 sem substituir a versão persistida; a interface deve recarregar os dados antes de nova tentativa.
+- Cliente, local e responsável são validados na organização autenticada. Demanda fora do escopo retorna 404; vínculos inválidos retornam 400 com erro de campo.
+
 A API de responsáveis oferece `GET /api/users/eligible-assignees`, contrato restrito que retorna somente ID e nome de usuários ativos da organização para os três perfis. A tela do seletor será integrada em T14/T22; a API não usa a listagem administrativa nem expõe e-mail/perfil da equipe ao Operador. A implementação de T12 e sua verificação estão em [verification.md](verification.md).
 
 ## Consulta, respostas e concorrência
