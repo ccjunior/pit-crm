@@ -4,7 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { Customer, CustomerApi, CustomerLocation } from '../customers/customer-api';
-import { CreatedDemand, DemandApi, EligibleAssignee } from './demand-api';
+import { CreatedDemand, DemandApi, DemandDetails, DemandInput, EligibleAssignee, UpdatedDemand } from './demand-api';
 
 @Component({
   selector: 'app-new-demand-page',
@@ -15,7 +15,9 @@ import { CreatedDemand, DemandApi, EligibleAssignee } from './demand-api';
 export class NewDemandPage implements OnInit {
   @Output() readonly cancelled = new EventEmitter<void>();
   @Output() readonly saved = new EventEmitter<CreatedDemand>();
+  @Output() readonly updated = new EventEmitter<UpdatedDemand>();
   @Input() embedded = false;
+  @Input() existingDemand: DemandDetails | null = null;
   private readonly formBuilder = inject(FormBuilder);
   private readonly customersApi = inject(CustomerApi);
   private readonly demandApi = inject(DemandApi);
@@ -39,7 +41,9 @@ export class NewDemandPage implements OnInit {
   readonly loadingLocations = signal(false);
   readonly loadingAssignees = signal(false);
   readonly submitting = signal(false);
+  readonly reloadingDemand = signal(false);
   readonly submitted = signal(false);
+  readonly versionConflict = signal(false);
   readonly customerPickerOpen = signal(false);
   readonly activeCustomerIndex = signal(0);
   readonly pageError = signal('');
@@ -50,6 +54,7 @@ export class NewDemandPage implements OnInit {
   private locationRequestId = 0;
 
   ngOnInit(): void {
+    if (this.existingDemand) this.applyDemandToForm(this.existingDemand);
     this.searchCustomers();
     this.loadAssignees();
   }
@@ -67,7 +72,9 @@ export class NewDemandPage implements OnInit {
           if (requestId !== this.customerSearchRequestId) return;
           this.customers.set(result.items);
           this.totalCustomerMatches.set(result.totalCount);
-          if (!result.items.some(customer => customer.id === this.form.controls.customerId.value)) {
+          const selectedCustomerId = this.form.controls.customerId.value;
+          const retainedEditCustomer = this.existingDemand?.customerId === selectedCustomerId;
+          if (!retainedEditCustomer && !result.items.some(customer => customer.id === selectedCustomerId)) {
             this.form.controls.customerId.setValue('');
             this.form.controls.locationId.setValue('');
             this.locations.set([]);
@@ -144,9 +151,17 @@ export class NewDemandPage implements OnInit {
     });
   }
 
+  currentAssigneeUnavailable(): boolean {
+    const assignedToUserId = this.existingDemand?.assignedToUserId;
+    return !!assignedToUserId && !this.assignees().some(assignee => assignee.id === assignedToUserId);
+  }
+
   onCustomerChange(): void {
+    this.loadLocations(this.form.controls.customerId.value, null);
+  }
+
+  private loadLocations(customerId: string, selectedLocationId: string | null): void {
     const requestId = ++this.locationRequestId;
-    const customerId = this.form.controls.customerId.value;
     this.form.controls.locationId.reset({ value: '', disabled: true });
     this.locations.set([]);
     this.submitError.set('');
@@ -161,12 +176,50 @@ export class NewDemandPage implements OnInit {
       next: locations => {
         if (requestId !== this.locationRequestId) return;
         this.locations.set(locations);
-        if (locations.length) this.form.controls.locationId.enable();
-        if (locations.length === 1) this.form.controls.locationId.setValue(locations[0].id);
+        if (locations.length) {
+          this.form.controls.locationId.enable();
+          if (selectedLocationId && locations.some(location => location.id === selectedLocationId)) {
+            this.form.controls.locationId.setValue(selectedLocationId);
+          } else if (locations.length === 1) {
+            this.form.controls.locationId.setValue(locations[0].id);
+          }
+        }
       },
       error: () => {
         if (requestId === this.locationRequestId) this.pageError.set('Não foi possível carregar os locais deste cliente.');
       },
+    });
+  }
+
+  private applyDemandToForm(demand: DemandDetails): void {
+    this.form.patchValue({
+      customerId: demand.customerId,
+      locationId: '',
+      description: demand.description,
+      origin: demand.origin,
+      assignedToUserId: demand.assignedToUserId ?? '',
+      ticketReference: demand.ticketReference ?? '',
+      purchaseOrderReference: demand.purchaseOrderReference ?? '',
+      priority: demand.priority ?? '',
+    });
+    this.customerSearch.setValue(demand.customerName);
+    this.loadLocations(demand.customerId, demand.locationId);
+  }
+
+  reloadCurrentDemand(): void {
+    const current = this.existingDemand;
+    if (!current || this.reloadingDemand()) return;
+    this.reloadingDemand.set(true);
+    this.demandApi.find(current.id).pipe(finalize(() => this.reloadingDemand.set(false))).subscribe({
+      next: demand => {
+        this.existingDemand = demand;
+        this.versionConflict.set(false);
+        this.submitError.set('');
+        this.fieldErrors.set({});
+        this.submitted.set(false);
+        this.applyDemandToForm(demand);
+      },
+      error: () => this.pageError.set('Não foi possível recarregar a demanda. Seus dados continuam preenchidos.'),
     });
   }
 
@@ -204,8 +257,7 @@ export class NewDemandPage implements OnInit {
       return;
     }
     const values = this.form.getRawValue();
-    this.submitting.set(true);
-    this.demandApi.create({
+    const input: DemandInput = {
       customerId: values.customerId,
       locationId: values.locationId,
       description: values.description.trim(),
@@ -214,19 +266,41 @@ export class NewDemandPage implements OnInit {
       ticketReference: values.ticketReference.trim() || null,
       purchaseOrderReference: values.purchaseOrderReference.trim() || null,
       priority: values.priority || null,
-    }).pipe(finalize(() => this.submitting.set(false))).subscribe({
+    };
+    this.submitting.set(true);
+    this.versionConflict.set(false);
+    if (this.existingDemand) {
+      this.demandApi.update(this.existingDemand.id, { ...input, version: this.existingDemand.version })
+        .pipe(finalize(() => this.submitting.set(false)))
+        .subscribe({
+          next: demand => this.updated.emit(demand),
+          error: error => this.handleSaveError(error),
+        });
+      return;
+    }
+
+    this.demandApi.create(input).pipe(finalize(() => this.submitting.set(false))).subscribe({
       next: demand => {
         this.created.set(demand);
         if (this.embedded) this.saved.emit(demand);
       },
-      error: (error: HttpErrorResponse) => {
-        const apiErrors = (error.error as { errors?: Record<string, string[]> } | null)?.errors;
-        if (apiErrors) this.fieldErrors.set(apiErrors);
-        this.submitError.set(error.status === 400
-          ? 'Revise os campos destacados e confirme que o local pertence ao cliente selecionado. Seus dados continuam preenchidos.'
-          : 'Não foi possível confirmar a gravação. Seus dados foram mantidos; confira as demandas antes de enviar outra vez.');
-      },
+      error: error => this.handleSaveError(error),
     });
+  }
+
+  private handleSaveError(error: HttpErrorResponse): void {
+    const apiErrors = (error.error as { errors?: Record<string, string[]> } | null)?.errors;
+    if (apiErrors) this.fieldErrors.set(apiErrors);
+    if (error.status === 409 && this.existingDemand) {
+      this.versionConflict.set(true);
+      this.submitError.set(typeof error.error?.error === 'string'
+        ? error.error.error
+        : 'Esta demanda foi alterada por outra pessoa. Recarregue os dados atuais antes de salvar novamente.');
+      return;
+    }
+    this.submitError.set(error.status === 400
+      ? 'Revise os campos destacados e confirme que o local pertence ao cliente selecionado. Seus dados continuam preenchidos.'
+      : 'Não foi possível confirmar a gravação. Seus dados foram mantidos; confira a demanda antes de tentar novamente.');
   }
 
   fieldError(name: string): string | null {

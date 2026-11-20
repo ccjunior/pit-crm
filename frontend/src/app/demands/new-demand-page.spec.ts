@@ -119,4 +119,77 @@ describe('NewDemandPage', () => {
     expect(page.fieldError('locationId')).toBe('O local não pertence ao cliente informado.');
     expect(page.submitError()).toContain('Seus dados continuam preenchidos');
   });
+
+  it('prefills a demand, sends its version and keeps edits when the version conflicts', () => {
+    const page = fixture.componentInstance;
+    page.existingDemand = {
+      id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa',
+      locationId: 'location-a', locationName: 'Unidade Central', description: 'Descrição atual', origin: 'WhatsApp',
+      priority: 'Alta', status: 'Recebida', ticketReference: 'CH-12', purchaseOrderReference: 'OC-8',
+      assignedToUserId: 'user-a', assignedToDisplayName: 'Gestora', createdAtUtc: '2026-11-05T12:00:00Z',
+      createdByDisplayName: 'Gestora', activities: [], version: 3,
+    };
+    page.ngOnInit();
+    http.expectOne(request => request.url === '/api/customers' && request.params.get('pageSize') === '100')
+      .flush({ items: [], page: 1, pageSize: 100, totalCount: 0 });
+    http.expectOne('/api/users/eligible-assignees').flush([{ id: 'user-a', displayName: 'Gestora' }]);
+    http.expectOne('/api/customers/customer-a/locations').flush([{
+      id: 'location-a', customerId: 'customer-a', name: 'Unidade Central', address: 'Rua das Flores, 100',
+      instructions: null, createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z',
+    }]);
+    expect(page.form.getRawValue()).toMatchObject({
+      customerId: 'customer-a', locationId: 'location-a', description: 'Descrição atual', origin: 'WhatsApp',
+      assignedToUserId: 'user-a', ticketReference: 'CH-12', purchaseOrderReference: 'OC-8', priority: 'Alta',
+    });
+    page.form.controls.description.setValue('Descrição editada');
+    page.submit();
+    const request = http.expectOne('/api/demands/demand-a');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.headers.get('X-CSRF-TOKEN')).toBe('csrf-value');
+    expect(request.request.body).toEqual({
+      customerId: 'customer-a', locationId: 'location-a', description: 'Descrição editada', origin: 'WhatsApp',
+      assignedToUserId: 'user-a', ticketReference: 'CH-12', purchaseOrderReference: 'OC-8', priority: 'Alta', version: 3,
+    });
+    request.flush({ error: 'A demanda foi alterada por outra pessoa.' }, { status: 409, statusText: 'Conflict' });
+    expect(page.form.controls.description.value).toBe('Descrição editada');
+    expect(page.versionConflict()).toBe(true);
+    expect(page.submitError()).toContain('alterada');
+  });
+
+  it('requires an explicit reload after a conflict and uses the latest version', () => {
+    const page = fixture.componentInstance;
+    page.existingDemand = {
+      id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa',
+      locationId: 'location-a', locationName: 'Unidade Central', description: 'Antes', origin: 'Ligação',
+      priority: null, status: 'Recebida', ticketReference: null, purchaseOrderReference: null,
+      assignedToUserId: null, assignedToDisplayName: null, createdAtUtc: '2026-11-05T12:00:00Z',
+      createdByDisplayName: 'Gestora', activities: [], version: 3,
+    };
+    page.ngOnInit();
+    http.expectOne(request => request.url === '/api/customers' && request.params.get('pageSize') === '100')
+      .flush({ items: [], page: 1, pageSize: 100, totalCount: 0 });
+    http.expectOne('/api/users/eligible-assignees').flush([]);
+    http.expectOne('/api/customers/customer-a/locations').flush([{
+      id: 'location-a', customerId: 'customer-a', name: 'Unidade Central', address: 'Rua das Flores, 100',
+      instructions: null, createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z',
+    }]);
+    page.form.controls.description.setValue('Minha versão');
+    page.versionConflict.set(true);
+    page.reloadCurrentDemand();
+    const reload = http.expectOne('/api/demands/demand-a');
+    expect(reload.request.method).toBe('GET');
+    reload.flush({
+      id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa',
+      locationId: 'location-a', locationName: 'Unidade Central', description: 'Versão mais recente', origin: 'E-mail',
+      priority: 'Baixa', status: 'Recebida', ticketReference: null, purchaseOrderReference: null,
+      assignedToUserId: null, assignedToDisplayName: null, createdAtUtc: '2026-11-05T12:00:00Z', version: 4,
+    });
+    http.expectOne('/api/customers/customer-a/locations').flush([{
+      id: 'location-a', customerId: 'customer-a', name: 'Unidade Central', address: 'Rua das Flores, 100',
+      instructions: null, createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z',
+    }]);
+    expect(page.form.controls.description.value).toBe('Versão mais recente');
+    expect(page.existingDemand?.version).toBe(4);
+    expect(page.versionConflict()).toBe(false);
+  });
 });

@@ -1,7 +1,7 @@
 # Primeira entrega operacional — verificação
 
 **Objeto:** especificação, desenho, plano de tarefas e implementação da primeira entrega operacional.
-**Estado:** T01–T18 verificadas; T19 implementada com testes focados/build aprovados; T21 implementada e verificada por testes focados/build; T24 implementada e compilada. Edição de demandas e demonstração integrada seguem pendentes; inspeção autenticada e conferência de teclado/viewport da T19 não foram executadas.
+**Estado:** T01–T18 verificadas; T19 implementada com testes focados/build aprovados; T20 concluída/verificada; T21 implementada e verificada por testes focados/build; T22 implementada com testes focados/build aprovados; T24 implementada e compilada. Demonstração integrada segue pendente; inspeção autenticada e conferência de teclado/viewport das telas não foram executadas.
 
 ## Escopo da conferência
 
@@ -272,6 +272,21 @@ A migração `20261120141438_SeedBaseIdentityRoles` registra Administrador, Gest
 
 O token `Demand.Version` é iniciado em 1 e mapeado como token de concorrência do EF Core. `GET /api/demands/{id}` e `POST /api/demands` expõem a versão; o PUT retorna a nova versão e salva a atividade na mesma transação. A API local em Debug não foi reiniciada e ainda não carrega o endpoint novo; reinicie o processo antes de validar o PUT manualmente pelo runtime local. A validação automatizada foi feita com PostgreSQL em schema isolado; a migração foi aplicada separadamente a `pitcrm_dev`.
 
+## Evidências de T22 — edição de demanda no frontend
+
+| Verificação | Procedimento | Resultado |
+| --- | --- | --- |
+| Carregamento e preservação dos campos | Teste focado do formulário com cliente fora da primeira página da busca, local, descrição, origem, responsável, prioridade, chamado e OC preexistentes | Dados mantidos; local selecionado após carregar os locais do cliente e responsável elegível exibido |
+| Gravação concorrente e antifalsificação | Teste do formulário envia PUT com `version` atual e `X-CSRF-TOKEN` | Corpo contém os campos básicos e a versão esperada; resposta 409 mantém a edição e apresenta instrução de conflito |
+| Recuperação após conflito | Teste aciona recarga explícita e retorna detalhe com versão nova | Formulário substitui os dados por escolha explícita; atualiza a versão e limpa o conflito, sem reenviar automaticamente |
+| Integração do painel | Teste de componente abre detalhe, entra em edição, envia atualização e verifica recarga | Após PUT, lista e detalhe são atualizados; drawer retorna ao detalhe e mostra notificação de sucesso |
+| Testes focados | `npm test -- --watch=false --include=src/app/demands/new-demand-page.spec.ts --include=src/app/shell/demands-home.spec.ts` | 2 arquivos e 11 testes aprovados |
+| Build Angular | `npm run build` | Aprovado; aviso de bundle inicial em 500,10 kB, 99 bytes acima do orçamento de 500 kB |
+| Diff | `git diff --check` | Aprovado; possíveis avisos LF/CRLF são da configuração local do Git |
+| Validação autenticada e teclado | Abrir a tela com conta real e percorrer em 390/1.280 px | Pendente para T23; não realizada nesta verificação |
+
+T22 reaproveita o formulário de abertura no painel de detalhes. O status e o histórico continuam fora da edição básica. Em conflito 409, os valores digitados permanecem até o usuário escolher recarregar os dados do servidor. O PUT usa a versão recebida no detalhe e a nova resposta dispara recarga da lista e do detalhe. A integração visual com a API local requer reiniciar a instância Debug, que ainda não carrega o endpoint implementado na T20.
+
 ## Verificação de comportamento planejada
 
 | Cenário | Critérios principais | Estado atual |
@@ -282,15 +297,15 @@ O token `Demand.Version` é iniciado em 1 e mapeado como token de concorrência 
 | Administrador cadastra/edita equipe; Gestor/Operador recebem recusa | PEO-05, PEO-07 | APIs T15/T17 e proteção do último Administrador verificadas; T19 cobre interface, guarda de rota, cadastro/edição e conflito 409 em testes focados; cenário integrado T23 pendente |
 | Administrador/Gestor mantêm clientes e locais; Operador consulta | PEO-08, PEO-09, PEO-10, PEO-11, PEO-27 | APIs e telas T07–T11 verificadas; T24 adiciona endereço principal opcional e passou nos builds; testes automatizados pendentes |
 | Criar demanda sem chamado e sem responsável | PEO-12, PEO-13, PEO-14, PEO-15 | API T13 e formulário T14 verificados; recarga/consulta integrada ainda em T23 |
-| Consultar responsáveis elegíveis; rejeitar referência incompatível na demanda | PEO-16, PEO-21 | T12 e vínculos de T13 verificados por HTTP; edição/concorrência pendentes em T20 |
+| Consultar responsáveis elegíveis; rejeitar referência incompatível na demanda | PEO-16, PEO-21 | T12 e vínculos de T13/T20 verificados por HTTP; formulário T22 usa a lista elegível e preserva responsável atual indisponível para decisão explícita |
 | Buscar, filtrar e abrir detalhe após nova sessão | PEO-17, PEO-18, PEO-21 | API T18 verificada por HTTP para filtros, paginação, atividade e isolamento; interface T21 verificada por testes de componente com API simulada; integração autenticada e recarga entre sessões aguardam T23 |
-| Editar demanda, registrar atividade e detectar versão antiga | PEO-19, PEO-20, PEO-22 | API T20 verificada por integração; edição pela interface segue pendente em T22 |
+| Editar demanda, registrar atividade e detectar versão antiga | PEO-19, PEO-20, PEO-22 | API T20 verificada por integração; formulário/painel T22 verificados com 11 testes focados; demonstração autenticada segue para T23 |
 | Consultar ou gravar dados entre organizações A e B | PEO-21, PEO-25 | T20 verifica demanda e vínculos entre duas organizações; a matriz completa permanece para T23 |
-| Simular falha transacional, resposta perdida e estados de interface | PEO-22, PEO-23, PEO-24 | Rollback de gravação de demanda verificado em T13/T20; resposta perdida e estados de interface seguem pendentes em T14/T22 |
+| Simular falha transacional, resposta perdida e estados de interface | PEO-22, PEO-23, PEO-24 | Rollback de gravação de demanda verificado em T13/T20; erros HTTP e conflito 409 preservam dados em T22; resposta perdida segue para T23 |
 | Percorrer as telas com teclado nas duas larguras propostas | PEO-26 | Não executado; tarefas T06, T10–T11, T14, T19 e T21–T23 |
 
 ## Limites
 
-Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T20 cobrem estrutura, autenticação, autorização inicial, entrada, clientes/locais, criação/busca/detalhe/edição de demanda e interfaces administrativas de equipe/senha; T21 implementa a interface de busca/detalhe de demanda e abertura lateral de criação; T24 adiciona endereço principal opcional do cliente. A edição de demanda pela interface (T22) e critérios restantes seguem pendentes. Login foi inspecionado no navegador; T19 e outras telas foram verificadas por testes de componentes/build, sem sessão autenticada no navegador. A API Debug ativa não foi reiniciada para o PUT T20; a validação desse endpoint foi feita por testes de integração.
+Perfil local da skill `tlc-spec-driven`. Os validadores originais dependentes do esquema upstream e provas de feature não foram executados; seu gate completo não está aprovado. T01–T20 cobrem estrutura, autenticação, autorização inicial, entrada, clientes/locais, criação/busca/detalhe/edição de demanda e interfaces administrativas de equipe/senha; T21 implementa a interface de busca/detalhe de demanda e abertura lateral de criação; T22 integra a edição; T24 adiciona endereço principal opcional do cliente. T23 e critérios de validação integrada seguem pendentes. Login foi inspecionado no navegador; T19, T21 e T22 foram verificadas por testes de componentes/build, sem sessão autenticada no navegador. A API Debug ativa não foi reiniciada para o PUT T20; a validação automatizada desse endpoint foi feita por testes de integração.
 
-Revisão documental e implementação T01–T20/T24 realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.
+Revisão documental e implementação T01–T22/T24 realizadas pelo mesmo agente, sem revisor independente ou delegação. O escopo da primeira entrega foi aprovado pelo usuário em 05/11/2026; os limites técnicos que continuam marcados como proposta não foram convertidos em regras comerciais.

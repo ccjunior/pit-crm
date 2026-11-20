@@ -363,6 +363,8 @@ app-demands-home .create-drawer app-new-demand-page {display:block; max-width:60
 app-demands-home .detail-drawer {width:min(44rem,94vw);}
 app-demands-home .detail-card {position:relative; min-height:100%; padding:clamp(1rem,2vw,1.45rem);}
 app-demands-home .detail-heading {display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; border-bottom:1px solid #efefeb; padding-bottom:1rem;}
+app-demands-home .detail-heading-actions {display:flex; align-items:center; gap:.5rem; flex:0 0 auto;}
+app-demands-home .detail-edit-button {min-height:2.2rem; padding:.45rem .7rem; font-size:.72rem;}
 app-demands-home .detail-heading h2 {overflow-wrap:anywhere; margin:0; color:var(--brand-ink); font-size:1.22rem;}
 app-demands-home .detail-heading p:last-child {margin:.35rem 0 0; color:var(--brand-muted); font-size:.68rem; font-family:monospace; overflow-wrap:anywhere;}
 app-demands-home .dialog-close {width:2.2rem; height:2.2rem; flex:0 0 auto; border:1px solid var(--brand-border); border-radius:.6rem; color:var(--brand-ink); background:#fff; font-size:1.35rem; line-height:1; cursor:pointer;}

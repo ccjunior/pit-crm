@@ -2,11 +2,11 @@
   @if (!embedded) { <a class="back-link" routerLink="/demandas"><span aria-hidden="true">←</span> Voltar à visão geral</a> }
   <header class="page-heading">
     <div>
-      <p class="eyebrow">Registro de serviço</p>
-      <h1 id="new-demand-title">Nova demanda</h1>
-      <p class="intro">Registre a solicitação recebida. Chamado, ordem de compra e responsável podem ser informados depois.</p>
+      <p class="eyebrow">{{ existingDemand ? 'Atualização de serviço' : 'Registro de serviço' }}</p>
+      <h1 id="new-demand-title" [attr.tabindex]="embedded ? -1 : null">{{ existingDemand ? 'Editar demanda' : 'Nova demanda' }}</h1>
+      <p class="intro">{{ existingDemand ? 'Atualize os dados básicos. A versão do orçamento e o andamento não são alterados aqui.' : 'Registre a solicitação recebida. Chamado, ordem de compra e responsável podem ser informados depois.' }}</p>
     </div>
-    @if (embedded) { <button class="dialog-close" type="button" aria-label="Fechar cadastro de demanda" (click)="cancelled.emit()">×</button> }
+    @if (embedded) { <button class="dialog-close" type="button" aria-label="Fechar formulário de demanda" (click)="cancelled.emit()">×</button> }
   </header>
 
   @if (pageError()) {
@@ -21,7 +21,7 @@
   } @else {
     <div class="demand-layout">
       <form class="demand-form" [formGroup]="form" (ngSubmit)="submit()" novalidate>
-        @if (submitError()) { <div class="error-banner form-error" role="alert">{{ submitError() }}</div> }
+        @if (submitError()) { <div class="error-banner form-error" role="alert"><span>{{ submitError() }}</span>@if (versionConflict()) { <button class="text-button" type="button" (click)="reloadCurrentDemand()" [disabled]="reloadingDemand()">{{ reloadingDemand() ? 'Recarregando…' : 'Descartar minha edição e carregar os dados atuais' }}</button> }</div> }
 
         <section class="form-section" aria-labelledby="reference-title">
           <div class="section-heading"><span class="section-number">01</span><div><h2 id="reference-title">Cliente e local</h2><p>Escolha a empresa e o endereço onde o serviço será realizado.</p></div></div>
@@ -87,7 +87,7 @@
         <section class="form-section optional-section" aria-labelledby="details-title">
           <div class="section-heading"><span class="section-number optional">03</span><div><h2 id="details-title">Referências e responsável</h2><p>Estas informações são opcionais e podem ser completadas depois.</p></div></div>
           <div class="form-grid">
-            <label class="field" for="assignee"><span>Responsável interno</span><select id="assignee" formControlName="assignedToUserId"><option value="">Sem responsável</option>@for (assignee of assignees(); track assignee.id) { <option [value]="assignee.id">{{ assignee.displayName }}</option> }</select></label>
+            <label class="field" for="assignee"><span>Responsável interno</span><select id="assignee" formControlName="assignedToUserId" [attr.aria-invalid]="fieldError('AssignedToUserId') ? 'true' : null" [attr.aria-describedby]="fieldError('AssignedToUserId') ? 'assignee-error' : null"><option value="">Sem responsável</option>@if (currentAssigneeUnavailable() && existingDemand) { <option [value]="existingDemand.assignedToUserId">{{ existingDemand.assignedToDisplayName || 'Responsável atual' }} — indisponível</option> }@for (assignee of assignees(); track assignee.id) { <option [value]="assignee.id">{{ assignee.displayName }}</option> }</select>@if (currentAssigneeUnavailable()) { <small class="field-hint">O responsável atual não está disponível. Escolha outro ou deixe sem responsável.</small> }@if (fieldError('AssignedToUserId'); as error) { <small class="field-error" id="assignee-error">{{ error }}</small> }</label>
             <label class="field" for="priority"><span>Prioridade</span><select id="priority" formControlName="priority"><option value="">Sem prioridade</option><option value="Baixa">Baixa</option><option value="Média">Média</option><option value="Alta">Alta</option></select></label>
             <label class="field" for="ticket-reference"><span>Chamado ou ticket</span><input id="ticket-reference" formControlName="ticketReference" maxlength="100" placeholder="Referência do cliente" /></label>
             <label class="field" for="purchase-order-reference"><span>Ordem de compra</span><input id="purchase-order-reference" formControlName="purchaseOrderReference" maxlength="100" placeholder="Número da OC" /></label>
@@ -95,8 +95,8 @@
         </section>
 
         <div class="form-actions">
-          <p>O status inicial será <strong>Recebida</strong>.</p>
-          <div>@if (embedded) { <button class="secondary-button" type="button" (click)="cancelled.emit()">Cancelar</button> } @else { <a class="secondary-button" routerLink="/demandas">Cancelar</a> }<button class="primary-button" type="submit" [disabled]="submitting()"><span>{{ submitting() ? 'Enviando…' : 'Registrar demanda' }}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg></button></div>
+          <p>@if (existingDemand) { O status permanece <strong>{{ existingDemand.status }}</strong>. } @else { O status inicial será <strong>Recebida</strong>. }</p>
+          <div>@if (embedded) { <button class="secondary-button" type="button" (click)="cancelled.emit()">Cancelar</button> } @else { <a class="secondary-button" routerLink="/demandas">Cancelar</a> }<button class="primary-button" type="submit" [disabled]="submitting() || reloadingDemand()"><span>{{ submitting() ? 'Salvando…' : existingDemand ? 'Salvar alterações' : 'Registrar demanda' }}</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14m-6-6 6 6-6 6" /></svg></button></div>
         </div>
       </form>
 

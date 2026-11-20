@@ -14,7 +14,10 @@ export interface DemandInput {
   purchaseOrderReference: string | null;
   priority: string | null;
 }
-export interface CreatedDemand {
+export interface DemandUpdateInput extends DemandInput {
+  version: number;
+}
+export interface DemandFields {
   id: string;
   referenceNumber: number;
   customerId: string;
@@ -26,12 +29,19 @@ export interface CreatedDemand {
   ticketReference: string | null;
   purchaseOrderReference: string | null;
   assignedToUserId: string | null;
+}
+export interface CreatedDemand extends DemandFields {
+  version: number;
   createdAtUtc: string;
 }
-export interface DemandListItem extends CreatedDemand {
+export interface UpdatedDemand extends DemandFields {
+  version: number;
+}
+export interface DemandListItem extends DemandFields {
   customerName: string;
   locationName: string;
   assignedToDisplayName: string | null;
+  createdAtUtc: string;
 }
 export interface DemandActivity {
   id: string;
@@ -41,6 +51,7 @@ export interface DemandActivity {
   occurredAtUtc: string;
 }
 export interface DemandDetails extends DemandListItem {
+  version: number;
   createdByDisplayName: string;
   activities: DemandActivity[];
 }
@@ -75,5 +86,8 @@ export class DemandApi {
   }
   create(input: DemandInput): Observable<CreatedDemand> {
     return this.http.post<CreatedDemand>('/api/demands', input);
+  }
+  update(id: string, input: DemandUpdateInput): Observable<UpdatedDemand> {
+    return this.http.put<UpdatedDemand>(`/api/demands/${id}`, input);
   }
 }

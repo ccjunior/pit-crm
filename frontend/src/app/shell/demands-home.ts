@@ -6,7 +6,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { debounceTime, distinctUntilChanged, finalize, tap } from 'rxjs';
 import { Customer, CustomerApi, CustomerLocation } from '../customers/customer-api';
 import { NewDemandPage } from '../demands/new-demand-page';
-import { CreatedDemand, DemandApi, DemandDetails, DemandListItem, EligibleAssignee } from '../demands/demand-api';
+import { CreatedDemand, DemandApi, DemandDetails, DemandListItem, EligibleAssignee, UpdatedDemand } from '../demands/demand-api';
 
 @Component({
   selector: 'app-demands-home',
@@ -54,10 +54,26 @@ import { CreatedDemand, DemandApi, DemandDetails, DemandListItem, EligibleAssign
       </section>
 
       <dialog #createDialog class="demand-drawer create-drawer" aria-label="Nova demanda" (close)="onCreateDialogClose()">@if (createFormOpen()) { <app-new-demand-page [embedded]="true" (cancelled)="closeCreate()" (saved)="onCreated($event)" /> }</dialog>
-      <dialog #detailDialog class="demand-drawer detail-drawer" aria-labelledby="demand-detail-title" (click)="onDetailBackdrop($event)" (close)="restoreFocus()">
+      <dialog #detailDialog class="demand-drawer detail-drawer" [attr.aria-labelledby]="editingDemand() ? 'new-demand-title' : 'demand-detail-title'" (click)="onDetailBackdrop($event)" (close)="restoreFocus()">
         @if (detailLoading()) { <div class="message" role="status">Carregando detalhes…</div> }
         @else if (detailError()) { <div class="detail-card"><button class="dialog-close" type="button" aria-label="Fechar detalhes" (click)="closeDetails()">×</button><div class="empty-state" role="alert"><h2 id="demand-detail-title">Não foi possível abrir a demanda</h2><p>{{ detailError() }}</p></div></div> }
-        @else if (detail(); as item) { <article class="detail-card"><header class="detail-heading"><div><p class="eyebrow">{{ publicCode(item.referenceNumber) }} · {{ item.status }}</p><h2 id="demand-detail-title">{{ item.customerName }}</h2></div><button class="dialog-close" type="button" aria-label="Fechar detalhes" (click)="closeDetails()">×</button></header><div class="detail-status-row"><span class="status-pill" [attr.data-status]="statusToken(item.status)">{{ item.status }}</span><span [attr.title]="fullDate(item.createdAtUtc)">{{ relativeDate(item.createdAtUtc) }}</span></div><dl class="detail-list"><div><dt>Local</dt><dd>{{ item.locationName }}</dd></div><div><dt>Origem</dt><dd>{{ item.origin }}</dd></div><div><dt>Prioridade</dt><dd><span class="priority-pill" [attr.data-priority]="priorityToken(item.priority)">{{ item.priority || 'Não definida' }}</span></dd></div><div><dt>Responsável</dt><dd>{{ item.assignedToDisplayName || 'Sem responsável' }}</dd></div><div><dt>Chamado ou ticket</dt><dd>{{ item.ticketReference || 'Não informado' }}</dd></div><div><dt>Ordem de compra</dt><dd>{{ item.purchaseOrderReference || 'Não informada' }}</dd></div><div class="detail-wide"><dt>Descrição</dt><dd>{{ item.description }}</dd></div><div><dt>Criada por</dt><dd>{{ item.createdByDisplayName }}</dd></div></dl><section class="activity-section"><h3>Atividades</h3>@if (item.activities.length) { <ol>@for (activity of item.activities; track activity.id) { <li><div><strong>{{ activity.description }}</strong><small>{{ activity.authorDisplayName }} · {{ activity.occurredAtUtc | date:'dd/MM/yyyy HH:mm' }}</small></div></li> }</ol> } @else { <p>Nenhuma atividade registrada.</p> }</section></article> }
+        @else if (editingDemand() && detail(); as item) {
+          <app-new-demand-page [embedded]="true" [existingDemand]="item" (cancelled)="cancelEditing()" (updated)="onDemandUpdated($event)" />
+        }
+        @else if (detail(); as item) {
+          <article class="detail-card">
+            <header class="detail-heading">
+              <div><p class="eyebrow">{{ publicCode(item.referenceNumber) }} · {{ item.status }}</p><h2 id="demand-detail-title" tabindex="-1">{{ item.customerName }}</h2></div>
+              <div class="detail-heading-actions">
+                <button class="secondary-button detail-edit-button" type="button" (click)="startEditing()">Editar dados</button>
+                <button class="dialog-close" type="button" aria-label="Fechar detalhes" (click)="closeDetails()">×</button>
+              </div>
+            </header>
+            <div class="detail-status-row"><span class="status-pill" [attr.data-status]="statusToken(item.status)">{{ item.status }}</span><span [attr.title]="fullDate(item.createdAtUtc)">{{ relativeDate(item.createdAtUtc) }}</span></div>
+            <dl class="detail-list"><div><dt>Local</dt><dd>{{ item.locationName }}</dd></div><div><dt>Origem</dt><dd>{{ item.origin }}</dd></div><div><dt>Prioridade</dt><dd><span class="priority-pill" [attr.data-priority]="priorityToken(item.priority)">{{ item.priority || 'Não definida' }}</span></dd></div><div><dt>Responsável</dt><dd>{{ item.assignedToDisplayName || 'Sem responsável' }}</dd></div><div><dt>Chamado ou ticket</dt><dd>{{ item.ticketReference || 'Não informado' }}</dd></div><div><dt>Ordem de compra</dt><dd>{{ item.purchaseOrderReference || 'Não informada' }}</dd></div><div class="detail-wide"><dt>Descrição</dt><dd>{{ item.description }}</dd></div><div><dt>Criada por</dt><dd>{{ item.createdByDisplayName }}</dd></div></dl>
+            <section class="activity-section"><h3>Atividades</h3>@if (item.activities.length) { <ol>@for (activity of item.activities; track activity.id) { <li><div><strong>{{ activity.description }}</strong><small>{{ activity.authorDisplayName }} · {{ activity.occurredAtUtc | date:'dd/MM/yyyy HH:mm' }}</small></div></li> }</ol> } @else { <p>Nenhuma atividade registrada.</p> }</section>
+          </article>
+        }
       </dialog>
     </section>
   `,
@@ -94,6 +110,7 @@ export class DemandsHome implements OnInit {
   readonly detail = signal<DemandDetails | null>(null);
   readonly detailLoading = signal(false);
   readonly detailError = signal('');
+  readonly editingDemand = signal(false);
   readonly notice = signal('');
   readonly recentDemandId = signal('');
   readonly createFormOpen = signal(false);
@@ -168,6 +185,24 @@ export class DemandsHome implements OnInit {
     this.noticeTimer = setTimeout(() => this.dismissNotice(), 7000);
     this.page.set(1); this.load();
   }
+  startEditing(): void {
+    this.editingDemand.set(true);
+    queueMicrotask(() => document.getElementById('new-demand-title')?.focus());
+  }
+  cancelEditing(): void {
+    this.editingDemand.set(false);
+    queueMicrotask(() => document.querySelector<HTMLButtonElement>('.detail-edit-button')?.focus());
+  }
+  onDemandUpdated(demand: UpdatedDemand): void {
+    this.editingDemand.set(false);
+    this.recentDemandId.set('');
+    this.notice.set(`Demanda ${this.publicCode(demand.referenceNumber)} atualizada.`);
+    this.clearNoticeTimer();
+    this.noticeTimer = setTimeout(() => this.dismissNotice(), 7000);
+    this.page.set(1);
+    this.load();
+    this.loadDetails(demand.id, true);
+  }
   openRecentDemand(): void { const id = this.recentDemandId(); if (id) this.openDetailsById(id); }
   dismissNotice(): void { this.clearNoticeTimer(); this.notice.set(''); this.recentDemandId.set(''); }
   private clearNoticeTimer(): void { if (this.noticeTimer !== null) clearTimeout(this.noticeTimer); this.noticeTimer = null; }
@@ -175,9 +210,19 @@ export class DemandsHome implements OnInit {
     this.openDetailsById(item.id);
   }
   private openDetailsById(id: string): void {
-    this.detail.set(null); this.detailError.set(''); this.detailLoading.set(true);
+    this.editingDemand.set(false);
     this.openDialog(this.detailDialog()?.nativeElement);
-    this.demandApi.find(id).pipe(finalize(() => this.detailLoading.set(false))).subscribe({ next: detail => this.detail.set(detail), error: () => this.detailError.set('A demanda pode ter sido removida ou não está disponível para sua organização.') });
+    this.loadDetails(id);
+  }
+  private loadDetails(id: string, focusTitle = false): void {
+    this.detail.set(null); this.detailError.set(''); this.detailLoading.set(true);
+    this.demandApi.find(id).pipe(finalize(() => this.detailLoading.set(false))).subscribe({
+      next: detail => {
+        this.detail.set(detail);
+        if (focusTitle) queueMicrotask(() => document.getElementById('demand-detail-title')?.focus());
+      },
+      error: () => this.detailError.set('A demanda pode ter sido removida ou não está disponível para sua organização.'),
+    });
   }
   closeDetails(): void {
     const dialog = this.detailDialog()?.nativeElement;

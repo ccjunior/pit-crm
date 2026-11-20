@@ -51,12 +51,62 @@ describe('DemandsHome', () => {
       id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa', locationId: 'location-a', locationName: 'Obra Centro',
       description: 'Revisar bomba hidráulica', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida', ticketReference: null,
       purchaseOrderReference: null, assignedToUserId: null, assignedToDisplayName: null, createdByUserId: 'user-a',
-      createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', activities: [{ id: 'activity-a', authorUserId: 'user-a',
+      createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 2, activities: [{ id: 'activity-a', authorUserId: 'user-a',
         authorDisplayName: 'Gestora', eventType: 'DemandCreated', description: 'Demanda criada.', occurredAtUtc: '2026-11-17T12:00:00Z' }],
     });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.detail-drawer[open]')).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Demanda criada.');
+  });
+
+  it('opens the existing demand in edit mode and returns to its refreshed detail after saving', () => {
+    (fixture.nativeElement.querySelector('.demand-card-main') as HTMLButtonElement).click();
+    http.expectOne('/api/demands/demand-a').flush({
+      id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa', locationId: 'location-a',
+      locationName: 'Obra Centro', description: 'Revisar bomba hidráulica', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida',
+      ticketReference: null, purchaseOrderReference: null, assignedToUserId: null, assignedToDisplayName: null,
+      createdByUserId: 'user-a', createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 2, activities: [],
+    });
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.detail-edit-button') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    http.expectOne(request => request.url === '/api/customers' && request.params.get('pageSize') === '100')
+      .flush({ items: [], page: 1, pageSize: 100, totalCount: 0 });
+    http.expectOne('/api/users/eligible-assignees').flush([]);
+    http.expectOne('/api/customers/customer-a/locations').flush([{
+      id: 'location-a', customerId: 'customer-a', name: 'Obra Centro', address: 'Rua Central, 10', instructions: null,
+      createdAtUtc: '2026-11-17T12:00:00Z', updatedAtUtc: '2026-11-17T12:00:00Z',
+    }]);
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('#new-demand-title')?.textContent).toContain('Editar demanda');
+    const description = fixture.nativeElement.querySelector('#description') as HTMLTextAreaElement;
+    expect(description.value).toBe('Revisar bomba hidráulica');
+    description.value = 'Bomba revisada';
+    description.dispatchEvent(new Event('input', { bubbles: true }));
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.form-actions .primary-button') as HTMLButtonElement).click();
+    const update = http.expectOne('/api/demands/demand-a');
+    expect(update.request.method).toBe('PUT');
+    expect(update.request.body.version).toBe(2);
+    update.flush({
+      id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', locationId: 'location-a',
+      description: 'Bomba revisada', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida', ticketReference: null,
+      purchaseOrderReference: null, assignedToUserId: null, version: 3,
+    });
+    http.expectOne(request => request.url === '/api/demands' && request.params.get('page') === '1').flush({
+      items: [], page: 1, pageSize: 12, totalCount: 0,
+    });
+    http.expectOne('/api/demands/demand-a').flush({
+      id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa', locationId: 'location-a',
+      locationName: 'Obra Centro', description: 'Bomba revisada', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida',
+      ticketReference: null, purchaseOrderReference: null, assignedToUserId: null, assignedToDisplayName: null,
+      createdByUserId: 'user-a', createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 3, activities: [],
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.detail-drawer[open]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('#demand-detail-title')?.textContent).toContain('Cliente Alfa');
+    expect(fixture.nativeElement.textContent).toContain('Bomba revisada');
+    expect(fixture.nativeElement.textContent).toContain('atualizada');
   });
 
   it('opens the adjusted demand form in a side panel and closes it without navigating away', () => {
