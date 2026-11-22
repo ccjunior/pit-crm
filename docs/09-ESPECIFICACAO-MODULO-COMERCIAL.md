@@ -63,9 +63,9 @@ Concluir o módulo Comercial do PIT Obras, de modo que uma empresa de construç�
 
 ## 3. Estado atual (conforme documento 08)
 
-Implementado parcialmente: estrutura de dados, persistência, migração, endpoints, páginas iniciais, Kanban/lista, fila de rascunhos, aprovação com criação idempotente de rascunho. Em 22/11/2026, as suítes locais passaram (backend 8/8; Angular 34/34), a inspeção autenticada cobriu Admin/Gestor, e o build Angular passou com bundle inicial de 416,31 kB (limite 500 kB). A confirmação visual de rascunho como Operador e inspeção touch/mobile foram adiadas para o fechamento integrado do Comercial por orientação do usuário. A migração foi aplicada apenas ao banco local de desenvolvimento.
+Implementado localmente: estrutura de dados, persistência, migração, endpoints, páginas iniciais, Kanban/lista, fila de rascunhos e aprovação com criação idempotente. Em 22/11/2026, as suítes locais passaram (backend 8/8; Angular 34/34), a inspeção autenticada cobriu Admin/Gestor e o build Angular passou com bundle inicial de 416,31 kB (limite 500 kB). A confirmação visual de rascunho como Operador e inspeção touch/mobile foram adiadas para o fechamento integrado do Comercial por orientação do usuário. A migração foi aplicada apenas ao banco local de desenvolvimento.
 
-A IA deve começar **auditando** o que existe e produzindo um relatório curto de lacunas em relação a esta especificação antes de codificar (seção 12, Fase 0).
+A Fase 0 foi auditada em 22/11/2026 e registrada na seção 14. As regras ainda abertas devem ser resolvidas antes das fases de implementação que dependem delas.
 
 ---
 
@@ -463,6 +463,30 @@ Cada fase produz especificação e tarefas com critérios verificáveis quando s
 
 ### Auditoria preliminar do legado
 
-O projeto legado usa IMAP com credenciais por organização protegidas por ASP.NET Data Protection e consulta periódica de mensagens. Processa anexos XLS/XLSX e usa OpenRouter com resposta estruturada e validação parcial. Existem identificação por mensagem, hash de anexo e reprocessamento. Heurísticas de planilha e mapeamento dos campos são referências para uma solução própria.
+**Relatório da Fase 0 — 22/11/2026.** Auditoria feita por leitura do código, configuração por nomes de campos/opções e testes existentes. O repositório legado permaneceu somente leitura. Arquivos `.env`, logs e valores de segredos não foram abertos nem copiados.
 
-Não foram comprovados OAuth, armazenamento do EML original, antivírus, fila de falhas definitiva, política de retenção, defesa contra injeção e validação local integral do schema. O limite de arquivo deve ser verificado antes do processamento em memória. Importação histórica exige especificação própria. A auditoria foi de leitura e não incluiu valores de segredos.
+#### Módulo Comercial atual do PIT Obras
+
+| Área | Estado observado no código | Consequência para as próximas fases |
+|---|---|---|
+| Modelo e nomes | A entidade central é `CommercialRequest`, revisões são inteiras (`1, 2, 3`) e itens guardam descrição/valor. Há rascunho com vínculos à solicitação e revisão aprovadas. | Manter um mapeamento explícito para a terminologia da especificação. Rebatizar entidades não é necessário para implementar a fase seguinte. Unidade, quantidade, custo, margem e BDI não existem ainda e pertencem à Fase 3. |
+| Etapas e histórico | `CommercialRequest` centraliza as transições permitidas no domínio. `CommercialActivity` guarda ator, horário, tipo e texto, mas não campos estruturados de estado anterior/novo. O motivo de resultado é texto livre; apenas “não cotada” exige motivo no domínio atual. | A Fase 2 precisa preservar atividades legadas e projetar histórico de transição tipado antes de migrar dados. Motivos estruturados e regras para os outros encerramentos permanecem decisão de produto. |
+| Acompanhamento | A solicitação atual não tem número legível, responsável comercial, local, referência do cliente, prazos, próxima ação ou origem e-mail/manual separada. A busca atual usa etapa, cliente, período de atualização e texto. | Campos, número e filtros da Fase 2 requerem desenho e migração compatível com registros existentes. |
+| Segurança multiempresa | Não foi encontrado `HasQueryFilter` no EF Core. Os repositórios comerciais e de rascunho recebem `OrganizationId` e filtram explicitamente as consultas; relacionamentos do banco incluem chaves compostas com organização e a suíte PostgreSQL testa acessos cruzados. | A exigência documental de filtro global diverge da arquitetura atual. Não trocar o padrão sem análise de efeitos em todo o sistema; manter verificações negativas e avaliar uma segunda camada antes de anexos/e-mail. |
+| Funcionalidades ainda ausentes | Não há visita técnica comercial, anexo comercial, comentário/atividade editável, lista configurável de motivos, job de expiração ou lembrete comercial. | Implementar somente depois de resolver desenho, autorização e infraestrutura das fases correspondentes. |
+| Frontend e validação da T26 | Propostas e rascunhos têm rotas sob demanda. Admin/Gestor foram inspecionados; o usuário adiou para o fechamento do módulo a confirmação visual como Operador e inspeção touch/mobile. Backend passou 8/8, Angular 34/34 e o build inicial Angular está em 416,31 kB. | Considerar os critérios T26 exercitados no nível registrado; retomar aquelas duas inspeções no fechamento integrado do Comercial. |
+
+#### Aplicação legada de e-mail
+
+O legado usa ASP.NET Core/.NET 10, EF Core e PostgreSQL. A integração observada é IMAP via MailKit: uma rotina consulta periodicamente a caixa de entrada por organização e também há sincronização manual. As mensagens são identificadas por `Message-ID` (com UID IMAP como fallback); índices únicos por organização reduzem duplicidades. Há hash SHA-256 de anexos e mecanismos de reprocessamento com status, tentativas e eventos. Uma fila de sincronização usa canal em memória limitado e os trabalhos são persistidos no banco para recuperação.
+
+As credenciais da caixa são guardadas protegidas via ASP.NET Data Protection, com opção legada de configuração. A aplicação persiste metadados e corpo da mensagem, e guarda anexos no sistema de arquivos configurado. A rotina de extração encontrada processa planilhas XLS/XLSX com ClosedXML/ExcelDataReader e chama OpenRouter; modelo e endpoint são configuráveis. O prompt orienta extrair somente fatos explícitos e a resposta usa JSON Schema estrito, com validação adicional na leitura. Há limites configuráveis de tamanho de arquivo e texto de entrada.
+
+Não foi encontrada integração OAuth, nem preservação do e-mail original bruto `.eml`, varredura antivírus, deduplicação/agrupamento por thread ou uma defesa específica contra prompt injection. A análise do arquivo ocorre após o download para memória; o limite aplicado no storage precisa ser complementado por limite antes/durante a transferência e leitura. A proteção/backup do key ring do Data Protection, retenção e descarte de dados, região de armazenamento, LGPD, fila durável de falhas, monitoramento de custos e mitigação de abuso do serviço de IA não ficaram comprovados. O legado contém código e testes que podem informar prompts, mapeamento de campos e casos de planilhas, mas sua arquitetura e regras de criação não devem ser copiadas diretamente.
+
+#### Encaminhamento da auditoria
+
+1. Preservar `CommercialRequest` e as revisões atuais, com terminologia mapeada; não renomear tabelas na Fase 2.
+2. Manter isolamento explícito por `OrganizationId` enquanto não houver decisão arquitetural sobre filtros globais; exigir cobertura negativa de tenant em cada novo caso de uso.
+3. Resolver as decisões AC-T01 sobre identificação, responsável, referências/canais e local de prospect antes da migração e dos endpoints da Fase 2.
+4. Para o e-mail, reaproveitar conhecimento de extração e testes do legado; reescrever integração na arquitetura do PIT Obras. OAuth, armazenamento bruto, limites prévios, segurança de anexos, retenção e defesa contra conteúdo malicioso são pré-requisitos de desenho da Fase 4.
