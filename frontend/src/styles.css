@@ -373,6 +373,8 @@ app-demands-home .detail-list {display:grid; grid-template-columns:repeat(2,minm
 app-demands-home .detail-list div {min-width:0; display:grid; gap:.2rem; align-content:start;}
 app-demands-home .detail-list dt {color:var(--brand-muted); font-size:.69rem; font-weight:650;}
 app-demands-home .detail-list dd {white-space:pre-wrap; overflow-wrap:anywhere; margin:0; color:#383a3d; font-size:.81rem; line-height:1.5;}
+app-demands-home .demand-external-reference {display:block; overflow-wrap:anywhere;}
+app-demands-home .demand-external-reference + .demand-external-reference {margin-top:.2rem;}
 app-demands-home .detail-wide {grid-column:1/-1;}
 app-demands-home .activity-section {border-top:1px solid #efefeb; padding-top:1rem;}
 app-demands-home .activity-section h3 {margin:0; color:var(--brand-ink); font-size:.92rem;}

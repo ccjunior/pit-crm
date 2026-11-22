@@ -5,8 +5,8 @@ public sealed class Demand
     private Demand() { }
 
     public Demand(Guid id, Guid organizationId, Guid customerId, Guid locationId, Guid createdByUserId,
-        Guid? assignedToUserId, string description, string origin, string? priority, string? ticketReference,
-        string? purchaseOrderReference, DateTimeOffset now)
+        Guid? assignedToUserId, string description, string origin, string? priority,
+        IEnumerable<(string Type, string Value)>? externalReferences, DateTimeOffset now)
     {
         if (id == Guid.Empty || organizationId == Guid.Empty || customerId == Guid.Empty || locationId == Guid.Empty || createdByUserId == Guid.Empty)
             throw new ArgumentException("Demand identity and required references cannot be empty.");
@@ -21,8 +21,7 @@ public sealed class Demand
         if (priority is not null && !Priorities.Contains(priority)) throw new ArgumentOutOfRangeException(nameof(priority));
         Origin = origin;
         Priority = priority;
-        TicketReference = Optional(ticketReference, nameof(ticketReference), 100);
-        PurchaseOrderReference = Optional(purchaseOrderReference, nameof(purchaseOrderReference), 100);
+        ExternalReferences = CreateExternalReferences(externalReferences);
         Status = "Recebida";
         Version = 1;
         CreatedAtUtc = NormalizeTimestamp(now);
@@ -41,8 +40,7 @@ public sealed class Demand
     public string Origin { get; private set; } = string.Empty;
     public string? Priority { get; private set; }
     public string Status { get; private set; } = string.Empty;
-    public string? TicketReference { get; private set; }
-    public string? PurchaseOrderReference { get; private set; }
+    public ICollection<DemandExternalReference> ExternalReferences { get; private set; } = new List<DemandExternalReference>();
     public Guid? AssignedToUserId { get; private set; }
     public Guid CreatedByUserId { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
@@ -55,7 +53,7 @@ public sealed class Demand
     }
 
     public void UpdateDetails(Guid customerId, Guid locationId, Guid? assignedToUserId, string description,
-        string origin, string? priority, string? ticketReference, string? purchaseOrderReference)
+        string origin, string? priority, IEnumerable<(string Type, string Value)>? externalReferences)
     {
         if (customerId == Guid.Empty || locationId == Guid.Empty)
             throw new ArgumentException("Demand customer and location cannot be empty.");
@@ -69,8 +67,11 @@ public sealed class Demand
         AssignedToUserId = assignedToUserId;
         Origin = origin;
         Priority = priority;
-        TicketReference = Optional(ticketReference, nameof(ticketReference), 100);
-        PurchaseOrderReference = Optional(purchaseOrderReference, nameof(purchaseOrderReference), 100);
+        if (externalReferences is not null)
+        {
+            ExternalReferences.Clear();
+            foreach (var reference in CreateExternalReferences(externalReferences)) ExternalReferences.Add(reference);
+        }
         Version = checked(Version + 1);
     }
 
@@ -87,6 +88,10 @@ public sealed class Demand
         if (string.IsNullOrWhiteSpace(value)) return null;
         return Required(value, parameterName, maxLength);
     }
+
+    private List<DemandExternalReference> CreateExternalReferences(IEnumerable<(string Type, string Value)>? references) =>
+        references?.Select(reference => new DemandExternalReference(Guid.NewGuid(), OrganizationId, Id,
+            reference.Type, reference.Value)).ToList() ?? [];
 
     private static DateTimeOffset NormalizeTimestamp(DateTimeOffset value)
     {

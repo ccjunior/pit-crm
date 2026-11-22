@@ -26,8 +26,8 @@ describe('DemandsHome', () => {
     fixture.detectChanges();
     http.expectOne(request => request.url === '/api/demands' && request.params.get('pageSize') === '12').flush({ items: [{
       id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa', locationId: 'location-a', locationName: 'Obra Centro',
-      description: 'Revisar bomba hidráulica', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida', ticketReference: null,
-      purchaseOrderReference: null, assignedToUserId: null, assignedToDisplayName: null, createdAtUtc: '2026-11-17T12:00:00Z',
+      description: 'Revisar bomba hidráulica', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida',
+      assignedToUserId: null, assignedToDisplayName: null, createdAtUtc: '2026-11-17T12:00:00Z',
     }], page: 1, pageSize: 12, totalCount: 1 });
     http.expectOne(request => request.url === '/api/customers' && request.params.get('pageSize') === '100').flush({ items: [], page: 1, pageSize: 100, totalCount: 0 });
     http.expectOne('/api/users/eligible-assignees').flush([]);
@@ -49,14 +49,16 @@ describe('DemandsHome', () => {
     const request = http.expectOne('/api/demands/demand-a');
     request.flush({
       id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa', locationId: 'location-a', locationName: 'Obra Centro',
-      description: 'Revisar bomba hidráulica', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida', ticketReference: null,
-      purchaseOrderReference: null, assignedToUserId: null, assignedToDisplayName: null, createdByUserId: 'user-a',
+      description: 'Revisar bomba hidráulica', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida',
+      externalReferences: [{ type: 'Chamado/OS', value: 'CH-42' }],
+      assignedToUserId: null, assignedToDisplayName: null, createdByUserId: 'user-a',
       createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 2, activities: [{ id: 'activity-a', authorUserId: 'user-a',
         authorDisplayName: 'Gestora', eventType: 'DemandCreated', description: 'Demanda criada.', occurredAtUtc: '2026-11-17T12:00:00Z' }],
     });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.detail-drawer[open]')).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Demanda criada.');
+    expect(fixture.nativeElement.textContent).toContain('CH-42');
   });
 
   it('opens the existing demand in edit mode and returns to its refreshed detail after saving', () => {
@@ -64,7 +66,7 @@ describe('DemandsHome', () => {
     http.expectOne('/api/demands/demand-a').flush({
       id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa', locationId: 'location-a',
       locationName: 'Obra Centro', description: 'Revisar bomba hidráulica', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida',
-      ticketReference: null, purchaseOrderReference: null, assignedToUserId: null, assignedToDisplayName: null,
+      externalReferences: [], assignedToUserId: null, assignedToDisplayName: null,
       createdByUserId: 'user-a', createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 2, activities: [],
     });
     fixture.detectChanges();
@@ -90,8 +92,8 @@ describe('DemandsHome', () => {
     expect(update.request.body.version).toBe(2);
     update.flush({
       id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', locationId: 'location-a',
-      description: 'Bomba revisada', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida', ticketReference: null,
-      purchaseOrderReference: null, assignedToUserId: null, version: 3,
+      description: 'Bomba revisada', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida', externalReferences: [],
+      assignedToUserId: null, version: 3,
     });
     http.expectOne(request => request.url === '/api/demands' && request.params.get('page') === '1').flush({
       items: [], page: 1, pageSize: 12, totalCount: 0,
@@ -99,7 +101,7 @@ describe('DemandsHome', () => {
     http.expectOne('/api/demands/demand-a').flush({
       id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa', locationId: 'location-a',
       locationName: 'Obra Centro', description: 'Bomba revisada', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida',
-      ticketReference: null, purchaseOrderReference: null, assignedToUserId: null, assignedToDisplayName: null,
+      externalReferences: [], assignedToUserId: null, assignedToDisplayName: null,
       createdByUserId: 'user-a', createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 3, activities: [],
     });
     fixture.detectChanges();

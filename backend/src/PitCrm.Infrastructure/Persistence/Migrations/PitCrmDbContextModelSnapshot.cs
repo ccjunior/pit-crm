@@ -321,10 +321,6 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<string>("PurchaseOrderReference")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<int>("ReferenceNumber")
                         .HasColumnType("integer");
 
@@ -332,10 +328,6 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
-
-                    b.Property<string>("TicketReference")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
 
                     b.Property<int>("Version")
                         .IsConcurrencyToken()
@@ -396,6 +388,35 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrganizationId", "DemandId", "OccurredAtUtc");
 
                     b.ToTable("DemandActivities", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Demands.DemandExternalReference", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("DemandId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "DemandId");
+
+                    b.ToTable("DemandExternalReferences", (string)null);
                 });
 
             modelBuilder.Entity("PitCrm.Domain.Locations.CustomerLocation", b =>
@@ -739,6 +760,16 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("PitCrm.Domain.Demands.DemandExternalReference", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Demands.Demand", null)
+                        .WithMany("ExternalReferences")
+                        .HasForeignKey("OrganizationId", "DemandId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("PitCrm.Domain.Locations.CustomerLocation", b =>
                 {
                     b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
@@ -782,6 +813,11 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Organization");
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Demands.Demand", b =>
+                {
+                    b.Navigation("ExternalReferences");
                 });
 #pragma warning restore 612, 618
         }

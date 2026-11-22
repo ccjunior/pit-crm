@@ -66,7 +66,7 @@ public static class DemandEndpoints
             : Demand.Priorities.Single(value => string.Equals(value, request.Priority.Trim(), StringComparison.OrdinalIgnoreCase));
         var demand = new Demand(Guid.NewGuid(), context.OrganizationId, request.CustomerId, request.LocationId,
             context.UserId, request.AssignedToUserId, request.Description!, origin, priority,
-            request.TicketReference, request.PurchaseOrderReference, now);
+            ToDomainReferences(request.ExternalReferences), now);
         var activity = new DemandActivity(Guid.NewGuid(), context.OrganizationId, demand.Id, context.UserId,
             "DemandCreated", "Demanda criada.", now);
         var result = await store.CreateAsync(demand, activity, cancellationToken);
@@ -89,7 +89,7 @@ public static class DemandEndpoints
 
         return Results.Created($"/api/demands/{demand.Id}", new DemandCreatedDto(demand.Id, demand.ReferenceNumber, demand.Version,
             demand.CustomerId, demand.LocationId, demand.Description, demand.Origin, demand.Priority, demand.Status,
-            demand.TicketReference, demand.PurchaseOrderReference, demand.AssignedToUserId, demand.CreatedAtUtc));
+            ToDtoReferences(demand.ExternalReferences), demand.AssignedToUserId, demand.CreatedAtUtc));
     }
 
     private static async Task<IResult> UpdateAsync(Guid id, UpdateDemandRequest request,
@@ -103,7 +103,7 @@ public static class DemandEndpoints
         var priority = request.Priority is null ? null
             : Demand.Priorities.Single(value => string.Equals(value, request.Priority.Trim(), StringComparison.OrdinalIgnoreCase));
         var update = new DemandUpdateData(request.Version, request.CustomerId, request.LocationId,
-            request.Description!, origin, priority, request.TicketReference, request.PurchaseOrderReference,
+            request.Description!, origin, priority, ToDomainReferences(request.ExternalReferences),
             request.AssignedToUserId);
         var result = await store.UpdateAsync(context.OrganizationId, id, context.UserId, update,
             DateTimeOffset.UtcNow, cancellationToken);
@@ -130,19 +130,19 @@ public static class DemandEndpoints
         var demand = result.Demand!;
         return Results.Ok(new DemandUpdatedDto(demand.Id, demand.ReferenceNumber, demand.Version,
             demand.CustomerId, demand.LocationId, demand.Description, demand.Origin, demand.Priority,
-            demand.Status, demand.TicketReference, demand.PurchaseOrderReference, demand.AssignedToUserId));
+            demand.Status, ToDtoReferences(demand.ExternalReferences), demand.AssignedToUserId));
     }
 
     private static Dictionary<string, string[]> Validate(CreateDemandRequest request) =>
         ValidateDemandData(request.CustomerId, request.LocationId, request.Description, request.Origin,
-            request.Priority, request.TicketReference, request.PurchaseOrderReference);
+            request.Priority, request.ExternalReferences);
 
     private static Dictionary<string, string[]> Validate(UpdateDemandRequest request) =>
         ValidateDemandData(request.CustomerId, request.LocationId, request.Description, request.Origin,
-            request.Priority, request.TicketReference, request.PurchaseOrderReference);
+            request.Priority, request.ExternalReferences);
 
     private static Dictionary<string, string[]> ValidateDemandData(Guid customerId, Guid locationId,
-        string? description, string? origin, string? priority, string? ticketReference, string? purchaseOrderReference)
+        string? description, string? origin, string? priority, IReadOnlyList<ExternalReferenceRequest?>? externalReferences)
     {
         var errors = new Dictionary<string, string[]>();
         if (customerId == Guid.Empty) errors[nameof(CreateDemandRequest.CustomerId)] = ["Selecione o cliente."];
@@ -153,20 +153,44 @@ public static class DemandEndpoints
             errors[nameof(CreateDemandRequest.Origin)] = ["Selecione uma origem válida: WhatsApp, Ligação, E-mail ou Outra."];
         if (priority is not null && !Demand.Priorities.Contains(priority.Trim(), StringComparer.OrdinalIgnoreCase))
             errors[nameof(CreateDemandRequest.Priority)] = ["A prioridade deve ser Baixa, Média ou Alta."];
-        if (ticketReference?.Trim().Length > 100) errors[nameof(CreateDemandRequest.TicketReference)] = ["O chamado deve ter até 100 caracteres."];
-        if (purchaseOrderReference?.Trim().Length > 100) errors[nameof(CreateDemandRequest.PurchaseOrderReference)] = ["A ordem de compra deve ter até 100 caracteres."];
+        if (externalReferences is not null)
+        {
+            for (var index = 0; index < externalReferences.Count; index++)
+            {
+                var reference = externalReferences[index];
+                var field = $"ExternalReferences[{index}]";
+                if (reference is null)
+                {
+                    errors[field] = ["A referência externa é inválida."];
+                    continue;
+                }
+                if (string.IsNullOrWhiteSpace(reference.Type)) errors[$"{field}.Type"] = ["Informe o tipo da referência."];
+                else if (reference.Type.Trim().Length > 50) errors[$"{field}.Type"] = ["O tipo deve ter até 50 caracteres."];
+                if (string.IsNullOrWhiteSpace(reference.Value)) errors[$"{field}.Value"] = ["Informe o valor da referência."];
+                else if (reference.Value.Trim().Length > 100) errors[$"{field}.Value"] = ["O valor deve ter até 100 caracteres."];
+            }
+        }
         return errors;
     }
 
+    private static IReadOnlyList<(string Type, string Value)>? ToDomainReferences(
+        IReadOnlyList<ExternalReferenceRequest?>? references) => references?.Select(reference =>
+            (reference!.Type!, reference.Value!)).ToArray();
+
+    private static IReadOnlyList<DemandExternalReferenceDto> ToDtoReferences(
+        IEnumerable<DemandExternalReference> references) => references
+        .Select(reference => new DemandExternalReferenceDto(reference.Type, reference.Value)).ToArray();
+
     public sealed record CreateDemandRequest(Guid CustomerId, Guid LocationId, string? Description, string? Origin,
-        Guid? AssignedToUserId, string? TicketReference, string? PurchaseOrderReference, string? Priority);
+        Guid? AssignedToUserId, IReadOnlyList<ExternalReferenceRequest?>? ExternalReferences, string? Priority);
     public sealed record UpdateDemandRequest(int Version, Guid CustomerId, Guid LocationId, string? Description, string? Origin,
-        Guid? AssignedToUserId, string? TicketReference, string? PurchaseOrderReference, string? Priority);
+        Guid? AssignedToUserId, IReadOnlyList<ExternalReferenceRequest?>? ExternalReferences, string? Priority);
+    public sealed record ExternalReferenceRequest(string? Type, string? Value);
     public sealed record DemandCreatedDto(Guid Id, int ReferenceNumber, int Version, Guid CustomerId, Guid LocationId, string Description, string Origin,
-        string? Priority, string Status, string? TicketReference, string? PurchaseOrderReference,
+        string? Priority, string Status, IReadOnlyList<DemandExternalReferenceDto> ExternalReferences,
         Guid? AssignedToUserId, DateTimeOffset CreatedAtUtc);
     public sealed record DemandUpdatedDto(Guid Id, int ReferenceNumber, int Version, Guid CustomerId, Guid LocationId,
-        string Description, string Origin, string? Priority, string Status, string? TicketReference,
-        string? PurchaseOrderReference, Guid? AssignedToUserId);
+        string Description, string Origin, string? Priority, string Status,
+        IReadOnlyList<DemandExternalReferenceDto> ExternalReferences, Guid? AssignedToUserId);
     public sealed record DemandPageResponse(IReadOnlyList<DemandListItemDto> Items, int Page, int PageSize, int TotalCount);
 }

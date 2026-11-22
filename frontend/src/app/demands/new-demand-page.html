@@ -89,8 +89,19 @@
           <div class="form-grid">
             <label class="field" for="assignee"><span>Responsável interno</span><select id="assignee" formControlName="assignedToUserId" [attr.aria-invalid]="fieldError('AssignedToUserId') ? 'true' : null" [attr.aria-describedby]="fieldError('AssignedToUserId') ? 'assignee-error' : null"><option value="">Sem responsável</option>@if (currentAssigneeUnavailable() && existingDemand) { <option [value]="existingDemand.assignedToUserId">{{ existingDemand.assignedToDisplayName || 'Responsável atual' }} — indisponível</option> }@for (assignee of assignees(); track assignee.id) { <option [value]="assignee.id">{{ assignee.displayName }}</option> }</select>@if (currentAssigneeUnavailable()) { <small class="field-hint">O responsável atual não está disponível. Escolha outro ou deixe sem responsável.</small> }@if (fieldError('AssignedToUserId'); as error) { <small class="field-error" id="assignee-error">{{ error }}</small> }</label>
             <label class="field" for="priority"><span>Prioridade</span><select id="priority" formControlName="priority"><option value="">Sem prioridade</option><option value="Baixa">Baixa</option><option value="Média">Média</option><option value="Alta">Alta</option></select></label>
-            <label class="field" for="ticket-reference"><span>Chamado ou ticket</span><input id="ticket-reference" formControlName="ticketReference" maxlength="100" placeholder="Referência do cliente" /></label>
-            <label class="field" for="purchase-order-reference"><span>Ordem de compra</span><input id="purchase-order-reference" formControlName="purchaseOrderReference" maxlength="100" placeholder="Número da OC" /></label>
+            <div class="field field-wide external-reference-section">
+              <div class="external-reference-heading"><span>Referências externas</span><button class="secondary-button" type="button" (click)="addExternalReference()">Adicionar referência</button></div>
+              <p class="field-hint">Chamado, ordem de compra ou outro código usado pelo cliente.</p>
+              <datalist id="external-reference-types">@for (type of externalReferenceTypes; track type) { <option [value]="type"></option> }</datalist>
+              @for (reference of externalReferences(); track $index) {
+                <div class="external-reference-row">
+                  <label class="field" [for]="'external-reference-type-' + $index"><span>Tipo</span><input [id]="'external-reference-type-' + $index" list="external-reference-types" maxlength="50" placeholder="Ex.: Chamado/OS" [value]="reference.type" [attr.aria-invalid]="externalReferenceErrors()[$index] ? 'true' : null" [attr.aria-describedby]="externalReferenceErrors()[$index] ? 'external-reference-error-' + $index : null" (input)="updateExternalReference($index, 'type', $any($event.target).value)" /></label>
+                  <label class="field" [for]="'external-reference-value-' + $index"><span>Valor</span><input [id]="'external-reference-value-' + $index" maxlength="100" placeholder="Código do cliente" [value]="reference.value" [attr.aria-invalid]="externalReferenceErrors()[$index] ? 'true' : null" [attr.aria-describedby]="externalReferenceErrors()[$index] ? 'external-reference-error-' + $index : null" (input)="updateExternalReference($index, 'value', $any($event.target).value)" /></label>
+                  <button class="reference-remove-button" type="button" [attr.aria-label]="'Remover referência ' + ($index + 1)" (click)="removeExternalReference($index)">Remover</button>
+                </div>
+                @if (externalReferenceErrors()[$index]; as error) { <small class="field-error" [id]="'external-reference-error-' + $index">{{ error }}</small> }
+              }
+            </div>
           </div>
         </section>
 

@@ -13,6 +13,7 @@ public enum DemandUpdateFailure
 }
 
 public sealed record DemandUpdateData(int Version, Guid CustomerId, Guid LocationId, string Description,
-    string Origin, string? Priority, string? TicketReference, string? PurchaseOrderReference, Guid? AssignedToUserId);
+    string Origin, string? Priority, IReadOnlyCollection<(string Type, string Value)>? ExternalReferences,
+    Guid? AssignedToUserId);
 
 public sealed record DemandUpdateResult(Demand? Demand, DemandUpdateFailure Failure);

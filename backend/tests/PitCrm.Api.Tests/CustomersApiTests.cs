@@ -201,8 +201,7 @@ public sealed class CustomersApiTests
             Assert.Equal("Média", demand.Priority);
             Assert.Equal("Recebida", demand.Status);
             Assert.Null(demand.AssignedToUserId);
-            Assert.Null(demand.TicketReference);
-            Assert.Null(demand.PurchaseOrderReference);
+            Assert.Empty(demand.ExternalReferences);
 
             Guid operatorUserId;
             Guid foreignAdminUserId;
@@ -239,15 +238,23 @@ public sealed class CustomersApiTests
                     locationId = location.Id,
                     description = "Outra solicitação independente",
                     origin = "Outra",
-                    ticketReference = "TICKET-COMPARTILHADO",
-                    purchaseOrderReference = "OC-COMPARTILHADA"
+                    externalReferences = new[]
+                    {
+                        new { type = "Chamado/OS", value = "TICKET-COMPARTILHADO" },
+                        new { type = "Ordem de Compra", value = "OC-COMPARTILHADA" },
+                        new { type = "Chamado/OS", value = "TICKET-SECUNDARIO" }
+                    }
                 });
                 Assert.Equal(HttpStatusCode.Created, duplicateReference.StatusCode);
                 var duplicateDemand = await duplicateReference.Content.ReadFromJsonAsync<DemandResponse>();
                 Assert.NotNull(duplicateDemand);
                 Assert.NotEqual(demand.Id, duplicateDemand.Id);
                 Assert.Equal(expectedReferenceNumber++, duplicateDemand.ReferenceNumber);
-                Assert.Equal("TICKET-COMPARTILHADO", duplicateDemand.TicketReference);
+                Assert.Equal(3, duplicateDemand.ExternalReferences.Length);
+                Assert.Contains(duplicateDemand.ExternalReferences, reference =>
+                    reference.Type == "Chamado/OS" && reference.Value == "TICKET-COMPARTILHADO");
+                Assert.Contains(duplicateDemand.ExternalReferences, reference =>
+                    reference.Type == "Chamado/OS" && reference.Value == "TICKET-SECUNDARIO");
             }
 
             var searchById = await adminClient.GetFromJsonAsync<DemandPageResponse>(
@@ -261,6 +268,10 @@ public sealed class CustomersApiTests
             Assert.NotNull(searchByReference);
             Assert.Equal(2, searchByReference.TotalCount);
             Assert.Equal(2, searchByReference.Items.Length);
+
+            var searchByReferenceType = await adminClient.GetFromJsonAsync<DemandPageResponse>("/api/demands?q=Ordem%20de%20Compra");
+            Assert.NotNull(searchByReferenceType);
+            Assert.Equal(2, searchByReferenceType.TotalCount);
 
             var searchByDescription = await adminClient.GetFromJsonAsync<DemandPageResponse>(
                 "/api/demands?q=manutenção%20da%20unidade");
@@ -313,11 +324,16 @@ public sealed class CustomersApiTests
                 description = "Descrição atualizada pelo Operador",
                 origin = "E-mail",
                 priority = "Alta",
-                ticketReference = "TICKET-ATUALIZADO",
-                purchaseOrderReference = "OC-ATUALIZADA",
+                externalReferences = new[]
+                {
+                    new { type = "Chamado/OS", value = "TICKET-ATUALIZADO" },
+                    new { type = "Ordem de Compra", value = "OC-ATUALIZADA" },
+                    new { type = "Código do Cliente", value = "REF-123" }
+                },
                 assignedToUserId = operatorUserId
             });
-            Assert.Equal(HttpStatusCode.OK, firstUpdate.StatusCode);
+            Assert.True(firstUpdate.StatusCode == HttpStatusCode.OK,
+                await firstUpdate.Content.ReadAsStringAsync());
             var firstUpdatedDemand = await firstUpdate.Content.ReadFromJsonAsync<DemandUpdateResponse>();
             Assert.NotNull(firstUpdatedDemand);
             Assert.Equal(demand.Id, firstUpdatedDemand.Id);
@@ -326,8 +342,13 @@ public sealed class CustomersApiTests
             Assert.Equal("Descrição atualizada pelo Operador", firstUpdatedDemand.Description);
             Assert.Equal("E-mail", firstUpdatedDemand.Origin);
             Assert.Equal("Alta", firstUpdatedDemand.Priority);
-            Assert.Equal("TICKET-ATUALIZADO", firstUpdatedDemand.TicketReference);
-            Assert.Equal("OC-ATUALIZADA", firstUpdatedDemand.PurchaseOrderReference);
+            Assert.Equal(3, firstUpdatedDemand.ExternalReferences.Length);
+            Assert.Contains(firstUpdatedDemand.ExternalReferences, reference =>
+                reference.Type == "Chamado/OS" && reference.Value == "TICKET-ATUALIZADO");
+            Assert.Contains(firstUpdatedDemand.ExternalReferences, reference =>
+                reference.Type == "Ordem de Compra" && reference.Value == "OC-ATUALIZADA");
+            Assert.Contains(firstUpdatedDemand.ExternalReferences, reference =>
+                reference.Type == "Código do Cliente" && reference.Value == "REF-123");
             Assert.Equal(operatorUserId, firstUpdatedDemand.AssignedToUserId);
             Assert.Equal("Recebida", firstUpdatedDemand.Status);
 
@@ -353,8 +374,7 @@ public sealed class CustomersApiTests
                 description = "Essa gravação desatualizada não pode vencer",
                 origin = "WhatsApp",
                 priority = "Baixa",
-                ticketReference = (string?)null,
-                purchaseOrderReference = (string?)null,
+                externalReferences = Array.Empty<object>(),
                 assignedToUserId = (Guid?)null
             });
             Assert.Equal(HttpStatusCode.Conflict, staleUpdate.StatusCode);
@@ -370,8 +390,7 @@ public sealed class CustomersApiTests
                     description = "Atualização concorrente Administrador",
                     origin = "WhatsApp",
                     priority = "Baixa",
-                    ticketReference = "TICKET-ADMIN",
-                    purchaseOrderReference = "OC-ADMIN",
+                    externalReferences = new[] { new { type = "Chamado/OS", value = "TICKET-ADMIN" } },
                     assignedToUserId = operatorUserId
                 }),
                 PutJsonAsync(managerClient, $"/api/demands/{demand.Id}", new
@@ -382,8 +401,7 @@ public sealed class CustomersApiTests
                     description = "Atualização concorrente Gestor",
                     origin = "Ligação",
                     priority = "Média",
-                    ticketReference = "TICKET-GESTOR",
-                    purchaseOrderReference = "OC-GESTOR",
+                    externalReferences = new[] { new { type = "Chamado/OS", value = "TICKET-GESTOR" } },
                     assignedToUserId = (Guid?)null
                 }));
             Assert.Single(concurrentUpdates, response => response.StatusCode == HttpStatusCode.OK);
@@ -400,8 +418,8 @@ public sealed class CustomersApiTests
             {
                 version = afterConcurrency.Version, customerId = secondCustomer.Id,
                 locationId = location.Id, description = "Local de outro cliente da mesma organização",
-                origin = "Outra", priority = (string?)null, ticketReference = (string?)null,
-                purchaseOrderReference = (string?)null, assignedToUserId = (Guid?)null
+                origin = "Outra", priority = (string?)null, externalReferences = Array.Empty<object>(),
+                assignedToUserId = (Guid?)null
             });
             Assert.Equal(HttpStatusCode.BadRequest, mismatchedCustomerLocation.StatusCode);
             Assert.Contains("LocationId", await mismatchedCustomerLocation.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
@@ -409,8 +427,8 @@ public sealed class CustomersApiTests
             {
                 version = afterConcurrency.Version, customerId = foreignCustomer.Id,
                 locationId = foreignLocation.Id, description = "Cliente de outra organização",
-                origin = "Outra", priority = (string?)null, ticketReference = (string?)null,
-                purchaseOrderReference = (string?)null, assignedToUserId = (Guid?)null
+                origin = "Outra", priority = (string?)null, externalReferences = Array.Empty<object>(),
+                assignedToUserId = (Guid?)null
             });
             Assert.Equal(HttpStatusCode.BadRequest, foreignCustomerUpdate.StatusCode);
             Assert.Contains("CustomerId", await foreignCustomerUpdate.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
@@ -418,8 +436,8 @@ public sealed class CustomersApiTests
             {
                 version = afterConcurrency.Version, customerId = demand.CustomerId,
                 locationId = demand.LocationId, description = "Responsável fora da organização",
-                origin = "Outra", priority = (string?)null, ticketReference = (string?)null,
-                purchaseOrderReference = (string?)null, assignedToUserId = foreignAdminUserId
+                origin = "Outra", priority = (string?)null, externalReferences = Array.Empty<object>(),
+                assignedToUserId = foreignAdminUserId
             });
             Assert.Equal(HttpStatusCode.BadRequest, foreignAssigneeUpdate.StatusCode);
             Assert.Contains("AssignedToUserId", await foreignAssigneeUpdate.Content.ReadAsStringAsync(), StringComparison.OrdinalIgnoreCase);
@@ -428,16 +446,16 @@ public sealed class CustomersApiTests
                 {
                     version = afterConcurrency.Version, customerId = foreignCustomer.Id,
                     locationId = foreignLocation.Id, description = "Demanda de outra organização",
-                    origin = "Outra", priority = (string?)null, ticketReference = (string?)null,
-                    purchaseOrderReference = (string?)null, assignedToUserId = (Guid?)null
+                    origin = "Outra", priority = (string?)null, externalReferences = Array.Empty<object>(),
+                    assignedToUserId = (Guid?)null
                 })).StatusCode);
             Assert.Equal(HttpStatusCode.Unauthorized,
                 (await PutJsonAsync(anonymousClient, $"/api/demands/{demand.Id}", new
                 {
                     version = afterConcurrency.Version, customerId = demand.CustomerId,
                     locationId = demand.LocationId, description = "Sem sessão",
-                    origin = "Outra", priority = (string?)null, ticketReference = (string?)null,
-                    purchaseOrderReference = (string?)null, assignedToUserId = (Guid?)null
+                    origin = "Outra", priority = (string?)null, externalReferences = Array.Empty<object>(),
+                    assignedToUserId = (Guid?)null
                 })).StatusCode);
 
             var assignedDetail = await adminClient.GetFromJsonAsync<DemandDetailsResponse>(
@@ -489,7 +507,7 @@ public sealed class CustomersApiTests
                 description = new string('x', 4001),
                 origin = "Origem inventada",
                 priority = "Urgente",
-                ticketReference = new string('T', 101)
+                externalReferences = new[] { new { type = "x", value = new string('T', 101) } }
             });
             Assert.Equal(HttpStatusCode.BadRequest, invalidDemand.StatusCode);
             var invalidDemandBody = await invalidDemand.Content.ReadAsStringAsync();
@@ -498,7 +516,7 @@ public sealed class CustomersApiTests
             Assert.Contains("Description", invalidDemandBody, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Origin", invalidDemandBody, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("Priority", invalidDemandBody, StringComparison.OrdinalIgnoreCase);
-            Assert.Contains("TicketReference", invalidDemandBody, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("ExternalReferences[0].Value", invalidDemandBody, StringComparison.OrdinalIgnoreCase);
 
             var foreignAssignee = await PostJsonAsync(adminClient, "/api/demands", new
             {
@@ -520,7 +538,7 @@ public sealed class CustomersApiTests
                 Assert.NotNull(creator);
                 var failedDemandId = Guid.NewGuid();
                 var failedDemand = new Demand(failedDemandId, organizationA, created.Id, location.Id, creator.Id,
-                    null, "Falha transacional", "Outra", null, null, null, DateTimeOffset.UtcNow);
+                    null, "Falha transacional", "Outra", null, null, DateTimeOffset.UtcNow);
                 var invalidActivity = new DemandActivity(Guid.NewGuid(), organizationA, failedDemandId, Guid.NewGuid(),
                     "DemandCreated", "Demanda criada.", DateTimeOffset.UtcNow);
                 var demandStore = scope.ServiceProvider.GetRequiredService<IDemandStore>();
@@ -535,8 +553,7 @@ public sealed class CustomersApiTests
                 var persistedDemand = await dbContext.Demands.AsNoTracking().SingleAsync(item => item.Id == demand.Id);
                 var invalidUpdateData = new DemandUpdateData(persistedDemand.Version, persistedDemand.CustomerId,
                     persistedDemand.LocationId, "Esta alteração deve ser revertida", persistedDemand.Origin,
-                    persistedDemand.Priority, persistedDemand.TicketReference, persistedDemand.PurchaseOrderReference,
-                    persistedDemand.AssignedToUserId);
+                    persistedDemand.Priority, null, persistedDemand.AssignedToUserId);
                 await Assert.ThrowsAsync<DbUpdateException>(() => demandStore.UpdateAsync(organizationA,
                     persistedDemand.Id, Guid.NewGuid(), invalidUpdateData, DateTimeOffset.UtcNow, CancellationToken.None));
             }
@@ -708,21 +725,21 @@ public sealed class CustomersApiTests
     private sealed record LocationResponse(Guid Id, Guid CustomerId, string Name, string Address, string? Instructions,
         DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc);
     private sealed record DemandResponse(Guid Id, int ReferenceNumber, int Version, Guid CustomerId, Guid LocationId, string Description, string Origin,
-        string? Priority, string Status, string? TicketReference, string? PurchaseOrderReference,
+        string? Priority, string Status, DemandExternalReferenceResponse[] ExternalReferences,
         Guid? AssignedToUserId, DateTimeOffset CreatedAtUtc);
     private sealed record DemandUpdateResponse(Guid Id, int ReferenceNumber, int Version, Guid CustomerId,
         Guid LocationId, string Description, string Origin, string? Priority, string Status,
-        string? TicketReference, string? PurchaseOrderReference, Guid? AssignedToUserId);
+        DemandExternalReferenceResponse[] ExternalReferences, Guid? AssignedToUserId);
     private sealed record DemandPageResponse(DemandListItemResponse[] Items, int Page, int PageSize, int TotalCount);
     private sealed record DemandListItemResponse(Guid Id, int ReferenceNumber, Guid CustomerId, string CustomerName, Guid LocationId,
         string LocationName, string Description, string Origin, string? Priority, string Status,
-        string? TicketReference, string? PurchaseOrderReference, Guid? AssignedToUserId,
-        string? AssignedToDisplayName, DateTimeOffset CreatedAtUtc);
+        Guid? AssignedToUserId, string? AssignedToDisplayName, DateTimeOffset CreatedAtUtc);
     private sealed record DemandDetailsResponse(Guid Id, int ReferenceNumber, int Version, Guid CustomerId, string CustomerName, Guid LocationId,
         string LocationName, string Description, string Origin, string? Priority, string Status,
-        string? TicketReference, string? PurchaseOrderReference, Guid? AssignedToUserId,
+        DemandExternalReferenceResponse[] ExternalReferences, Guid? AssignedToUserId,
         string? AssignedToDisplayName, Guid CreatedByUserId, string CreatedByDisplayName,
         DateTimeOffset CreatedAtUtc, DemandActivityResponse[] Activities);
+    private sealed record DemandExternalReferenceResponse(string Type, string Value);
     private sealed record DemandActivityResponse(Guid Id, Guid AuthorUserId, string AuthorDisplayName,
         string EventType, string Description, DateTimeOffset OccurredAtUtc);
 }

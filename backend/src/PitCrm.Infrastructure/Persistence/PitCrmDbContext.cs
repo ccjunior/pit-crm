@@ -19,6 +19,7 @@ public sealed class PitCrmDbContext(
     public DbSet<CustomerLocation> CustomerLocations => Set<CustomerLocation>();
     public DbSet<CustomerContact> CustomerContacts => Set<CustomerContact>();
     public DbSet<Demand> Demands => Set<Demand>();
+    public DbSet<DemandExternalReference> DemandExternalReferences => Set<DemandExternalReference>();
     public DbSet<DemandActivity> DemandActivities => Set<DemandActivity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -143,8 +144,6 @@ public sealed class PitCrmDbContext(
             demand.Property(value => value.Origin).HasMaxLength(30).IsRequired();
             demand.Property(value => value.Priority).HasMaxLength(20);
             demand.Property(value => value.Status).HasMaxLength(30).IsRequired();
-            demand.Property(value => value.TicketReference).HasMaxLength(100);
-            demand.Property(value => value.PurchaseOrderReference).HasMaxLength(100);
             demand.Property(value => value.CreatedAtUtc).IsRequired();
             demand.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
                 .IsRequired().OnDelete(DeleteBehavior.Restrict);
@@ -161,6 +160,19 @@ public sealed class PitCrmDbContext(
             demand.HasIndex(value => new { value.OrganizationId, value.LocationId });
             demand.HasIndex(value => new { value.OrganizationId, value.AssignedToUserId });
             demand.HasIndex(value => new { value.OrganizationId, value.ReferenceNumber }).IsUnique();
+        });
+
+        builder.Entity<DemandExternalReference>(reference =>
+        {
+            reference.ToTable("DemandExternalReferences");
+            reference.HasKey(value => value.Id);
+            reference.Property(value => value.Type).HasMaxLength(50).IsRequired();
+            reference.Property(value => value.Value).HasMaxLength(100).IsRequired();
+            reference.HasOne<Demand>().WithMany(value => value.ExternalReferences)
+                .HasForeignKey(value => new { value.OrganizationId, value.DemandId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id })
+                .IsRequired().OnDelete(DeleteBehavior.Cascade);
+            reference.HasIndex(value => new { value.OrganizationId, value.DemandId });
         });
 
         builder.Entity<DemandActivity>(activity =>

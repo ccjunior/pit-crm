@@ -59,8 +59,16 @@ public sealed class PersistenceDemandStore(PitCrmDbContext dbContext) : IDemandS
                 user.OrganizationId == organizationId && user.Id == assigneeId && user.IsActive, cancellationToken))
             return new DemandUpdateResult(null, DemandUpdateFailure.AssigneeNotEligible);
 
+        await dbContext.Entry(demand).Collection(item => item.ExternalReferences).LoadAsync(cancellationToken);
+        var previousReferences = demand.ExternalReferences.ToArray();
+
         demand.UpdateDetails(update.CustomerId, update.LocationId, update.AssignedToUserId,
-            update.Description, update.Origin, update.Priority, update.TicketReference, update.PurchaseOrderReference);
+            update.Description, update.Origin, update.Priority, update.ExternalReferences);
+        if (update.ExternalReferences is not null)
+        {
+            dbContext.DemandExternalReferences.RemoveRange(previousReferences);
+            dbContext.DemandExternalReferences.AddRange(demand.ExternalReferences);
+        }
         dbContext.DemandActivities.Add(new DemandActivity(Guid.NewGuid(), organizationId, demandId,
             updatedByUserId, "DemandUpdated", "Dados básicos da demanda atualizados.", occurredAtUtc));
 
@@ -102,8 +110,9 @@ public sealed class PersistenceDemandStore(PitCrmDbContext dbContext) : IDemandS
                 (isDemandId && demand.Id == demandId)
                 || (isReferenceNumber && demand.ReferenceNumber == referenceNumber)
                 || EF.Functions.ILike(demand.Description, pattern, "\\")
-                || (demand.TicketReference != null && EF.Functions.ILike(demand.TicketReference, pattern, "\\"))
-                || (demand.PurchaseOrderReference != null && EF.Functions.ILike(demand.PurchaseOrderReference, pattern, "\\")));
+                || demand.ExternalReferences.Any(reference =>
+                    EF.Functions.ILike(reference.Type, pattern, "\\")
+                    || EF.Functions.ILike(reference.Value, pattern, "\\")));
         }
 
         var totalCount = await demands.CountAsync(cancellationToken);
@@ -129,8 +138,7 @@ public sealed class PersistenceDemandStore(PitCrmDbContext dbContext) : IDemandS
             .Select(item => new DemandListItemDto(item.Demand.Id, item.Demand.ReferenceNumber,
                 item.Demand.CustomerId, item.CustomerName, item.Demand.LocationId, item.LocationName,
                 item.Demand.Description, item.Demand.Origin, item.Demand.Priority, item.Demand.Status,
-                item.Demand.TicketReference, item.Demand.PurchaseOrderReference, item.Demand.AssignedToUserId,
-                item.AssigneeName, item.Demand.CreatedAtUtc))
+                item.Demand.AssignedToUserId, item.AssigneeName, item.Demand.CreatedAtUtc))
             .ToListAsync(cancellationToken);
 
         return new DemandSearchResult(items, totalCount);
@@ -143,7 +151,7 @@ public sealed class PersistenceDemandStore(PitCrmDbContext dbContext) : IDemandS
             .Select(item => new
             {
                 item.Id, item.ReferenceNumber, item.Version, item.CustomerId, item.LocationId, item.Description, item.Origin, item.Priority,
-                item.Status, item.TicketReference, item.PurchaseOrderReference, item.AssignedToUserId,
+                item.Status, item.AssignedToUserId,
                 item.CreatedByUserId, item.CreatedAtUtc
             })
             .SingleOrDefaultAsync(cancellationToken);
@@ -178,9 +186,15 @@ public sealed class PersistenceDemandStore(PitCrmDbContext dbContext) : IDemandS
                 activity.EventType, activity.Description, activity.OccurredAtUtc))
             .ToListAsync(cancellationToken);
 
+        var externalReferences = await dbContext.DemandExternalReferences.AsNoTracking()
+            .Where(reference => reference.OrganizationId == organizationId && reference.DemandId == demandId)
+            .OrderBy(reference => reference.Type).ThenBy(reference => reference.Value).ThenBy(reference => reference.Id)
+            .Select(reference => new DemandExternalReferenceDto(reference.Type, reference.Value))
+            .ToListAsync(cancellationToken);
+
         return new DemandDetailsDto(demand.Id, demand.ReferenceNumber, demand.Version, demand.CustomerId, customerName, demand.LocationId,
             locationName, demand.Description, demand.Origin, demand.Priority, demand.Status,
-            demand.TicketReference, demand.PurchaseOrderReference, demand.AssignedToUserId,
-            assignedToDisplayName, demand.CreatedByUserId, createdByDisplayName, demand.CreatedAtUtc, activities);
+            externalReferences, demand.AssignedToUserId, assignedToDisplayName,
+            demand.CreatedByUserId, createdByDisplayName, demand.CreatedAtUtc, activities);
     }
 }

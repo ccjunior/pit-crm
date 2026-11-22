@@ -85,8 +85,14 @@ describe('NewDemandPage', () => {
     }]);
     page.form.patchValue({
       locationId: 'location-a', description: 'Manutenção solicitada pelo cliente', origin: 'WhatsApp',
-      assignedToUserId: '', ticketReference: '', purchaseOrderReference: '', priority: 'Média',
+      assignedToUserId: '', priority: 'Média',
     });
+    page.addExternalReference();
+    page.updateExternalReference(0, 'type', 'Chamado/OS');
+    page.updateExternalReference(0, 'value', 'CH-15');
+    page.addExternalReference();
+    page.updateExternalReference(1, 'type', 'Código do Cliente');
+    page.updateExternalReference(1, 'value', 'REF-9');
     page.submit();
     page.submit();
     const request = http.expectOne('/api/demands');
@@ -94,11 +100,12 @@ describe('NewDemandPage', () => {
     expect(request.request.headers.get('X-CSRF-TOKEN')).toBe('csrf-value');
     expect(request.request.body).toEqual({
       customerId: 'customer-a', locationId: 'location-a', description: 'Manutenção solicitada pelo cliente',
-      origin: 'WhatsApp', assignedToUserId: null, ticketReference: null, purchaseOrderReference: null, priority: 'Média',
+      origin: 'WhatsApp', assignedToUserId: null,
+      externalReferences: [{ type: 'Chamado/OS', value: 'CH-15' }, { type: 'Código do Cliente', value: 'REF-9' }], priority: 'Média',
     });
     request.flush({ id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', locationId: 'location-a',
       description: 'Manutenção solicitada pelo cliente', origin: 'WhatsApp', priority: 'Média', status: 'Recebida',
-      ticketReference: null, purchaseOrderReference: null, assignedToUserId: null,
+      externalReferences: [{ type: 'Chamado/OS', value: 'CH-15' }, { type: 'Código do Cliente', value: 'REF-9' }], assignedToUserId: null,
       createdAtUtc: '2026-11-05T12:00:00Z' });
     expect(page.created()?.id).toBe('demand-a');
     expect(page.created()?.status).toBe('Recebida');
@@ -120,12 +127,30 @@ describe('NewDemandPage', () => {
     expect(page.submitError()).toContain('Seus dados continuam preenchidos');
   });
 
+  it('requires both type and value when an external reference row is partially filled', () => {
+    const page = fixture.componentInstance;
+    page.form.patchValue({ customerId: 'customer-a' });
+    page.onCustomerChange();
+    http.expectOne('/api/customers/customer-a/locations').flush([{
+      id: 'location-a', customerId: 'customer-a', name: 'Unidade Central', address: 'Rua das Flores, 100',
+      instructions: null, createdAtUtc: '2026-11-05T12:00:00Z', updatedAtUtc: '2026-11-05T12:00:00Z',
+    }]);
+    page.form.patchValue({ locationId: 'location-a', description: 'Manutenção solicitada', origin: 'WhatsApp' });
+    page.addExternalReference();
+    page.updateExternalReference(0, 'type', 'Chamado/OS');
+    page.submit();
+    fixture.detectChanges();
+
+    expect(page.externalReferenceErrors()[0]).toContain('Preencha o tipo e o valor');
+    expect(fixture.nativeElement.textContent).toContain('Preencha o tipo e o valor');
+  });
+
   it('prefills a demand, sends its version and keeps edits when the version conflicts', () => {
     const page = fixture.componentInstance;
     page.existingDemand = {
       id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa',
       locationId: 'location-a', locationName: 'Unidade Central', description: 'Descrição atual', origin: 'WhatsApp',
-      priority: 'Alta', status: 'Recebida', ticketReference: 'CH-12', purchaseOrderReference: 'OC-8',
+      priority: 'Alta', status: 'Recebida', externalReferences: [{ type: 'Chamado/OS', value: 'CH-12' }, { type: 'Ordem de Compra', value: 'OC-8' }],
       assignedToUserId: 'user-a', assignedToDisplayName: 'Gestora', createdAtUtc: '2026-11-05T12:00:00Z',
       createdByDisplayName: 'Gestora', activities: [], version: 3,
     };
@@ -139,8 +164,9 @@ describe('NewDemandPage', () => {
     }]);
     expect(page.form.getRawValue()).toMatchObject({
       customerId: 'customer-a', locationId: 'location-a', description: 'Descrição atual', origin: 'WhatsApp',
-      assignedToUserId: 'user-a', ticketReference: 'CH-12', purchaseOrderReference: 'OC-8', priority: 'Alta',
+      assignedToUserId: 'user-a', priority: 'Alta',
     });
+    expect(page.externalReferences()).toEqual([{ type: 'Chamado/OS', value: 'CH-12' }, { type: 'Ordem de Compra', value: 'OC-8' }]);
     page.form.controls.description.setValue('Descrição editada');
     page.submit();
     const request = http.expectOne('/api/demands/demand-a');
@@ -148,7 +174,8 @@ describe('NewDemandPage', () => {
     expect(request.request.headers.get('X-CSRF-TOKEN')).toBe('csrf-value');
     expect(request.request.body).toEqual({
       customerId: 'customer-a', locationId: 'location-a', description: 'Descrição editada', origin: 'WhatsApp',
-      assignedToUserId: 'user-a', ticketReference: 'CH-12', purchaseOrderReference: 'OC-8', priority: 'Alta', version: 3,
+      assignedToUserId: 'user-a', externalReferences: [{ type: 'Chamado/OS', value: 'CH-12' }, { type: 'Ordem de Compra', value: 'OC-8' }],
+      priority: 'Alta', version: 3,
     });
     request.flush({ error: 'A demanda foi alterada por outra pessoa.' }, { status: 409, statusText: 'Conflict' });
     expect(page.form.controls.description.value).toBe('Descrição editada');
@@ -161,7 +188,7 @@ describe('NewDemandPage', () => {
     page.existingDemand = {
       id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa',
       locationId: 'location-a', locationName: 'Unidade Central', description: 'Antes', origin: 'Ligação',
-      priority: null, status: 'Recebida', ticketReference: null, purchaseOrderReference: null,
+      priority: null, status: 'Recebida', externalReferences: [],
       assignedToUserId: null, assignedToDisplayName: null, createdAtUtc: '2026-11-05T12:00:00Z',
       createdByDisplayName: 'Gestora', activities: [], version: 3,
     };
@@ -181,7 +208,7 @@ describe('NewDemandPage', () => {
     reload.flush({
       id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa',
       locationId: 'location-a', locationName: 'Unidade Central', description: 'Versão mais recente', origin: 'E-mail',
-      priority: 'Baixa', status: 'Recebida', ticketReference: null, purchaseOrderReference: null,
+      priority: 'Baixa', status: 'Recebida', externalReferences: [],
       assignedToUserId: null, assignedToDisplayName: null, createdAtUtc: '2026-11-05T12:00:00Z', version: 4,
     });
     http.expectOne('/api/customers/customer-a/locations').flush([{

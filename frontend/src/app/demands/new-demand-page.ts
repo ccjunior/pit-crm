@@ -4,7 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { Customer, CustomerApi, CustomerLocation } from '../customers/customer-api';
-import { CreatedDemand, DemandApi, DemandDetails, DemandInput, EligibleAssignee, UpdatedDemand } from './demand-api';
+import { CreatedDemand, DemandApi, DemandDetails, DemandInput, EligibleAssignee, ExternalReferenceInput, UpdatedDemand } from './demand-api';
 
 @Component({
   selector: 'app-new-demand-page',
@@ -28,10 +28,10 @@ export class NewDemandPage implements OnInit {
       typeof control.value === 'string' && control.value.trim() ? null : { required: true }]],
     origin: ['', Validators.required],
     assignedToUserId: [''],
-    ticketReference: ['', Validators.maxLength(100)],
-    purchaseOrderReference: ['', Validators.maxLength(100)],
     priority: [''],
   });
+  readonly externalReferences = signal<ExternalReferenceInput[]>([]);
+  readonly externalReferenceTypes = ['Chamado/OS', 'Ordem de Compra', 'Código do Cliente', 'Contrato', 'Outro'];
   readonly customerSearch = this.formBuilder.nonNullable.control('');
   readonly customers = signal<Customer[]>([]);
   readonly totalCustomerMatches = signal(0);
@@ -49,6 +49,7 @@ export class NewDemandPage implements OnInit {
   readonly pageError = signal('');
   readonly submitError = signal('');
   readonly fieldErrors = signal<Record<string, string[]>>({});
+  readonly externalReferenceErrors = signal<Record<number, string>>({});
   readonly created = signal<CreatedDemand | null>(null);
   private customerSearchRequestId = 0;
   private locationRequestId = 0;
@@ -198,10 +199,10 @@ export class NewDemandPage implements OnInit {
       description: demand.description,
       origin: demand.origin,
       assignedToUserId: demand.assignedToUserId ?? '',
-      ticketReference: demand.ticketReference ?? '',
-      purchaseOrderReference: demand.purchaseOrderReference ?? '',
       priority: demand.priority ?? '',
     });
+    this.externalReferences.set(demand.externalReferences.map(reference => ({ ...reference })));
+    this.externalReferenceErrors.set({});
     this.customerSearch.setValue(demand.customerName);
     this.loadLocations(demand.customerId, demand.locationId);
   }
@@ -251,7 +252,8 @@ export class NewDemandPage implements OnInit {
     this.submitted.set(true);
     this.submitError.set('');
     this.fieldErrors.set({});
-    if (this.submitting() || this.form.invalid || !this.form.controls.locationId.value) {
+    const referencesValid = this.validateExternalReferences();
+    if (this.submitting() || this.form.invalid || !this.form.controls.locationId.value || !referencesValid) {
       this.form.markAllAsTouched();
       this.customerPickerOpen.set(false);
       return;
@@ -263,8 +265,8 @@ export class NewDemandPage implements OnInit {
       description: values.description.trim(),
       origin: values.origin,
       assignedToUserId: values.assignedToUserId || null,
-      ticketReference: values.ticketReference.trim() || null,
-      purchaseOrderReference: values.purchaseOrderReference.trim() || null,
+      externalReferences: this.externalReferences().filter(reference => reference.type.trim() && reference.value.trim())
+        .map(reference => ({ type: reference.type.trim(), value: reference.value.trim() })),
       priority: values.priority || null,
     };
     this.submitting.set(true);
@@ -286,6 +288,41 @@ export class NewDemandPage implements OnInit {
       },
       error: error => this.handleSaveError(error),
     });
+  }
+
+  addExternalReference(): void {
+    this.externalReferences.update(references => [...references, { type: '', value: '' }]);
+  }
+
+  updateExternalReference(index: number, field: keyof ExternalReferenceInput, value: string): void {
+    this.externalReferences.update(references => references.map((reference, currentIndex) =>
+      currentIndex === index ? { ...reference, [field]: value } : reference));
+    this.externalReferenceErrors.update(errors => {
+      const next = { ...errors };
+      delete next[index];
+      return next;
+    });
+  }
+
+  removeExternalReference(index: number): void {
+    this.externalReferences.update(references => references.filter((_, currentIndex) => currentIndex !== index));
+    this.externalReferenceErrors.update(errors => Object.fromEntries(Object.entries(errors)
+      .filter(([key]) => Number(key) !== index)
+      .map(([key, value]) => [Number(key) > index ? Number(key) - 1 : Number(key), value])));
+  }
+
+  private validateExternalReferences(): boolean {
+    const errors: Record<number, string> = {};
+    this.externalReferences().forEach((reference, index) => {
+      const hasType = !!reference.type.trim();
+      const hasValue = !!reference.value.trim();
+      if (!hasType && !hasValue) return;
+      if (!hasType || !hasValue) errors[index] = 'Preencha o tipo e o valor da referência.';
+      else if (reference.type.trim().length > 50) errors[index] = 'O tipo deve ter até 50 caracteres.';
+      else if (reference.value.trim().length > 100) errors[index] = 'O valor deve ter até 100 caracteres.';
+    });
+    this.externalReferenceErrors.set(errors);
+    return Object.keys(errors).length === 0;
   }
 
   private handleSaveError(error: HttpErrorResponse): void {

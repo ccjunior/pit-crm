@@ -4,14 +4,14 @@ import { HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
 export interface EligibleAssignee { id: string; displayName: string; }
+export interface ExternalReferenceInput { type: string; value: string; }
 export interface DemandInput {
   customerId: string;
   locationId: string;
   description: string;
   origin: string;
   assignedToUserId: string | null;
-  ticketReference: string | null;
-  purchaseOrderReference: string | null;
+  externalReferences: ExternalReferenceInput[];
   priority: string | null;
 }
 export interface DemandUpdateInput extends DemandInput {
@@ -26,16 +26,16 @@ export interface DemandFields {
   origin: string;
   priority: string | null;
   status: string;
-  ticketReference: string | null;
-  purchaseOrderReference: string | null;
   assignedToUserId: string | null;
 }
 export interface CreatedDemand extends DemandFields {
   version: number;
   createdAtUtc: string;
+  externalReferences: ExternalReferenceInput[];
 }
 export interface UpdatedDemand extends DemandFields {
   version: number;
+  externalReferences: ExternalReferenceInput[];
 }
 export interface DemandListItem extends DemandFields {
   customerName: string;
@@ -53,6 +53,7 @@ export interface DemandActivity {
 export interface DemandDetails extends DemandListItem {
   version: number;
   createdByDisplayName: string;
+  externalReferences: ExternalReferenceInput[];
   activities: DemandActivity[];
 }
 export interface DemandPage {
