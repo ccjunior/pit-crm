@@ -106,6 +106,7 @@ export class ProposalsPage implements OnInit {
       this.error.set('Informe o nome do prospect ou selecione um cliente existente.');
       return;
     }
+    if (existingCustomer) this.createForm.controls.prospectName.updateValueAndValidity();
     this.createForm.markAllAsTouched(); if (this.createForm.invalid || this.saving()) return;
     const input = { customerId: value.customerId || null, prospectName: existingCustomer ? null : value.prospectName.trim(),
       prospectContactName: existingCustomer ? null : value.contactName.trim() || null, prospectEmail: existingCustomer ? null : value.email.trim() || null,

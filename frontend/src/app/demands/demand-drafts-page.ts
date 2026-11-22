@@ -3,7 +3,7 @@ import { HttpClient } from '@angular/common/http';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
-import { finalize } from 'rxjs';
+import { finalize, switchMap, tap } from 'rxjs';
 import { AuthService } from '../core/auth.service';
 import { Customer, CustomerApi, CustomerLocation } from '../customers/customer-api';
 import { EligibleAssignee, DemandApi } from './demand-api';
@@ -58,8 +58,25 @@ export class DemandDraftsPage implements OnInit {
   ensureLocationsLoaded(): void { const customerId = this.form.controls.customerId.value; if (customerId && !this.locations().length) this.loadLocationsForCustomer(customerId, this.form.controls.locationId.value || null); }
   private loadLocationsForCustomer(customerId: string, selectedId: string | null): void { this.customerApi.locations(customerId).subscribe({ next: result => { this.locations.set(result); if (selectedId) this.form.controls.locationId.setValue(selectedId); }, error: error => this.handleError(error) }); }
   total(draft: DraftDetails): number { return draft.items.reduce((sum, item) => sum + item.amount, 0); }
-  save(): void { const draft = this.selected(); if (!draft) return; this.form.markAllAsTouched(); if (this.form.invalid) return; const value = this.form.getRawValue(); this.mutate(this.http.put<DraftDetails>(`/api/demand-drafts/${draft.id}`, { ...value, customerId: value.customerId || null, locationId: value.locationId || null, priority: value.priority || null, assignedToUserId: value.assignedToUserId || null }), 'Rascunho salvo.'); }
-  convert(): void { const draft = this.selected(); if (!draft) return; const value = this.form.getRawValue(); if (this.form.invalid) { this.form.markAllAsTouched(); return; } this.saving.set(true); this.error.set(''); this.http.put<DraftDetails>(`/api/demand-drafts/${draft.id}`, { ...value, customerId: value.customerId || null, locationId: value.locationId || null, priority: value.priority || null, assignedToUserId: value.assignedToUserId || null }).pipe(finalize(() => this.saving.set(false))).subscribe({ next: updated => this.http.post<{ demandId: string }>(`/api/demand-drafts/${draft.id}/convert`, { version: updated.version }).subscribe({ next: result => { this.selected.set(null); this.success.set(`Demanda criada com sucesso (${result.demandId}).`); this.load(); }, error: error => this.handleError(error) }), error: error => this.handleError(error) }); }
+  save(): void { const draft = this.selected(); if (!draft || this.saving()) return; this.form.markAllAsTouched(); if (this.form.invalid) return; const value = this.form.getRawValue(); this.mutate(this.http.put<DraftDetails>(`/api/demand-drafts/${draft.id}`, { ...value, customerId: value.customerId || null, locationId: value.locationId || null, priority: value.priority || null, assignedToUserId: value.assignedToUserId || null }), 'Rascunho salvo.'); }
+  convert(): void {
+    const draft = this.selected();
+    if (!draft || this.saving()) return;
+    const value = this.form.getRawValue();
+    if (this.form.invalid) { this.form.markAllAsTouched(); return; }
+    this.saving.set(true); this.error.set(''); this.success.set('');
+    this.http.put<DraftDetails>(`/api/demand-drafts/${draft.id}`, { ...value,
+      customerId: value.customerId || null, locationId: value.locationId || null,
+      priority: value.priority || null, assignedToUserId: value.assignedToUserId || null }).pipe(
+      tap(updated => { this.selected.set(updated); this.form.controls.version.setValue(updated.version); }),
+      switchMap(updated => this.http.post<{ demandId: string }>(
+        `/api/demand-drafts/${draft.id}/convert`, { version: updated.version })),
+      finalize(() => this.saving.set(false)),
+    ).subscribe({
+      next: result => { this.selected.set(null); this.success.set(`Demanda criada com sucesso (${result.demandId}).`); this.load(); },
+      error: error => this.handleError(error),
+    });
+  }
   private mutate(request: import('rxjs').Observable<DraftDetails>, message: string): void { this.saving.set(true); this.error.set(''); request.pipe(finalize(() => this.saving.set(false))).subscribe({ next: draft => { this.selected.set(draft); this.form.controls.version.setValue(draft.version); this.success.set(message); this.load(); }, error: error => this.handleError(error) }); }
   private handleError(error: HttpErrorResponse): void { this.error.set(error.status === 403 ? 'Seu perfil não pode vincular este cliente ou local.' : error.status === 409 ? 'O rascunho foi alterado. Recarregue e tente novamente.' : error.status === 400 ? 'Revise os campos e os vínculos obrigatórios.' : 'Não foi possível carregar ou salvar o rascunho.'); }
 }

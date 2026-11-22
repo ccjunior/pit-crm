@@ -13,6 +13,7 @@ Produto da Project IT para gestão comercial e operacional de empresas de constr
 - [Skills locais, origem e adaptações](docs/06-SKILLS-E-ORIGEM.md)
 - [Padrão de telas de cadastro e edição](docs/07-PADRAO-DE-INTERFACE.md)
 - [Visão geral para revisão especializada](docs/08-OVERVIEW-PARA-REVISAO-ESPECIALISTA.md)
+- [Evolução do módulo comercial](docs/09-ESPECIFICACAO-MODULO-COMERCIAL.md)
 - [Decisões arquiteturais](docs/decisions/README.md)
 
 ## Orientação dos agentes

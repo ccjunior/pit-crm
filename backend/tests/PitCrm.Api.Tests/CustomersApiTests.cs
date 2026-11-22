@@ -637,6 +637,7 @@ public sealed class CustomersApiTests
                 (await adminClient.GetAsync("/api/customers?page=1&pageSize=101")).StatusCode);
 
             await VerifyCommercialConversionAsync(managerClient, operatorClient, foreignClient, created.Id, location.Id);
+            await VerifyProspectRevisionAsync(managerClient, operatorClient, created.Id, location.Id);
         }
         finally
         {
@@ -664,12 +665,30 @@ public sealed class CustomersApiTests
         var proposalPath = $"/api/proposals/{proposal.Id}";
         using var foreignRead = await otherOrganization.GetAsync(proposalPath);
         Assert.Equal(HttpStatusCode.NotFound, foreignRead.StatusCode);
+        using var operatorRead = await operatorClient.GetAsync(proposalPath);
+        Assert.Equal(HttpStatusCode.Forbidden, operatorRead.StatusCode);
+        using var operatorList = await operatorClient.GetAsync("/api/proposals");
+        Assert.Equal(HttpStatusCode.Forbidden, operatorList.StatusCode);
+        var foreignList = await otherOrganization.GetFromJsonAsync<ProposalPageDto>("/api/proposals");
+        Assert.DoesNotContain(foreignList!.Items, item => item.Id == proposal.Id);
+        using var foreignUpdate = await PutJsonAsync(otherOrganization, proposalPath,
+            new { proposal.Version, customerId, origin = "E-mail", description = "Tentativa cruzada" });
+        Assert.Equal(HttpStatusCode.NotFound, foreignUpdate.StatusCode);
+        using var foreignStatus = await PostJsonAsync(otherOrganization, proposalPath + "/status",
+            new { proposal.Version, status = CommercialRequest.Evaluating });
+        Assert.Equal(HttpStatusCode.NotFound, foreignStatus.StatusCode);
+        using var operatorStatus = await PostJsonAsync(operatorClient, proposalPath + "/status",
+            new { proposal.Version, status = CommercialRequest.Evaluating });
+        Assert.Equal(HttpStatusCode.Forbidden, operatorStatus.StatusCode);
 
         using var evaluated = await PostJsonAsync(manager, proposalPath + "/status",
             new { proposal.Version, status = CommercialRequest.Evaluating });
         evaluated.EnsureSuccessStatusCode();
         proposal = (await evaluated.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
 
+        using var foreignRevision = await PostJsonAsync(otherOrganization, proposalPath + "/revisions",
+            new { proposal.Version, items = new[] { new { description = "Tentativa", amount = 1m } } });
+        Assert.Equal(HttpStatusCode.NotFound, foreignRevision.StatusCode);
         using var revised = await PostJsonAsync(manager, proposalPath + "/revisions",
             new { proposal.Version, items = new[] { new { description = "Pintura", amount = 120.50m } } });
         revised.EnsureSuccessStatusCode();
@@ -678,6 +697,9 @@ public sealed class CustomersApiTests
         var item = Assert.Single(revision.Items);
 
         var sentAtUtc = DateTimeOffset.UtcNow.AddMinutes(-10);
+        using var foreignSend = await PostJsonAsync(otherOrganization, proposalPath + "/send",
+            new { proposal.Version, revisionId = revision.Id, channel = "Email", sentAtUtc });
+        Assert.Equal(HttpStatusCode.NotFound, foreignSend.StatusCode);
         using var sent = await PostJsonAsync(manager, proposalPath + "/send",
             new { proposal.Version, revisionId = revision.Id, channel = "Email", sentAtUtc });
         sent.EnsureSuccessStatusCode();
@@ -688,6 +710,8 @@ public sealed class CustomersApiTests
         var approvalPath = proposalPath + "/approve";
         using var foreignApproval = await PostJsonAsync(otherOrganization, approvalPath, approval);
         Assert.Equal(HttpStatusCode.NotFound, foreignApproval.StatusCode);
+        using var deniedApproval = await PostJsonAsync(operatorClient, approvalPath, approval);
+        Assert.Equal(HttpStatusCode.Forbidden, deniedApproval.StatusCode);
 
         var concurrent = await Task.WhenAll(PostJsonAsync(manager, approvalPath, approval),
             PostJsonAsync(manager, approvalPath, approval));
@@ -704,7 +728,17 @@ public sealed class CustomersApiTests
         var draftPath = $"/api/demand-drafts/{draftId}";
         using var foreignDraft = await otherOrganization.GetAsync(draftPath);
         Assert.Equal(HttpStatusCode.NotFound, foreignDraft.StatusCode);
+        var foreignDrafts = await otherOrganization.GetFromJsonAsync<JsonElement>("/api/demand-drafts");
+        Assert.DoesNotContain(foreignDrafts.GetProperty("items").EnumerateArray(),
+            value => value.GetProperty("id").GetGuid() == draftId);
         var draft = await operatorClient.GetFromJsonAsync<JsonElement>(draftPath);
+        using var foreignDraftUpdate = await PutJsonAsync(otherOrganization, draftPath,
+            new { version = draft.GetProperty("version").GetInt32(), customerId, locationId,
+                description = request.description, origin = request.origin });
+        Assert.Equal(HttpStatusCode.NotFound, foreignDraftUpdate.StatusCode);
+        using var foreignConvert = await PostJsonAsync(otherOrganization, draftPath + "/convert",
+            new { version = draft.GetProperty("version").GetInt32() });
+        Assert.Equal(HttpStatusCode.NotFound, foreignConvert.StatusCode);
         using var incomplete = await PostJsonAsync(operatorClient, draftPath + "/convert",
             new { version = draft.GetProperty("version").GetInt32() });
         Assert.Equal(HttpStatusCode.BadRequest, incomplete.StatusCode);
@@ -726,6 +760,66 @@ public sealed class CustomersApiTests
         Assert.Equal(item.Id, subitem.GetProperty("sourceProposalItemId").GetGuid());
         Assert.Equal(item.Description, subitem.GetProperty("description").GetString());
         Assert.Equal(item.Amount, subitem.GetProperty("amount").GetDecimal());
+    }
+
+    private static async Task VerifyProspectRevisionAsync(HttpClient manager, HttpClient operatorClient,
+        Guid customerId, Guid locationId)
+    {
+        using var created = await PostJsonAsync(manager, "/api/proposals",
+            new { prospectName = "Prospect Teste", origin = "E-mail", description = "Reforma" });
+        created.EnsureSuccessStatusCode();
+        var proposal = (await created.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        var path = $"/api/proposals/{proposal.Id}";
+        using var evaluated = await PostJsonAsync(manager, path + "/status",
+            new { proposal.Version, status = CommercialRequest.Evaluating });
+        evaluated.EnsureSuccessStatusCode();
+        proposal = (await evaluated.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        using var firstRevision = await PostJsonAsync(manager, path + "/revisions",
+            new { proposal.Version, items = new[] { new { description = "Serviço inicial", amount = 100m } } });
+        firstRevision.EnsureSuccessStatusCode();
+        proposal = (await firstRevision.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        var revision = Assert.Single(proposal.Revisions);
+        var timestamp = DateTimeOffset.UtcNow;
+        using var sent = await PostJsonAsync(manager, path + "/send",
+            new { proposal.Version, revisionId = revision.Id, channel = "E-mail", sentAtUtc = timestamp });
+        sent.EnsureSuccessStatusCode();
+        proposal = (await sent.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        using var approved = await PostJsonAsync(manager, path + "/approve",
+            new { proposal.Version, revisionId = revision.Id, approverName = "Cliente", channel = "E-mail", approvedAtUtc = timestamp });
+        approved.EnsureSuccessStatusCode();
+        var approval = await approved.Content.ReadFromJsonAsync<JsonElement>();
+        var draftId = approval.GetProperty("demandDraftId").GetGuid();
+        proposal = (await manager.GetFromJsonAsync<ProposalDetailsDto>(path))!;
+
+        using var secondRevision = await PostJsonAsync(manager, path + "/revisions",
+            new { proposal.Version, items = new[] { new { description = "Serviço revisado", amount = 150m } } });
+        secondRevision.EnsureSuccessStatusCode();
+        proposal = (await secondRevision.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        Assert.Equal(2, proposal.Revisions.Count);
+        revision = proposal.Revisions.Single(value => value.Number == 2);
+        using var secondSend = await PostJsonAsync(manager, path + "/send",
+            new { proposal.Version, revisionId = revision.Id, channel = "E-mail", sentAtUtc = timestamp });
+        secondSend.EnsureSuccessStatusCode();
+        proposal = (await secondSend.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        using var secondApproval = await PostJsonAsync(manager, path + "/approve",
+            new { proposal.Version, revisionId = revision.Id, approverName = "Cliente", channel = "E-mail", approvedAtUtc = timestamp });
+        secondApproval.EnsureSuccessStatusCode();
+        Assert.Equal(draftId, (await secondApproval.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("demandDraftId").GetGuid());
+
+        var draftPath = $"/api/demand-drafts/{draftId}";
+        var draft = await operatorClient.GetFromJsonAsync<JsonElement>(draftPath);
+        var item = Assert.Single(draft.GetProperty("items").EnumerateArray());
+        Assert.Equal("Serviço revisado", item.GetProperty("description").GetString());
+        using var denied = await PutJsonAsync(operatorClient, draftPath,
+            new { version = draft.GetProperty("version").GetInt32(), customerId, locationId, description = "Reforma", origin = "E-mail" });
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        using var linked = await PutJsonAsync(manager, draftPath,
+            new { version = draft.GetProperty("version").GetInt32(), customerId, locationId, description = "Reforma", origin = "E-mail" });
+        linked.EnsureSuccessStatusCode();
+        draft = await linked.Content.ReadFromJsonAsync<JsonElement>();
+        using var converted = await PostJsonAsync(operatorClient, draftPath + "/convert",
+            new { version = draft.GetProperty("version").GetInt32() });
+        converted.EnsureSuccessStatusCode();
     }
 
     private static async Task AddUserAsync(

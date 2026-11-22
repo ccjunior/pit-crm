@@ -2,7 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { CanActivateFn, ActivatedRouteSnapshot, provideRouter, Router, RouterStateSnapshot } from '@angular/router';
 import { firstValueFrom, isObservable, of } from 'rxjs';
 import { AuthService, AuthSession } from './auth.service';
-import { authGuard, initialPasswordChangeGuard, manageTeamGuard } from './auth.guard';
+import { authGuard, initialPasswordChangeGuard, manageProposalsGuard, manageTeamGuard } from './auth.guard';
 
 const session = (roles: string[], mustChangePassword = false): AuthSession => ({
   id: 'user-a', displayName: 'Pessoa de Teste', email: 'person@example.invalid',
@@ -50,5 +50,16 @@ describe('authentication route guards', () => {
     expect(await evaluate(manageTeamGuard)).toEqual(router.parseUrl('/'));
     currentSession = null;
     expect(await evaluate(manageTeamGuard)).toEqual(router.parseUrl('/'));
+  });
+
+  it('allows Administrador and Gestor to access Propostas and redirects Operador', async () => {
+    currentSession = session(['Administrador']);
+    expect(await evaluate(manageProposalsGuard)).toBe(true);
+    currentSession = session(['Gestor']);
+    expect(await evaluate(manageProposalsGuard)).toBe(true);
+    currentSession = session(['Operador']);
+    expect(await evaluate(manageProposalsGuard)).toEqual(router.parseUrl('/'));
+    currentSession = null;
+    expect(await evaluate(manageProposalsGuard)).toEqual(router.parseUrl('/'));
   });
 });
