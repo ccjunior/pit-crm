@@ -58,16 +58,34 @@ public sealed class PersistenceDemandStore(PitCrmDbContext dbContext) : IDemandS
         if (update.AssignedToUserId is { } assigneeId && !await dbContext.Users.AnyAsync(user =>
                 user.OrganizationId == organizationId && user.Id == assigneeId && user.IsActive, cancellationToken))
             return new DemandUpdateResult(null, DemandUpdateFailure.AssigneeNotEligible);
+        var sourceItemIds = update.Subitems?.Where(item => item.SourceProposalItemId is not null)
+            .Select(item => item.SourceProposalItemId!.Value).Distinct().ToArray() ?? [];
+        if (sourceItemIds.Length > 0)
+        {
+            if (demand.SourceProposalRevisionId is not { } sourceRevisionId)
+                return new DemandUpdateResult(null, DemandUpdateFailure.InvalidSubitemSource);
+            var validSourceItemCount = await dbContext.ProposalItems.CountAsync(item => item.OrganizationId == organizationId
+                && item.ProposalRevisionId == sourceRevisionId && sourceItemIds.Contains(item.Id), cancellationToken);
+            if (validSourceItemCount != sourceItemIds.Length)
+                return new DemandUpdateResult(null, DemandUpdateFailure.InvalidSubitemSource);
+        }
 
         await dbContext.Entry(demand).Collection(item => item.ExternalReferences).LoadAsync(cancellationToken);
+        await dbContext.Entry(demand).Collection(item => item.Subitems).LoadAsync(cancellationToken);
         var previousReferences = demand.ExternalReferences.ToArray();
+        var previousSubitems = demand.Subitems.ToArray();
 
         demand.UpdateDetails(update.CustomerId, update.LocationId, update.AssignedToUserId,
-            update.Description, update.Origin, update.Priority, update.ExternalReferences);
+            update.Description, update.Origin, update.Priority, update.ExternalReferences, update.Subitems);
         if (update.ExternalReferences is not null)
         {
             dbContext.DemandExternalReferences.RemoveRange(previousReferences);
             dbContext.DemandExternalReferences.AddRange(demand.ExternalReferences);
+        }
+        if (update.Subitems is not null)
+        {
+            dbContext.DemandSubitems.RemoveRange(previousSubitems);
+            dbContext.DemandSubitems.AddRange(demand.Subitems);
         }
         dbContext.DemandActivities.Add(new DemandActivity(Guid.NewGuid(), organizationId, demandId,
             updatedByUserId, "DemandUpdated", "Dados básicos da demanda atualizados.", occurredAtUtc));
@@ -191,10 +209,15 @@ public sealed class PersistenceDemandStore(PitCrmDbContext dbContext) : IDemandS
             .OrderBy(reference => reference.Type).ThenBy(reference => reference.Value).ThenBy(reference => reference.Id)
             .Select(reference => new DemandExternalReferenceDto(reference.Type, reference.Value))
             .ToListAsync(cancellationToken);
+        var subitems = await dbContext.DemandSubitems.AsNoTracking()
+            .Where(subitem => subitem.OrganizationId == organizationId && subitem.DemandId == demandId)
+            .OrderBy(subitem => subitem.Position)
+            .Select(subitem => new DemandSubitemDto(subitem.Id, subitem.SourceProposalItemId, subitem.Position, subitem.Description, subitem.Amount))
+            .ToListAsync(cancellationToken);
 
         return new DemandDetailsDto(demand.Id, demand.ReferenceNumber, demand.Version, demand.CustomerId, customerName, demand.LocationId,
             locationName, demand.Description, demand.Origin, demand.Priority, demand.Status,
-            externalReferences, demand.AssignedToUserId, assignedToDisplayName,
+            externalReferences, subitems, demand.AssignedToUserId, assignedToDisplayName,
             demand.CreatedByUserId, createdByDisplayName, demand.CreatedAtUtc, activities);
     }
 }

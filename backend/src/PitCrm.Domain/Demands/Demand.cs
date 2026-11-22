@@ -6,7 +6,8 @@ public sealed class Demand
 
     public Demand(Guid id, Guid organizationId, Guid customerId, Guid locationId, Guid createdByUserId,
         Guid? assignedToUserId, string description, string origin, string? priority,
-        IEnumerable<(string Type, string Value)>? externalReferences, DateTimeOffset now)
+        IEnumerable<(string Type, string Value)>? externalReferences, DateTimeOffset now,
+        Guid? sourceProposalRevisionId = null, IEnumerable<(string Description, decimal? Amount, Guid? SourceProposalItemId)>? subitems = null)
     {
         if (id == Guid.Empty || organizationId == Guid.Empty || customerId == Guid.Empty || locationId == Guid.Empty || createdByUserId == Guid.Empty)
             throw new ArgumentException("Demand identity and required references cannot be empty.");
@@ -16,12 +17,14 @@ public sealed class Demand
         LocationId = locationId;
         CreatedByUserId = createdByUserId;
         AssignedToUserId = assignedToUserId;
+        SourceProposalRevisionId = sourceProposalRevisionId;
         Description = Required(description, nameof(description), 4000);
         if (!Origins.Contains(origin)) throw new ArgumentOutOfRangeException(nameof(origin));
         if (priority is not null && !Priorities.Contains(priority)) throw new ArgumentOutOfRangeException(nameof(priority));
         Origin = origin;
         Priority = priority;
         ExternalReferences = CreateExternalReferences(externalReferences);
+        Subitems = CreateSubitems(subitems);
         Status = "Recebida";
         Version = 1;
         CreatedAtUtc = NormalizeTimestamp(now);
@@ -41,6 +44,8 @@ public sealed class Demand
     public string? Priority { get; private set; }
     public string Status { get; private set; } = string.Empty;
     public ICollection<DemandExternalReference> ExternalReferences { get; private set; } = new List<DemandExternalReference>();
+    public ICollection<DemandSubitem> Subitems { get; private set; } = new List<DemandSubitem>();
+    public Guid? SourceProposalRevisionId { get; private set; }
     public Guid? AssignedToUserId { get; private set; }
     public Guid CreatedByUserId { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
@@ -53,7 +58,8 @@ public sealed class Demand
     }
 
     public void UpdateDetails(Guid customerId, Guid locationId, Guid? assignedToUserId, string description,
-        string origin, string? priority, IEnumerable<(string Type, string Value)>? externalReferences)
+        string origin, string? priority, IEnumerable<(string Type, string Value)>? externalReferences,
+        IEnumerable<(string Description, decimal? Amount, Guid? SourceProposalItemId)>? subitems = null)
     {
         if (customerId == Guid.Empty || locationId == Guid.Empty)
             throw new ArgumentException("Demand customer and location cannot be empty.");
@@ -71,6 +77,11 @@ public sealed class Demand
         {
             ExternalReferences.Clear();
             foreach (var reference in CreateExternalReferences(externalReferences)) ExternalReferences.Add(reference);
+        }
+        if (subitems is not null)
+        {
+            Subitems.Clear();
+            foreach (var subitem in CreateSubitems(subitems)) Subitems.Add(subitem);
         }
         Version = checked(Version + 1);
     }
@@ -92,6 +103,10 @@ public sealed class Demand
     private List<DemandExternalReference> CreateExternalReferences(IEnumerable<(string Type, string Value)>? references) =>
         references?.Select(reference => new DemandExternalReference(Guid.NewGuid(), OrganizationId, Id,
             reference.Type, reference.Value)).ToList() ?? [];
+
+    private List<DemandSubitem> CreateSubitems(IEnumerable<(string Description, decimal? Amount, Guid? SourceProposalItemId)>? subitems) =>
+        subitems?.Select((item, index) => new DemandSubitem(Guid.NewGuid(), OrganizationId, Id,
+            index + 1, item.Description, item.Amount, item.SourceProposalItemId)).ToList() ?? [];
 
     private static DateTimeOffset NormalizeTimestamp(DateTimeOffset value)
     {

@@ -18,6 +18,16 @@
         <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M5 12h14M5 19h14" /><circle cx="2.5" cy="5" r=".5" /><circle cx="2.5" cy="12" r=".5" /><circle cx="2.5" cy="19" r=".5" /></svg>
         Demandas
       </a>
+      <a class="nav-link" routerLink="/demandas/rascunhos" routerLinkActive="active">
+        <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h7l4 4V20a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 20V5a1.5 1.5 0 0 1 1-1.5z" /><path d="M14 3.5V8h4M9 12h6M9 16h6" /></svg>
+        Rascunhos de demanda
+      </a>
+      @if (auth.session()?.roles?.includes('Administrador') || auth.session()?.roles?.includes('Gestor')) {
+        <a class="nav-link" routerLink="/propostas" routerLinkActive="active">
+          <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h14v15H5z" /><path d="M8 8h8M8 12h5M8 16h3" /><path d="m16 15 1.2 1.2L20 13.5" /></svg>
+          Propostas
+        </a>
+      }
       @if (auth.session()?.roles?.includes('Administrador')) {
         <a class="nav-link" routerLink="/equipe" routerLinkActive="active">
           <svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20v-1.5a5.5 5.5 0 0 1 11 0V20zM17 8h5m-2.5-2.5v5" /></svg>
@@ -51,10 +61,12 @@
       </div>
     </header>
     <nav class="mobile-nav" aria-label="Navegação principal">
-      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Visão geral</a>
-      <a routerLink="/clientes" routerLinkActive="active">Clientes</a>
-      <a routerLink="/demandas" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Demandas</a>
-      @if (auth.session()?.roles?.includes('Administrador')) { <a routerLink="/equipe" routerLinkActive="active">Equipe</a> }
+      <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m3.5 10 8.5-7 8.5 7v10.5h-6v-6h-5v6h-6z" /></svg><span>Visão geral</span></a>
+      <a routerLink="/clientes" routerLinkActive="active"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20v-1.5a5.5 5.5 0 0 1 11 0V20zM16 5.2a3.2 3.2 0 0 1 0 6.2M17.5 14.5a4.9 4.9 0 0 1 3 4.5V20h-4" /></svg><span>Clientes</span></a>
+      <a routerLink="/demandas" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14M5 12h14M5 19h14" /><circle cx="2.5" cy="5" r=".5" /><circle cx="2.5" cy="12" r=".5" /><circle cx="2.5" cy="19" r=".5" /></svg><span>Demandas</span></a>
+      <a routerLink="/demandas/rascunhos" routerLinkActive="active"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h7l4 4V20a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 20V5a1.5 1.5 0 0 1 1-1.5z" /><path d="M14 3.5V8h4M9 12h6M9 16h6" /></svg><span>Rascunhos</span></a>
+      @if (auth.session()?.roles?.includes('Administrador') || auth.session()?.roles?.includes('Gestor')) { <a routerLink="/propostas" routerLinkActive="active"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4.5h14v15H5z" /><path d="M8 8h8M8 12h5M8 16h3" /><path d="m16 15 1.2 1.2L20 13.5" /></svg><span>Propostas</span></a> }
+      @if (auth.session()?.roles?.includes('Administrador')) { <a routerLink="/equipe" routerLinkActive="active"><svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="8" r="3.2" /><path d="M3.5 20v-1.5a5.5 5.5 0 0 1 11 0V20zM17 8h5m-2.5-2.5v5" /></svg><span>Equipe</span></a> }
     </nav>
     @if (signOutError()) {
       <p class="shell-error" role="alert">{{ signOutError() }}</p>

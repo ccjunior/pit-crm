@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { authGuard, initialPasswordChangeGuard, manageTeamGuard } from './core/auth.guard';
+import { authGuard, initialPasswordChangeGuard, manageProposalsGuard, manageTeamGuard } from './core/auth.guard';
 import { LoginPage } from './auth/login-page';
 import { AuthenticatedShell } from './shell/authenticated-shell';
 import { CustomersPage } from './customers/customers-page';
@@ -17,6 +17,8 @@ export const routes: Routes = [
       { path: 'demandas', loadComponent: () => import('./shell/demands-home').then(page => page.DemandsHome) },
       { path: 'clientes', component: CustomersPage },
       { path: 'demandas/nova', component: NewDemandPage },
+      { path: 'propostas', canActivate: [manageProposalsGuard], loadComponent: () => import('./proposals/proposals-page').then(page => page.ProposalsPage) },
+      { path: 'demandas/rascunhos', loadComponent: () => import('./demands/demand-drafts-page').then(page => page.DemandDraftsPage) },
       { path: 'equipe', canActivate: [manageTeamGuard], loadComponent: () => import('./team/team-page').then(page => page.TeamPage) },
     ],
   },

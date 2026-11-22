@@ -33,3 +33,12 @@ export const manageTeamGuard: CanActivateFn = () => {
     catchError(() => of(router.parseUrl('/'))),
   );
 };
+
+export const manageProposalsGuard: CanActivateFn = () => {
+  const auth = inject(AuthService);
+  const router = inject(Router);
+  return auth.restoreSession().pipe(
+    map((session) => session?.roles.some(role => role === 'Administrador' || role === 'Gestor') ? true : router.parseUrl('/')),
+    catchError(() => of(router.parseUrl('/'))),
+  );
+};

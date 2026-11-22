@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { CurrencyPipe, DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
@@ -10,7 +10,7 @@ import { CreatedDemand, DemandApi, DemandDetails, DemandListItem, EligibleAssign
 
 @Component({
   selector: 'app-demands-home',
-  imports: [DatePipe, ReactiveFormsModule, NewDemandPage],
+  imports: [CurrencyPipe, DatePipe, ReactiveFormsModule, NewDemandPage],
   template: `
     <section class="demands-page" aria-labelledby="demands-title">
       <header class="page-heading">
@@ -70,7 +70,7 @@ import { CreatedDemand, DemandApi, DemandDetails, DemandListItem, EligibleAssign
               </div>
             </header>
             <div class="detail-status-row"><span class="status-pill" [attr.data-status]="statusToken(item.status)">{{ item.status }}</span><span [attr.title]="fullDate(item.createdAtUtc)">{{ relativeDate(item.createdAtUtc) }}</span></div>
-            <dl class="detail-list"><div><dt>Local</dt><dd>{{ item.locationName }}</dd></div><div><dt>Origem</dt><dd>{{ item.origin }}</dd></div><div><dt>Prioridade</dt><dd><span class="priority-pill" [attr.data-priority]="priorityToken(item.priority)">{{ item.priority || 'Não definida' }}</span></dd></div><div><dt>Responsável</dt><dd>{{ item.assignedToDisplayName || 'Sem responsável' }}</dd></div><div class="detail-wide"><dt>Referências externas</dt><dd>@if (item.externalReferences.length) { @for (reference of item.externalReferences; track $index) { <span class="demand-external-reference"><strong>{{ reference.type }}</strong> · {{ reference.value }}</span> } } @else { Não informadas }</dd></div><div class="detail-wide"><dt>Descrição</dt><dd>{{ item.description }}</dd></div><div><dt>Criada por</dt><dd>{{ item.createdByDisplayName }}</dd></div></dl>
+            <dl class="detail-list"><div><dt>Local</dt><dd>{{ item.locationName }}</dd></div><div><dt>Origem</dt><dd>{{ item.origin }}</dd></div><div><dt>Prioridade</dt><dd><span class="priority-pill" [attr.data-priority]="priorityToken(item.priority)">{{ item.priority || 'Não definida' }}</span></dd></div><div><dt>Responsável</dt><dd>{{ item.assignedToDisplayName || 'Sem responsável' }}</dd></div><div class="detail-wide"><dt>Referências externas</dt><dd>@if (item.externalReferences.length) { @for (reference of item.externalReferences; track $index) { <span class="demand-external-reference"><strong>{{ reference.type }}</strong> · {{ reference.value }}</span> } } @else { Não informadas }</dd></div><div class="detail-wide"><dt>Descrição</dt><dd>{{ item.description }}</dd></div><div class="detail-wide"><dt>Subitens</dt><dd>@if (item.subitems.length) { @for (subitem of item.subitems; track subitem.id) { <span class="demand-external-reference"><strong>{{ subitem.position }}.</strong> {{ subitem.description }} @if (subitem.amount !== null) { · {{ subitem.amount | currency:'BRL' }} }</span> } } @else { Nenhum subitem registrado }</dd></div><div><dt>Criada por</dt><dd>{{ item.createdByDisplayName }}</dd></div></dl>
             <section class="activity-section"><h3>Atividades</h3>@if (item.activities.length) { <ol>@for (activity of item.activities; track activity.id) { <li><div><strong>{{ activity.description }}</strong><small>{{ activity.authorDisplayName }} · {{ activity.occurredAtUtc | date:'dd/MM/yyyy HH:mm' }}</small></div></li> }</ol> } @else { <p>Nenhuma atividade registrada.</p> }</section>
           </article>
         }

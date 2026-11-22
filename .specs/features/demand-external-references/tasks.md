@@ -17,4 +17,4 @@
 ## Handoff
 
 **Concluídas:** T25.1–T25.4.
-**Dados:** a migração foi exercitada em schema temporário; ainda não foi aplicada ao banco `pitcrm_dev`. Não aplicar a banco compartilhado ou publicado sem autorização específica.
+**Dados:** a migração foi exercitada em schema temporário. Em 21/11/2026, após autorização do usuário para aplicar migrações pendentes no banco local, foi aplicada ao `pitcrm_dev` junto à migração T26. Nenhum banco compartilhado ou publicado foi alterado.

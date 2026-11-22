@@ -5,6 +5,7 @@ using PitCrm.Domain.Organizations;
 using PitCrm.Domain.Customers;
 using PitCrm.Domain.Locations;
 using PitCrm.Domain.Demands;
+using PitCrm.Domain.Proposals;
 using PitCrm.Infrastructure.Identity;
 
 namespace PitCrm.Infrastructure.Persistence;
@@ -21,6 +22,13 @@ public sealed class PitCrmDbContext(
     public DbSet<Demand> Demands => Set<Demand>();
     public DbSet<DemandExternalReference> DemandExternalReferences => Set<DemandExternalReference>();
     public DbSet<DemandActivity> DemandActivities => Set<DemandActivity>();
+    public DbSet<DemandSubitem> DemandSubitems => Set<DemandSubitem>();
+    public DbSet<DemandDraft> DemandDrafts => Set<DemandDraft>();
+    public DbSet<DemandDraftItem> DemandDraftItems => Set<DemandDraftItem>();
+    public DbSet<CommercialRequest> CommercialRequests => Set<CommercialRequest>();
+    public DbSet<ProposalRevision> ProposalRevisions => Set<ProposalRevision>();
+    public DbSet<ProposalItem> ProposalItems => Set<ProposalItem>();
+    public DbSet<CommercialActivity> CommercialActivities => Set<CommercialActivity>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -144,6 +152,7 @@ public sealed class PitCrmDbContext(
             demand.Property(value => value.Origin).HasMaxLength(30).IsRequired();
             demand.Property(value => value.Priority).HasMaxLength(20);
             demand.Property(value => value.Status).HasMaxLength(30).IsRequired();
+            demand.Property(value => value.SourceProposalRevisionId);
             demand.Property(value => value.CreatedAtUtc).IsRequired();
             demand.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
                 .IsRequired().OnDelete(DeleteBehavior.Restrict);
@@ -155,11 +164,151 @@ public sealed class PitCrmDbContext(
                 .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
             demand.HasOne<ApplicationUser>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.AssignedToUserId })
                 .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).OnDelete(DeleteBehavior.Restrict);
+            demand.HasOne<ProposalRevision>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.SourceProposalRevisionId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).OnDelete(DeleteBehavior.Restrict);
             demand.HasIndex(value => new { value.OrganizationId, value.CreatedAtUtc });
             demand.HasIndex(value => new { value.OrganizationId, value.CustomerId });
             demand.HasIndex(value => new { value.OrganizationId, value.LocationId });
             demand.HasIndex(value => new { value.OrganizationId, value.AssignedToUserId });
             demand.HasIndex(value => new { value.OrganizationId, value.ReferenceNumber }).IsUnique();
+            demand.HasIndex(value => new { value.OrganizationId, value.SourceProposalRevisionId }).IsUnique()
+                .HasFilter("\"SourceProposalRevisionId\" IS NOT NULL");
+        });
+
+        builder.Entity<DemandSubitem>(subitem =>
+        {
+            subitem.ToTable("DemandSubitems");
+            subitem.HasKey(value => value.Id);
+            subitem.HasAlternateKey(value => new { value.OrganizationId, value.Id });
+            subitem.Property(value => value.Description).HasMaxLength(1000).IsRequired();
+            subitem.Property(value => value.Amount).HasPrecision(18, 2);
+            subitem.HasOne<Demand>().WithMany(value => value.Subitems)
+                .HasForeignKey(value => new { value.OrganizationId, value.DemandId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Cascade);
+            subitem.HasOne<ProposalItem>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.SourceProposalItemId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).OnDelete(DeleteBehavior.Restrict);
+            subitem.HasIndex(value => new { value.OrganizationId, value.DemandId, value.Position }).IsUnique();
+        });
+
+        builder.Entity<DemandDraft>(draft =>
+        {
+            draft.ToTable("DemandDrafts");
+            draft.HasKey(value => value.Id);
+            draft.HasAlternateKey(value => new { value.OrganizationId, value.Id });
+            draft.Property(value => value.ProspectName).HasMaxLength(200);
+            draft.Property(value => value.Description).HasMaxLength(4000).IsRequired();
+            draft.Property(value => value.Origin).HasMaxLength(30).IsRequired();
+            draft.Property(value => value.Priority).HasMaxLength(20);
+            draft.Property(value => value.State).HasMaxLength(20).IsRequired();
+            draft.Property(value => value.Version).IsConcurrencyToken().IsRequired();
+            draft.Property(value => value.CreatedAtUtc).IsRequired();
+            draft.Property(value => value.UpdatedAtUtc).IsRequired();
+            draft.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
+                .IsRequired().OnDelete(DeleteBehavior.Restrict);
+            draft.HasOne<CommercialRequest>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.ProposalRequestId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            draft.HasOne<ProposalRevision>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.ProposalRevisionId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            draft.HasOne<Customer>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CustomerId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).OnDelete(DeleteBehavior.Restrict);
+            draft.HasOne<CustomerLocation>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CustomerId, value.LocationId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.CustomerId, value.Id }).OnDelete(DeleteBehavior.Restrict);
+            draft.HasOne<ApplicationUser>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CreatedByUserId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            draft.HasOne<Demand>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.ConvertedDemandId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).OnDelete(DeleteBehavior.Restrict);
+            draft.HasIndex(value => new { value.OrganizationId, value.ProposalRequestId }).IsUnique();
+            draft.HasIndex(value => new { value.OrganizationId, value.State, value.CreatedAtUtc });
+            draft.HasIndex(value => new { value.OrganizationId, value.CustomerId });
+        });
+
+        builder.Entity<DemandDraftItem>(item =>
+        {
+            item.ToTable("DemandDraftItems");
+            item.HasKey(value => value.Id);
+            item.Property(value => value.Description).HasMaxLength(1000).IsRequired();
+            item.Property(value => value.Amount).HasPrecision(18, 2).IsRequired();
+            item.HasOne<DemandDraft>().WithMany(value => value.Items)
+                .HasForeignKey(value => new { value.OrganizationId, value.DemandDraftId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Cascade);
+            item.HasIndex(value => new { value.OrganizationId, value.DemandDraftId, value.Position }).IsUnique();
+            item.HasIndex(value => new { value.OrganizationId, value.SourceProposalItemId });
+        });
+
+        builder.Entity<CommercialRequest>(request =>
+        {
+            request.ToTable("CommercialRequests");
+            request.HasKey(value => value.Id);
+            request.HasAlternateKey(value => new { value.OrganizationId, value.Id });
+            request.Property(value => value.ProspectName).HasMaxLength(200);
+            request.Property(value => value.ProspectContactName).HasMaxLength(200);
+            request.Property(value => value.ProspectEmail).HasMaxLength(254);
+            request.Property(value => value.ProspectPhone).HasMaxLength(40);
+            request.Property(value => value.Origin).HasMaxLength(30).IsRequired();
+            request.Property(value => value.Description).HasMaxLength(4000).IsRequired();
+            request.Property(value => value.Status).HasMaxLength(20).IsRequired();
+            request.Property(value => value.OutcomeReason).HasMaxLength(1000);
+            request.Property(value => value.Version).IsConcurrencyToken().IsRequired();
+            request.Property(value => value.CreatedAtUtc).IsRequired();
+            request.Property(value => value.UpdatedAtUtc).IsRequired();
+            request.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
+                .IsRequired().OnDelete(DeleteBehavior.Restrict);
+            request.HasOne<Customer>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CustomerId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).OnDelete(DeleteBehavior.Restrict);
+            request.HasOne<ApplicationUser>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CreatedByUserId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            request.HasIndex(value => new { value.OrganizationId, value.Status, value.UpdatedAtUtc });
+            request.HasIndex(value => new { value.OrganizationId, value.CustomerId });
+        });
+
+        builder.Entity<ProposalRevision>(revision =>
+        {
+            revision.ToTable("ProposalRevisions");
+            revision.HasKey(value => value.Id);
+            revision.HasAlternateKey(value => new { value.OrganizationId, value.Id });
+            revision.Property(value => value.Status).HasMaxLength(20).IsRequired();
+            revision.Property(value => value.Notes).HasMaxLength(4000);
+            revision.Property(value => value.SendChannel).HasMaxLength(50);
+            revision.Property(value => value.ClientApproverName).HasMaxLength(200);
+            revision.Property(value => value.ApprovalChannel).HasMaxLength(50);
+            revision.Property(value => value.ApprovalNotes).HasMaxLength(2000);
+            revision.Property(value => value.CreatedAtUtc).IsRequired();
+            revision.HasOne<CommercialRequest>().WithMany(value => value.Revisions)
+                .HasForeignKey(value => new { value.OrganizationId, value.CommercialRequestId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Cascade);
+            revision.HasOne<ApplicationUser>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CreatedByUserId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            revision.HasOne<ApplicationUser>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.ApprovedByUserId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).OnDelete(DeleteBehavior.Restrict);
+            revision.HasIndex(value => new { value.OrganizationId, value.CommercialRequestId, value.Number }).IsUnique();
+            revision.HasIndex(value => new { value.OrganizationId, value.CommercialRequestId, value.Status });
+        });
+
+        builder.Entity<ProposalItem>(item =>
+        {
+            item.ToTable("ProposalItems");
+            item.HasKey(value => value.Id);
+            item.HasAlternateKey(value => new { value.OrganizationId, value.Id });
+            item.Property(value => value.Description).HasMaxLength(1000).IsRequired();
+            item.Property(value => value.Amount).HasPrecision(18, 2).IsRequired();
+            item.HasOne<ProposalRevision>().WithMany(value => value.Items)
+                .HasForeignKey(value => new { value.OrganizationId, value.ProposalRevisionId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Cascade);
+            item.HasIndex(value => new { value.OrganizationId, value.ProposalRevisionId, value.Position }).IsUnique();
+        });
+
+        builder.Entity<CommercialActivity>(activity =>
+        {
+            activity.ToTable("CommercialActivities");
+            activity.HasKey(value => value.Id);
+            activity.Property(value => value.EventType).HasMaxLength(60).IsRequired();
+            activity.Property(value => value.Description).HasMaxLength(1000).IsRequired();
+            activity.Property(value => value.OccurredAtUtc).IsRequired();
+            activity.HasOne<CommercialRequest>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CommercialRequestId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Cascade);
+            activity.HasOne<ApplicationUser>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.ActorUserId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            activity.HasIndex(value => new { value.OrganizationId, value.CommercialRequestId, value.OccurredAtUtc });
         });
 
         builder.Entity<DemandExternalReference>(reference =>

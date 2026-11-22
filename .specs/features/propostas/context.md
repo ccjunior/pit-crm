@@ -1,6 +1,6 @@
 # Contexto — módulo de propostas
 
-Atualizado em 21/11/2026. Esta é uma descoberta em andamento; a especificação ainda não foi aprovada para design ou implementação.
+Atualizado em 21/11/2026. A especificação foi aprovada pelo usuário; implementação em andamento.
 
 ## Direção informada pelo usuário
 
@@ -12,27 +12,23 @@ Atualizado em 21/11/2026. Esta é uma descoberta em andamento; a especificação
 - Administrador e Gestor gerenciam propostas; Operador atua nas demandas.
 - O usuário pediu uma área para visualizar e acompanhar propostas e considera um quadro Kanban.
 - O primeiro recorte registra e acompanha os dados; envio e documento/PDF ficam fora do sistema.
+- O usuário confirmou que D01 permanece: apenas Administrador/Gestor criam ou editam clientes/locais; Operador completa o rascunho depois que esses registros forem vinculados.
 
-## Recomendações para discutir
+## Diretrizes para o design
 
-- Oferecer Kanban e lista como modos de visualização do mesmo fluxo. O Kanban facilita perceber gargalos; a lista favorece busca e consulta detalhada. Após o usuário dizer “pode seguir” diante da recomendação de cartão por solicitação, esta é a opção usada no rascunho da especificação, sujeita à revisão do próprio documento.
+- Oferecer Kanban e lista como modos de visualização do mesmo fluxo. O Kanban facilita perceber gargalos; a lista favorece busca e consulta detalhada. O usuário aprovou a recomendação de um cartão por solicitação, com revisões agrupadas no detalhe.
 - Registrar cada solicitação/oportunidade comercial mesmo quando a empresa decide não enviar proposta. Caso contrário, solicitações sem orçamento desaparecem do histórico e do acompanhamento do funil.
 - Tratar versões da proposta como revisões da mesma negociação, sem duplicar cartões no quadro.
 - Na conversão, copiar o escopo da versão aprovada para os subitens da demanda, preservando o vínculo e um retrato dos dados aprovados.
 - Manter a demanda em rascunho fora dos indicadores e etapas operacionais até o Operador completar os dados necessários e confirmar.
 - Manter contratos fora do escopo inicial do módulo. O vínculo opcional entre contrato e demanda permanece uma decisão separada.
 
-## Pendências de produto
+## Pontos futuros fora desta entrega
 
-- Nome final do registro comercial e das etapas do quadro.
-- Revisão/aprovação interna antes do envio e seus responsáveis.
-- Dados mínimos e composição de preço, validade e necessidade de quantidade/unidade nos itens.
-- Como registrar evidência de aprovação do cliente e quais dados o Operador deve completar para converter lead/local.
-- Campos e estados operacionais dos subitens.
-- Se uma solicitação pode conter propostas alternativas ou somente versões sucessivas; o rascunho recomenda revisões sucessivas.
-- Como demandas cobertas por contrato serão identificadas quando existir um módulo de contratos.
+- Como associar futuramente demandas a contratos; gestão de contratos permanece fora desta entrega.
 
 ## Respostas adicionais
 
 - Permissões: Administrador e Gestor gerenciam propostas; Operador trata demandas (resposta de 21/11/2026).
 - Documento: no primeiro recorte, o módulo registra e acompanha os dados; envio e PDF/documento ficam fora do sistema (resposta de 21/11/2026).
+- Permissões na conversão de prospect: preservar D01; Administrador/Gestor criam/vinculam cliente e local, Operador completa e confirma a demanda (resposta de 21/11/2026).

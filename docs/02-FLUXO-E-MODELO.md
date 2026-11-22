@@ -2,16 +2,26 @@
 
 ## Fluxo de ponta a ponta
 
-1. **Receber demanda:** registrar origem, cliente, local, descrição e referências externas disponíveis.
-2. **Realizar visita técnica inicial:** quando necessária, é o primeiro atendimento da equipe.
-3. **Preparar e enviar orçamento:** registrar valor e versão do orçamento.
-4. **Obter autorização do orçamento:** a execução só é programada depois que o cliente autoriza.
-5. **Programar e executar:** combinar data com cliente e técnico/prestador, acompanhar o serviço e registrar ocorrências.
-6. **Documentar e concluir:** guardar fotos antes/durante/depois, vídeos, relatório e apresentar evidências ao cliente.
-7. **Obter autorização para faturar:** aprovação do cliente para emitir NF, separada da aprovação do orçamento.
-8. **Faturar:** registrar nota fiscal e envio ao cliente.
-9. **Receber:** acompanhar previsão, eventual adiantamento e pagamento efetivo.
-10. **Consultar histórico:** localizar todo o ciclo por demanda, cliente, local, chamado e período.
+1. **Registrar solicitação comercial (quando houver cotação):** cliente existente ou prospect pede orçamento; a equipe registra manualmente canal, resumo e contato conhecido.
+2. **Avaliar se vai cotar:** manter a decisão e o motivo de não cotar quando a empresa optar por não preparar proposta.
+3. **Preparar e enviar proposta:** registrar itens, valores e revisões; envio ao cliente é manual e sua data/canal ficam registrados.
+4. **Registrar resultado comercial:** aprovação, recusa, expiração ou cancelamento são lançados manualmente. Uma revisão aprovada gera um único rascunho de demanda.
+5. **Validar e confirmar demanda:** Operador completa dados operacionais; para prospect, Administrador/Gestor cria ou vincula cliente/local (D01). A confirmação exige cliente, local, descrição e origem, e coloca a demanda em “Recebida”.
+6. **Entrada manual direta:** cliente existente também pode solicitar serviço sem passar pela proposta; a equipe cria a demanda pelo fluxo operacional existente.
+7. **Realizar visita técnica inicial:** quando necessária, é o primeiro atendimento da equipe.
+8. **Programar e executar:** combinar data com cliente e técnico/prestador, acompanhar o serviço e registrar ocorrências.
+9. **Documentar e concluir:** guardar fotos antes/durante/depois, vídeos, relatório e apresentar evidências ao cliente.
+10. **Obter autorização para faturar:** aprovação do cliente para emitir NF, separada da aprovação da proposta/orçamento.
+11. **Faturar e receber:** registrar nota fiscal/envio, previsão, eventual adiantamento e pagamento efetivo.
+12. **Consultar histórico:** localizar o ciclo comercial e operacional por solicitação, proposta, demanda, cliente, local, referência e período.
+
+O Kanban/lista acompanha solicitações comerciais; um cartão contém a negociação e suas revisões. Demanda manual e demanda gerada por proposta convergem ao mesmo fluxo operacional após confirmação.
+
+### Etapas da solicitação comercial
+
+`Solicitação recebida` → `Em avaliação` → `Em elaboração` → `Enviada` → `Em negociação` → `Aprovada`.
+
+Resultados terminais: `Não cotada` (decisão interna, com motivo obrigatório), `Recusada` (resposta do cliente), `Expirada` e `Cancelada`. Envio e aprovação são registrados manualmente; não há varredura ou envio automático de e-mail.
 
 ## Estados e marcos
 
@@ -35,7 +45,7 @@ As definições abaixo foram informadas pela operação piloto. O desenho final 
 
 **Atribuição de equipe:** no processo piloto, cada demanda terá uma equipe ou prestador responsável.
 
-**Abertura da demanda:** para a primeira entrega, o usuário confirmou em 04/11/2026 a obrigatoriedade de cliente, local, descrição e origem. O responsável operacional interno pode ser atribuído depois. Essa pessoa acompanha a demanda e não substitui a atribuição da equipe/prestador de execução.
+**Abertura da demanda operacional:** D02 exige cliente, local, descrição e origem na demanda confirmada. O rascunho criado por proposta aprovada pode aguardar dados faltantes e não aparece nas etapas/indicadores operacionais. Administrador/Gestor criam ou editam cliente/local; se o cliente já estiver vinculado, Operador pode selecionar um local existente desse cliente, completar os demais dados e confirmar. O responsável operacional interno é opcional e não substitui a atribuição da equipe/prestador de execução.
 
 ## Entidades conceituais
 
@@ -47,8 +57,12 @@ As definições abaixo foram informadas pela operação piloto. O desenho final 
 - **Local de atendimento:** loja, unidade ou endereço de execução, associado ao cliente; inclui nome, endereço, bairro, cidade e status (Ativo, Pausado ou Concluído); a demanda seleciona um desses locais.
 - **Documento de cliente:** CPF/CNPJ numérico, validado pelos dígitos verificadores, aceitando pontuação apenas na entrada e persistindo sem máscara. CNPJ com letras não é aceito por decisão do usuário em 14/11/2026.
 - **Demanda/ordem de serviço:** unidade principal do trabalho, com ID interno, origem, descrição, responsável e referências externas.
+- **Solicitação comercial/oportunidade:** entrada para avaliar uma cotação, vinculada a cliente existente ou aos dados de um prospect; pode terminar sem proposta.
+- **Proposta e revisão:** negociação comercial da solicitação, com itens de descrição/valor e revisões preservadas; envio e aprovação são fatos registrados manualmente.
+- **Rascunho de demanda:** estado intermediário criado uma única vez pela aprovação da proposta, pendente de validação; não é demanda operacional nem entra em seus indicadores.
+- **Subitem de demanda:** parte do escopo de uma demanda, com descrição/valor copiados da revisão aprovada; não tem ciclo, cliente ou autorização próprios.
 - **Referência externa:** chamado/ticket, ordem de compra ou código do sistema do cliente. Pode haver mais de uma e não substitui o ID interno.
-- **Orçamento e revisão:** valor proposto, versões, aprovação, retificação e aditivo.
+- **Orçamento e revisão:** proposta antes da demanda, valor/itens por revisão e aprovação do cliente. Aditivo posterior altera escopo/valor da demanda, com histórico e aprovação.
 - **Programação/atribuição:** visita técnica, execução agendada e um técnico/equipe/prestador responsável por demanda.
 - **Execução e evidência:** datas, resultado, fotos, vídeos, relatório e observações.
 - **Retrabalho em garantia:** registro vinculado à demanda que originou a garantia.
@@ -61,6 +75,8 @@ As definições abaixo foram informadas pela operação piloto. O desenho final 
 
 - O chamado/ticket depende do cliente; pode não existir e pode não ser único entre clientes. Deve ser uma referência pesquisável, não a chave primária.
 - Um cliente pode ter muitos locais e demandas. Normalmente há uma demanda por local, mas isso não deve ser imposto como unicidade rígida.
+- Cliente existente pode iniciar demanda diretamente; proposta aprovada de cliente ou prospect gera uma demanda em rascunho, completada pelo Operador depois dos cadastros de cliente/local autorizados.
+- Cada solicitação representa uma negociação com revisões sequenciais; a revisão aprovada gera uma demanda com subitens e não duplica demandas em tentativas repetidas.
 - “Autorizado” para orçamento e autorização para emitir NF após execução são aprovações diferentes.
 - “Aditivo” muda escopo/valor; “ADD” é adiantamento financeiro.
 - Na planilha LL, o custo estimado é digitado manualmente; imposto/administração é considerado fixo em 28% pela empresa piloto. O resultado chamado LL significa Lucro Líquido, e a meta mínima é 20%. Pela fórmula atual, o percentual é LL dividido pelo valor aprovado.

@@ -11,6 +11,8 @@ Produto da Project IT para gestão comercial e operacional de empresas de constr
 - [Levantamento do processo com a empresa piloto](LEVANTAMENTO-PROCESSO-OPERACIONAL.md)
 - [Trabalho com agentes](docs/05-TRABALHO-COM-AGENTES.md)
 - [Skills locais, origem e adaptações](docs/06-SKILLS-E-ORIGEM.md)
+- [Padrão de telas de cadastro e edição](docs/07-PADRAO-DE-INTERFACE.md)
+- [Visão geral para revisão especializada](docs/08-OVERVIEW-PARA-REVISAO-ESPECIALISTA.md)
 - [Decisões arquiteturais](docs/decisions/README.md)
 
 ## Orientação dos agentes
@@ -103,4 +105,4 @@ Depois de provisionar, inicie a API e o Angular conforme as instruções acima e
 
 ## Estado atual
 
-O escopo da primeira entrega foi aprovado em 05/11/2026. T01–T18 foram concluídas e verificadas; T19–T23 e T24 foram implementadas/verificadas nos níveis registrados. T23 executou as suítes completas (backend 7/7; frontend 29/29), build Angular e demonstração local de criação, consulta e edição de demanda entre sessões, com dados isolados em duas organizações. A T25 permite múltiplas referências externas por demanda, com busca, edição e migração testada em schema temporário; as suítes atuais passaram (backend 8/8; frontend 30/30). A migração T25 ainda não foi aplicada ao banco `pitcrm_dev`; o build Angular reporta bundle inicial 4,39 kB acima do orçamento configurado. Consulte [verificação T25](.specs/features/demand-external-references/verification.md), [verificação da primeira entrega](.specs/features/primeira-entrega-operacional/verification.md) e [.specs/STATE.md](.specs/STATE.md). As regras do levantamento vêm das respostas do responsável pela operação; decisões ainda abertas continuam identificadas como propostas ou perguntas.
+O escopo da primeira entrega foi aprovado em 05/11/2026. T01–T18 foram concluídas e verificadas; T19–T23, T24 e T25 foram implementadas/verificadas nos níveis registrados. Em 21/11/2026, após autorização, as migrações T25 e T26 foram aplicadas ao banco local `pitcrm_dev`; a funcionalidade T26 segue em implementação e validação. Builds .NET e Angular passaram; o bundle inicial está 19,36 kB acima do orçamento de 500 kB. Consulte [tarefas T26](.specs/features/propostas/tasks.md), [verificação T25](.specs/features/demand-external-references/verification.md), [verificação da primeira entrega](.specs/features/primeira-entrega-operacional/verification.md) e [.specs/STATE.md](.specs/STATE.md). Decisões de produto e arquitetura ainda abertas permanecem marcadas como propostas ou perguntas.

@@ -44,9 +44,11 @@ Com a diretriz geral dada pelo usuário, a primeira tarefa de implementação de
 
 - Organização, usuários e permissões básicas.
 - Clientes, contatos e locais.
+- Solicitações comerciais, avaliação de cotação e propostas com revisões, Kanban/lista e conversão da revisão aprovada em rascunho de demanda.
 - Cadastro e busca de demandas com ID interno e referências externas.
+- Validação operacional do rascunho originado de proposta e subitens vinculados ao escopo aprovado.
 - Visita técnica inicial e execução agendada como compromissos distintos.
-- Orçamento, aprovação, retificação e aditivos com histórico.
+- Aprovação de orçamento, retificação e aditivos com histórico; proposta e demanda continuam como registros distintos.
 - Atribuição de uma equipe/prestador por demanda.
 - Atualizações, pausa, cancelamento, conclusão e evidências do serviço.
 - Retrabalho em garantia vinculado à demanda original.

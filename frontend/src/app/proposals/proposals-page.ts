@@ -1,0 +1,184 @@
+import { CurrencyPipe, DatePipe } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
+import { Component, DestroyRef, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
+import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
+import { debounceTime, distinctUntilChanged, finalize } from 'rxjs';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Customer, CustomerApi } from '../customers/customer-api';
+import { ProposalApi, ProposalDetails, ProposalListItem, ProposalRevision, proposalStages } from './proposal-api';
+
+@Component({
+  selector: 'app-proposals-page',
+  imports: [CurrencyPipe, DatePipe, ReactiveFormsModule],
+  templateUrl: './proposals-page.html',
+  styleUrls: ['./proposals-page.css', './proposal-details.css'],
+})
+export class ProposalsPage implements OnInit {
+  private readonly api = inject(ProposalApi);
+  private readonly customersApi = inject(CustomerApi);
+  private readonly fb = inject(FormBuilder).nonNullable;
+  private readonly destroyRef = inject(DestroyRef);
+  private readonly requestDialog = viewChild<ElementRef<HTMLDialogElement>>('requestDialog');
+  private returnFocusTarget: HTMLElement | null = null;
+  readonly stages = proposalStages;
+  readonly items = signal<ProposalListItem[]>([]);
+  readonly customers = signal<Customer[]>([]);
+  readonly selected = signal<ProposalDetails | null>(null);
+  readonly selectedRevision = computed(() => this.selected()?.revisions[0] ?? null);
+  readonly query = this.fb.control('');
+  readonly filterStage = this.fb.control('');
+  readonly filterCustomer = this.fb.control('');
+  readonly filterFrom = this.fb.control('');
+  readonly filterTo = this.fb.control('');
+  readonly mode = signal<'kanban' | 'list'>('kanban');
+  readonly page = signal(1);
+  readonly pageSize = signal(12);
+  readonly totalCount = signal(0);
+  readonly showCreate = signal(false);
+  readonly editingProposal = signal(false);
+  readonly loading = signal(false);
+  readonly saving = signal(false);
+  readonly error = signal('');
+  readonly success = signal('');
+  readonly createForm = this.fb.group({ customerId: '', prospectName: ['', Validators.maxLength(200)], contactName: ['', Validators.maxLength(200)], email: ['', [Validators.maxLength(254), Validators.email]], phone: ['', Validators.maxLength(40)], origin: ['', Validators.required], description: ['', [Validators.required, Validators.maxLength(4000)]] });
+  readonly revisionForm = this.fb.group({ validUntil: '', notes: '', items: this.fb.array([this.makeItem()]) });
+  readonly sendForm = this.fb.group({ channel: ['E-mail', Validators.required] });
+  readonly approveForm = this.fb.group({ approverName: ['', Validators.required], channel: ['E-mail', Validators.required] });
+  readonly resultForm = this.fb.group({ status: ['Rejected'], reason: [''] });
+  readonly revisionItems = this.revisionForm.controls.items as FormArray;
+
+  ngOnInit(): void {
+    this.query.valueChanges.pipe(debounceTime(250), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.load(1));
+    this.customersApi.search('', 1, 100).subscribe({ next: result => this.customers.set(result.items) });
+    this.load();
+  }
+  openCreate(): void {
+    this.error.set(''); this.success.set(''); this.editingProposal.set(false);
+    this.createForm.reset({ customerId: '', prospectName: '', contactName: '', email: '', phone: '', origin: '', description: '' });
+    this.openRequestDialog();
+  }
+  openEdit(proposal: ProposalDetails): void {
+    if (!['Received', 'Evaluating', 'Drafting'].includes(proposal.status)) return;
+    this.error.set(''); this.success.set(''); this.editingProposal.set(true);
+    this.createForm.reset({ customerId: proposal.customerId ?? '', prospectName: proposal.prospectName ?? '',
+      contactName: proposal.prospectContactName ?? '', email: proposal.prospectEmail ?? '', phone: proposal.prospectPhone ?? '',
+      origin: proposal.origin, description: proposal.description });
+    this.openRequestDialog();
+  }
+  closeRequestDialog(): void {
+    const dialog = this.requestDialog()?.nativeElement;
+    if (dialog?.open) dialog.close();
+    else { this.showCreate.set(false); this.restoreFocus(); }
+  }
+  requestClose(): void {
+    if (this.createForm.dirty && !window.confirm('Descartar as alterações deste formulário?')) return;
+    this.closeRequestDialog();
+  }
+  onRequestDialogClose(): void { this.showCreate.set(false); this.restoreFocus(); }
+  stageLabel(stage: string): string { return this.stages.find(value => value.id === stage)?.label ?? stage; }
+  stageItems(stage: string): ProposalListItem[] { return this.items().filter(item => item.status === stage); }
+  load(page = this.page()): void {
+    this.page.set(page);
+    this.loading.set(true); this.error.set('');
+    this.api.search(this.query.value, this.filterStage.value, this.filterCustomer.value,
+      this.filterFrom.value, this.filterTo.value, page, this.pageSize()).pipe(finalize(() => this.loading.set(false))).subscribe({
+      next: result => { this.items.set(result.items); this.totalCount.set(result.totalCount); }, error: error => this.error.set(this.errorMessage(error)),
+    });
+  }
+  applyFilters(): void { this.load(1); }
+  previousPage(): void { if (this.page() > 1) this.load(this.page() - 1); }
+  nextPage(): void { if (this.page() * this.pageSize() < this.totalCount()) this.load(this.page() + 1); }
+  setPageSize(value: string): void { this.pageSize.set(Number(value)); this.load(1); }
+  rangeStart(): number { return this.totalCount() ? (this.page() - 1) * this.pageSize() + 1 : 0; }
+  rangeEnd(): number { return Math.min(this.page() * this.pageSize(), this.totalCount()); }
+  open(item: ProposalListItem): void {
+    this.error.set(''); this.success.set('');
+    this.api.find(item.id).subscribe({ next: value => { this.selected.set(value); this.setOutcomeDefault(value.status); }, error: error => this.error.set(this.errorMessage(error)) });
+  }
+  close(): void { this.selected.set(null); }
+  create(): void {
+    const value = this.createForm.getRawValue();
+    const existingCustomer = !!value.customerId;
+    if (!existingCustomer && !value.prospectName.trim()) {
+      this.createForm.controls.prospectName.setErrors({ required: true });
+      this.createForm.controls.prospectName.markAsTouched();
+      this.error.set('Informe o nome do prospect ou selecione um cliente existente.');
+      return;
+    }
+    this.createForm.markAllAsTouched(); if (this.createForm.invalid || this.saving()) return;
+    const input = { customerId: value.customerId || null, prospectName: existingCustomer ? null : value.prospectName.trim(),
+      prospectContactName: existingCustomer ? null : value.contactName.trim() || null, prospectEmail: existingCustomer ? null : value.email.trim() || null,
+      prospectPhone: existingCustomer ? null : value.phone.trim() || null, origin: value.origin, description: value.description.trim() };
+    const proposal = this.selected();
+    const request = this.editingProposal() && proposal
+      ? this.api.update(proposal.id, proposal.version, input)
+      : this.api.create(input);
+    this.run(request, updated => {
+      this.selected.set(updated);
+      this.createForm.reset({ customerId: '', prospectName: '', contactName: '', email: '', phone: '', origin: '', description: '' });
+      this.closeRequestDialog();
+    });
+  }
+  addItem(): void { if (this.revisionItems.length < 100) this.revisionItems.push(this.makeItem()); }
+  removeItem(index: number): void { if (this.revisionItems.length > 1) this.revisionItems.removeAt(index); }
+  createRevision(): void {
+    const proposal = this.selected(); this.revisionForm.markAllAsTouched(); if (!proposal || this.revisionForm.invalid || this.saving()) return;
+    const value = this.revisionForm.getRawValue();
+    this.run(this.api.createRevision(proposal.id, proposal.version, value.items.map(item => ({ description: item.description.trim(), amount: Number(item.amount) })), value.validUntil || null, value.notes.trim() || null),
+      updated => { this.selected.set(updated); this.revisionForm.reset({ validUntil: '', notes: '' }); this.revisionItems.clear(); this.revisionItems.push(this.makeItem()); });
+  }
+  recordSent(): void {
+    const proposal = this.selected(), revision = this.selectedRevision(); if (!proposal || !revision) return;
+    this.run(this.api.send(proposal.id, proposal.version, revision.id, this.sendForm.controls.channel.value), value => this.selected.set(value));
+  }
+  approve(): void {
+    const proposal = this.selected(), revision = this.selectedRevision(); this.approveForm.markAllAsTouched();
+    if (!proposal || !revision || this.approveForm.invalid) return;
+    this.saving.set(true); this.error.set('');
+    const value = this.approveForm.getRawValue();
+    this.api.approve(proposal.id, proposal.version, revision.id, value.approverName.trim(), value.channel)
+      .pipe(finalize(() => this.saving.set(false))).subscribe({ next: result => {
+        this.selected.set(result.proposal); this.success.set(`Aprovação registrada. Rascunho da demanda ${result.demandDraftId ? 'criado' : 'atualizado'} na fila de operação.`); this.load();
+      }, error: error => this.error.set(this.errorMessage(error)) });
+  }
+  markOutcome(): void {
+    const proposal = this.selected(); if (!proposal) return;
+    const value = this.resultForm.getRawValue();
+    this.run(this.api.changeStatus(proposal.id, proposal.version, value.status, value.reason.trim() || null), updated => { this.selected.set(updated); this.load(); });
+  }
+  advanceTo(status: string): void {
+    const proposal = this.selected(); if (!proposal) return;
+    this.run(this.api.changeStatus(proposal.id, proposal.version, status, null), updated => { this.selected.set(updated); this.setOutcomeDefault(updated.status); });
+  }
+  total(): number { return this.revisionItems.controls.reduce((sum, control) => sum + Number(control.get('amount')?.value || 0), 0); }
+  private makeItem() { return this.fb.group({ description: ['', Validators.required], amount: [0, [Validators.required, Validators.min(0)]] }); }
+  private openRequestDialog(): void {
+    const dialog = this.requestDialog()?.nativeElement;
+    if (!dialog || dialog.open) return;
+    const active = document.activeElement;
+    this.returnFocusTarget = active instanceof HTMLElement ? active : null;
+    this.showCreate.set(true);
+    if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
+    queueMicrotask(() => document.getElementById('proposal-form-title')?.focus());
+  }
+  private restoreFocus(): void {
+    const target = this.returnFocusTarget; this.returnFocusTarget = null;
+    queueMicrotask(() => { if (target?.isConnected) target.focus(); });
+  }
+  private setOutcomeDefault(status: string): void { this.resultForm.controls.status.setValue(status === 'Evaluating' ? 'NotQuoted' : 'Rejected'); }
+  private run<T extends ProposalDetails>(request: import('rxjs').Observable<T>, done: (value: T) => void): void {
+    this.saving.set(true); this.error.set(''); this.success.set('');
+    request.pipe(finalize(() => this.saving.set(false))).subscribe({ next: value => {
+      done(value);
+      if (this.selected()?.id === value.id) this.setOutcomeDefault(value.status);
+      this.load();
+    }, error: error => this.error.set(this.errorMessage(error)) });
+  }
+  private errorMessage(error: HttpErrorResponse): string {
+    if (error.status === 403) return 'Seu perfil não tem acesso a esta ação.';
+    if (error.status === 409) return error.error?.error ?? 'A solicitação mudou. Atualize os dados e tente novamente.';
+    if (error.status === 400) return 'Revise os campos preenchidos.';
+    return 'Não foi possível concluir a operação. Tente novamente.';
+  }
+}

@@ -20,6 +20,6 @@ Os modelos e referências importados ficam em `.agents/skills/tlc-spec-driven/`.
 | --- | --- |
 | [Primeira entrega operacional](primeira-entrega-operacional/spec.md) | Escopo aprovado; implementação verificada nos níveis registrados em `.specs/STATE.md` e `verification.md` |
 | [Referências externas em demandas](demand-external-references/spec.md) | Implementada e verificada localmente; migração ainda não aplicada ao `pitcrm_dev` |
-| [Solicitações comerciais e propostas](propostas/spec.md) | Especificação em revisão; aguardando aprovação antes do design e implementação |
+| [Solicitações comerciais e propostas](propostas/spec.md) | Especificação aprovada; backend e telas em implementação, builds passam; migração e verificação integrada pendentes |
 
 Não crie arquivos vazios nem use um exemplo como autorização para implementação.

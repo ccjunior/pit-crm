@@ -2,7 +2,7 @@
 
 ## Objetivo
 
-O produto chama-se **PIT Obras** e é desenvolvido pela Project IT. Ele organiza o trabalho de empresas de construção civil e reformas, acompanhando uma demanda desde a entrada até a execução, o faturamento e o recebimento.
+O produto chama-se **PIT Obras** e é desenvolvido pela Project IT. Ele organiza o trabalho de empresas de construção civil e reformas, acompanhando solicitações comerciais e demandas desde a avaliação de orçamento ou abertura operacional até a execução, o faturamento e o recebimento.
 
 O posicionamento do produto é específico para empresas de construção civil e reformas. A plataforma não começa como um ERP genérico.
 
@@ -13,6 +13,9 @@ Empresa piloto com serviços principalmente de civil e ar-condicionado, contrato
 ## Princípios
 
 - Uma demanda recebe um identificador interno próprio.
+- O trabalho pode nascer de uma demanda criada manualmente para cliente existente ou de uma proposta aprovada, que origina uma demanda em rascunho para validação operacional.
+- Propostas e demandas são registros distintos: a proposta registra a negociação comercial; a demanda acompanha a execução aprovada.
+- Uma proposta aprovada gera uma demanda com subitens que representam o escopo acordado; a aprovação não libera execução até a demanda ser completada e confirmada.
 - Chamado/ticket, ordem de compra e outras referências externas são pesquisáveis e vinculadas ao cliente e ao local; o chamado pode depender do cliente.
 - Cliente, contato e local são registros distintos: um cliente pode ter várias demandas e vários locais.
 - Aprovação de orçamento e autorização para emitir nota fiscal são momentos diferentes.
@@ -47,9 +50,12 @@ Detalhamento confirmado pelo usuário em 04/11/2026 para a primeira entrega: **A
 
 ### Demandas e execução
 
-- Cadastro de demanda com origem (WhatsApp, ligação, e-mail ou outra), descrição, cliente, local, ticket/OC opcional, responsável e prioridade.
-- Na primeira entrega, cliente, local, descrição e origem são obrigatórios na abertura; o responsável operacional interno é opcional e pode ser atribuído depois, conforme confirmação do usuário em 04/11/2026.
-- Orçamento associado à demanda, aprovação do cliente e histórico de retificações/aditivos.
+- Registrar solicitações de orçamento para cliente existente ou prospect e avaliar se a empresa prepara uma proposta; manter o motivo quando não cotar.
+- Criar propostas com itens de descrição/valor e revisões sucessivas, registrando manualmente envio e aprovação do cliente. Administrador e Gestor gerenciam propostas; envio e documentos ocorrem fora do sistema no primeiro recorte.
+- Uma proposta aprovada origina automaticamente um rascunho de demanda. Administrador/Gestor criam ou vinculam cliente/local quando se tratar de prospect, preservando D01; Operador completa os dados operacionais restantes e confirma a demanda.
+- Manter a criação manual de demanda para cliente existente. Na demanda operacional confirmada, cliente, local, descrição e origem são obrigatórios; o responsável operacional interno é opcional e pode ser atribuído depois (D02).
+- Itens da versão aprovada são copiados como subitens da demanda, mantendo a revisão de origem e os valores aprovados. Demandas manuais também podem ter subitens opcionais.
+- Exibir o fluxo comercial em Kanban e lista; cartão representa solicitação/oportunidade e suas revisões ficam no detalhe.
 - Programação de visita e/ou execução, com técnico/prestador atribuído.
 - Acompanhamento de status, notas internas e motivo de pausa/cancelamento.
 - Registro de fotos antes/durante/depois, vídeos e relatórios técnicos.
@@ -83,4 +89,5 @@ Detalhamento confirmado pelo usuário em 04/11/2026 para a primeira entrega: **A
 - Integrações automáticas com WhatsApp, e-mail ou sistemas dos clientes. Inicialmente, a origem pode ser registrada manualmente.
 - IA, automações avançadas, folha de pagamento, estoque completo, contabilidade ou ERP genérico.
 - Contabilidade completa ou regras financeiras genéricas para todos os segmentos. O cálculo LL entra no MVP para a empresa piloto, com parâmetros configuráveis por organização.
-- Funis completos de prospecção e marketing; o MVP pode registrar origem e orçamento da demanda, com gestão comercial mais ampla em fase posterior.
+- Campanhas de marketing, automação/leitura de e-mails, envio automático de proposta, portal de cliente, assinatura eletrônica e geração de PDF comercial.
+- Gestão de contratos guarda-chuva; demandas podem ganhar vínculo contratual quando esse módulo for especificado.

@@ -66,7 +66,7 @@ public static class DemandEndpoints
             : Demand.Priorities.Single(value => string.Equals(value, request.Priority.Trim(), StringComparison.OrdinalIgnoreCase));
         var demand = new Demand(Guid.NewGuid(), context.OrganizationId, request.CustomerId, request.LocationId,
             context.UserId, request.AssignedToUserId, request.Description!, origin, priority,
-            ToDomainReferences(request.ExternalReferences), now);
+            ToDomainReferences(request.ExternalReferences), now, subitems: ToDomainSubitems(request.Subitems, preserveSourceIds: false));
         var activity = new DemandActivity(Guid.NewGuid(), context.OrganizationId, demand.Id, context.UserId,
             "DemandCreated", "Demanda criada.", now);
         var result = await store.CreateAsync(demand, activity, cancellationToken);
@@ -89,7 +89,7 @@ public static class DemandEndpoints
 
         return Results.Created($"/api/demands/{demand.Id}", new DemandCreatedDto(demand.Id, demand.ReferenceNumber, demand.Version,
             demand.CustomerId, demand.LocationId, demand.Description, demand.Origin, demand.Priority, demand.Status,
-            ToDtoReferences(demand.ExternalReferences), demand.AssignedToUserId, demand.CreatedAtUtc));
+            ToDtoReferences(demand.ExternalReferences), ToDtoSubitems(demand.Subitems), demand.AssignedToUserId, demand.CreatedAtUtc));
     }
 
     private static async Task<IResult> UpdateAsync(Guid id, UpdateDemandRequest request,
@@ -104,7 +104,7 @@ public static class DemandEndpoints
             : Demand.Priorities.Single(value => string.Equals(value, request.Priority.Trim(), StringComparison.OrdinalIgnoreCase));
         var update = new DemandUpdateData(request.Version, request.CustomerId, request.LocationId,
             request.Description!, origin, priority, ToDomainReferences(request.ExternalReferences),
-            request.AssignedToUserId);
+            request.AssignedToUserId, ToDomainSubitems(request.Subitems));
         var result = await store.UpdateAsync(context.OrganizationId, id, context.UserId, update,
             DateTimeOffset.UtcNow, cancellationToken);
         if (result.Failure == DemandUpdateFailure.DemandNotFound) return Results.NotFound();
@@ -116,12 +116,14 @@ public static class DemandEndpoints
             {
                 DemandUpdateFailure.CustomerNotFound => nameof(request.CustomerId),
                 DemandUpdateFailure.LocationNotFound => nameof(request.LocationId),
+                DemandUpdateFailure.InvalidSubitemSource => nameof(request.Subitems),
                 _ => nameof(request.AssignedToUserId),
             };
             var message = result.Failure switch
             {
                 DemandUpdateFailure.CustomerNotFound => "O cliente não foi encontrado na organização atual.",
                 DemandUpdateFailure.LocationNotFound => "O local não pertence ao cliente informado ou não existe.",
+                DemandUpdateFailure.InvalidSubitemSource => "Os subitens de origem devem pertencer à revisão aprovada que gerou esta demanda.",
                 _ => "O responsável deve ser um usuário ativo da organização atual.",
             };
             return Results.ValidationProblem(new Dictionary<string, string[]> { [field] = [message] });
@@ -130,19 +132,20 @@ public static class DemandEndpoints
         var demand = result.Demand!;
         return Results.Ok(new DemandUpdatedDto(demand.Id, demand.ReferenceNumber, demand.Version,
             demand.CustomerId, demand.LocationId, demand.Description, demand.Origin, demand.Priority,
-            demand.Status, ToDtoReferences(demand.ExternalReferences), demand.AssignedToUserId));
+            demand.Status, ToDtoReferences(demand.ExternalReferences), ToDtoSubitems(demand.Subitems), demand.AssignedToUserId));
     }
 
     private static Dictionary<string, string[]> Validate(CreateDemandRequest request) =>
         ValidateDemandData(request.CustomerId, request.LocationId, request.Description, request.Origin,
-            request.Priority, request.ExternalReferences);
+            request.Priority, request.ExternalReferences, request.Subitems);
 
     private static Dictionary<string, string[]> Validate(UpdateDemandRequest request) =>
         ValidateDemandData(request.CustomerId, request.LocationId, request.Description, request.Origin,
-            request.Priority, request.ExternalReferences);
+            request.Priority, request.ExternalReferences, request.Subitems);
 
     private static Dictionary<string, string[]> ValidateDemandData(Guid customerId, Guid locationId,
-        string? description, string? origin, string? priority, IReadOnlyList<ExternalReferenceRequest?>? externalReferences)
+        string? description, string? origin, string? priority, IReadOnlyList<ExternalReferenceRequest?>? externalReferences,
+        IReadOnlyList<DemandSubitemRequest?>? subitems)
     {
         var errors = new Dictionary<string, string[]>();
         if (customerId == Guid.Empty) errors[nameof(CreateDemandRequest.CustomerId)] = ["Selecione o cliente."];
@@ -170,6 +173,20 @@ public static class DemandEndpoints
                 else if (reference.Value.Trim().Length > 100) errors[$"{field}.Value"] = ["O valor deve ter até 100 caracteres."];
             }
         }
+        if (subitems is { Count: > 100 }) errors[nameof(CreateDemandRequest.Subitems)] = ["A demanda pode ter até 100 subitens."];
+        if (subitems is not null)
+        {
+            for (var index = 0; index < subitems.Count; index++)
+            {
+                var subitem = subitems[index];
+                var field = $"Subitems[{index}]";
+                if (subitem is null) { errors[field] = ["O subitem é inválido."]; continue; }
+                if (string.IsNullOrWhiteSpace(subitem.Description)) errors[$"{field}.Description"] = ["Informe a descrição do subitem."];
+                else if (subitem.Description.Trim().Length > 1000) errors[$"{field}.Description"] = ["A descrição deve ter até 1.000 caracteres."];
+                if (subitem.Amount is < 0 or > 9999999999999999.99m || subitem.Amount is { } amount && decimal.Round(amount, 2) != amount)
+                    errors[$"{field}.Amount"] = ["O valor deve ser positivo ou zero e ter até duas casas decimais."];
+            }
+        }
         return errors;
     }
 
@@ -181,16 +198,28 @@ public static class DemandEndpoints
         IEnumerable<DemandExternalReference> references) => references
         .Select(reference => new DemandExternalReferenceDto(reference.Type, reference.Value)).ToArray();
 
+    private static IReadOnlyCollection<(string Description, decimal? Amount, Guid? SourceProposalItemId)>? ToDomainSubitems(
+        IReadOnlyList<DemandSubitemRequest?>? subitems, bool preserveSourceIds = true) => subitems?
+        .Select(item => (item!.Description!, item.Amount, preserveSourceIds ? item.SourceProposalItemId : null)).ToArray();
+
+    private static IReadOnlyList<DemandSubitemDto> ToDtoSubitems(IEnumerable<DemandSubitem> subitems) => subitems
+        .OrderBy(subitem => subitem.Position)
+        .Select(subitem => new DemandSubitemDto(subitem.Id, subitem.SourceProposalItemId, subitem.Position, subitem.Description, subitem.Amount)).ToArray();
+
     public sealed record CreateDemandRequest(Guid CustomerId, Guid LocationId, string? Description, string? Origin,
-        Guid? AssignedToUserId, IReadOnlyList<ExternalReferenceRequest?>? ExternalReferences, string? Priority);
+        Guid? AssignedToUserId, IReadOnlyList<ExternalReferenceRequest?>? ExternalReferences, string? Priority,
+        IReadOnlyList<DemandSubitemRequest?>? Subitems = null);
     public sealed record UpdateDemandRequest(int Version, Guid CustomerId, Guid LocationId, string? Description, string? Origin,
-        Guid? AssignedToUserId, IReadOnlyList<ExternalReferenceRequest?>? ExternalReferences, string? Priority);
+        Guid? AssignedToUserId, IReadOnlyList<ExternalReferenceRequest?>? ExternalReferences, string? Priority,
+        IReadOnlyList<DemandSubitemRequest?>? Subitems = null);
     public sealed record ExternalReferenceRequest(string? Type, string? Value);
+    public sealed record DemandSubitemRequest(string? Description, decimal? Amount, Guid? SourceProposalItemId = null);
     public sealed record DemandCreatedDto(Guid Id, int ReferenceNumber, int Version, Guid CustomerId, Guid LocationId, string Description, string Origin,
         string? Priority, string Status, IReadOnlyList<DemandExternalReferenceDto> ExternalReferences,
+        IReadOnlyList<DemandSubitemDto> Subitems,
         Guid? AssignedToUserId, DateTimeOffset CreatedAtUtc);
     public sealed record DemandUpdatedDto(Guid Id, int ReferenceNumber, int Version, Guid CustomerId, Guid LocationId,
         string Description, string Origin, string? Priority, string Status,
-        IReadOnlyList<DemandExternalReferenceDto> ExternalReferences, Guid? AssignedToUserId);
+        IReadOnlyList<DemandExternalReferenceDto> ExternalReferences, IReadOnlyList<DemandSubitemDto> Subitems, Guid? AssignedToUserId);
     public sealed record DemandPageResponse(IReadOnlyList<DemandListItemDto> Items, int Page, int PageSize, int TotalCount);
 }

@@ -19,7 +19,11 @@ Os testes backend cobrem criação, atualização, detalhe, busca por tipo/valor
 
 A migração cria a tabela de referências, converte as antigas colunas `TicketReference` e `PurchaseOrderReference` e, somente depois, remove essas colunas. O teste de migração aplica a sequência em schema temporário com demanda legada sintética e confirma a preservação dos valores.
 
-A migração nova **não foi aplicada ao banco `pitcrm_dev`**. Nenhum banco compartilhado ou publicado foi alterado. O fluxo autenticado ponta a ponta não foi repetido nesta entrega; a cobertura é por testes de integração da API e testes Angular.
+Na verificação inicial da entrega, a migração nova ainda não havia sido aplicada ao banco `pitcrm_dev`. Nenhum banco compartilhado ou publicado foi alterado. O fluxo autenticado ponta a ponta não foi repetido naquela entrega; a cobertura é por testes de integração da API e testes Angular.
+
+### Atualização posterior — 21/11/2026
+
+Após autorização do usuário para aplicar as migrações pendentes no banco local, `20261120160727_AddDemandExternalReferences` foi aplicada a `pitcrm_dev` junto com T26. A entrada foi confirmada em `__EFMigrationsHistory`. Nenhum banco compartilhado ou publicado foi alterado.
 
 ## Conclusão
 

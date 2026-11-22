@@ -8,6 +8,7 @@ using PitCrm.Api.Authorization;
 using PitCrm.Api.Features.Customers;
 using PitCrm.Api.Features.Locations;
 using PitCrm.Api.Features.Demands;
+using PitCrm.Api.Features.Proposals;
 using PitCrm.Api.Features.Users;
 using PitCrm.Application.Authorization;
 using PitCrm.Application.Organizations.Provisioning;
@@ -15,6 +16,7 @@ using PitCrm.Application.Users.EligibleAssignees;
 using PitCrm.Application.Customers;
 using PitCrm.Application.Locations;
 using PitCrm.Application.Demands;
+using PitCrm.Application.Proposals;
 using PitCrm.Infrastructure.Identity;
 using PitCrm.Infrastructure.Persistence;
 using PitCrm.Infrastructure.Provisioning;
@@ -22,6 +24,7 @@ using PitCrm.Infrastructure.Users.EligibleAssignees;
 using PitCrm.Infrastructure.Customers;
 using PitCrm.Infrastructure.Locations;
 using PitCrm.Infrastructure.Demands;
+using PitCrm.Infrastructure.Proposals;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -124,6 +127,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AuthorizationPolicies.OperateDemands, policy =>
         policy.RequireRole(RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator)
             .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
+    options.AddPolicy(AuthorizationPolicies.ManageProposals, policy =>
+        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
     options.AddPolicy(AuthorizationPolicies.ChangeOwnPassword, policy =>
         policy.RequireRole(RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator));
 });
@@ -134,6 +140,8 @@ builder.Services.AddScoped<ICustomerStore, PersistenceCustomerStore>();
 builder.Services.AddScoped<ICustomerLocationStore, PersistenceCustomerLocationStore>();
 builder.Services.AddScoped<ICustomerContactStore, PersistenceCustomerContactStore>();
 builder.Services.AddScoped<IDemandStore, PersistenceDemandStore>();
+builder.Services.AddScoped<IDemandDraftStore, PersistenceDemandDraftStore>();
+builder.Services.AddScoped<IProposalStore, PersistenceProposalStore>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentOrganizationContext, HttpCurrentOrganizationContext>();
 
@@ -294,6 +302,8 @@ CustomerEndpoints.Map(app);
 CustomerLocationEndpoints.Map(app);
 CustomerContactEndpoints.Map(app);
 DemandEndpoints.Map(app);
+ProposalEndpoints.Map(app);
+DemandDraftEndpoints.Map(app);
 TeamEndpoints.Map(app);
 
 static string RequiredEnvironmentValue(string name)

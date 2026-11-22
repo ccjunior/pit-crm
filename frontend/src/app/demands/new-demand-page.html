@@ -102,6 +102,18 @@
                 @if (externalReferenceErrors()[$index]; as error) { <small class="field-error" [id]="'external-reference-error-' + $index">{{ error }}</small> }
               }
             </div>
+            <div class="field field-wide external-reference-section">
+              <div class="external-reference-heading"><span>Subitens da demanda</span><button class="secondary-button" type="button" (click)="addSubitem()" [disabled]="subitems().length >= 100">Adicionar subitem</button></div>
+              <p class="field-hint">Detalhe etapas ou itens de execução. Eles não criam demandas separadas.</p>
+              @for (subitem of subitems(); track $index) {
+                <div class="external-reference-row demand-subitem-row">
+                  <label class="field"><span>Descrição</span><input maxlength="1000" [value]="subitem.description" placeholder="Ex.: Troca de disjuntor" (input)="updateSubitem($index, 'description', $any($event.target).value)" /></label>
+                  <label class="field"><span>Valor opcional</span><input type="number" min="0" step="0.01" [value]="subitem.amount ?? ''" placeholder="0,00" (input)="updateSubitem($index, 'amount', $any($event.target).value)" /></label>
+                  <button class="reference-remove-button" type="button" [attr.aria-label]="'Remover subitem ' + ($index + 1)" (click)="removeSubitem($index)">Remover</button>
+                </div>
+                @if (subitemErrors()[$index]; as error) { <small class="field-error">{{ error }}</small> }
+              }
+            </div>
           </div>
         </section>
 

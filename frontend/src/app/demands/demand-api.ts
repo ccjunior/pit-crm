@@ -5,6 +5,8 @@ import { Observable } from 'rxjs';
 
 export interface EligibleAssignee { id: string; displayName: string; }
 export interface ExternalReferenceInput { type: string; value: string; }
+export interface DemandSubitemInput { description: string; amount: number | null; sourceProposalItemId?: string | null; }
+export interface DemandSubitem extends DemandSubitemInput { id: string; position: number; }
 export interface DemandInput {
   customerId: string;
   locationId: string;
@@ -13,6 +15,7 @@ export interface DemandInput {
   assignedToUserId: string | null;
   externalReferences: ExternalReferenceInput[];
   priority: string | null;
+  subitems: DemandSubitemInput[];
 }
 export interface DemandUpdateInput extends DemandInput {
   version: number;
@@ -32,10 +35,12 @@ export interface CreatedDemand extends DemandFields {
   version: number;
   createdAtUtc: string;
   externalReferences: ExternalReferenceInput[];
+  subitems: DemandSubitem[];
 }
 export interface UpdatedDemand extends DemandFields {
   version: number;
   externalReferences: ExternalReferenceInput[];
+  subitems: DemandSubitem[];
 }
 export interface DemandListItem extends DemandFields {
   customerName: string;
@@ -55,6 +60,7 @@ export interface DemandDetails extends DemandListItem {
   createdByDisplayName: string;
   externalReferences: ExternalReferenceInput[];
   activities: DemandActivity[];
+  subitems: DemandSubitem[];
 }
 export interface DemandPage {
   items: DemandListItem[];

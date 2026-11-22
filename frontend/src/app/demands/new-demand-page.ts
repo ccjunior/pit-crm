@@ -4,7 +4,7 @@ import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { finalize } from 'rxjs';
 import { Customer, CustomerApi, CustomerLocation } from '../customers/customer-api';
-import { CreatedDemand, DemandApi, DemandDetails, DemandInput, EligibleAssignee, ExternalReferenceInput, UpdatedDemand } from './demand-api';
+import { CreatedDemand, DemandApi, DemandDetails, DemandInput, EligibleAssignee, ExternalReferenceInput, DemandSubitemInput, UpdatedDemand } from './demand-api';
 
 @Component({
   selector: 'app-new-demand-page',
@@ -31,6 +31,8 @@ export class NewDemandPage implements OnInit {
     priority: [''],
   });
   readonly externalReferences = signal<ExternalReferenceInput[]>([]);
+  readonly subitems = signal<DemandSubitemInput[]>([]);
+  readonly subitemErrors = signal<Record<number, string>>({});
   readonly externalReferenceTypes = ['Chamado/OS', 'Ordem de Compra', 'Código do Cliente', 'Contrato', 'Outro'];
   readonly customerSearch = this.formBuilder.nonNullable.control('');
   readonly customers = signal<Customer[]>([]);
@@ -202,6 +204,8 @@ export class NewDemandPage implements OnInit {
       priority: demand.priority ?? '',
     });
     this.externalReferences.set(demand.externalReferences.map(reference => ({ ...reference })));
+    this.subitems.set(demand.subitems.map(item => ({ description: item.description, amount: item.amount, sourceProposalItemId: item.sourceProposalItemId })));
+    this.subitemErrors.set({});
     this.externalReferenceErrors.set({});
     this.customerSearch.setValue(demand.customerName);
     this.loadLocations(demand.customerId, demand.locationId);
@@ -268,6 +272,8 @@ export class NewDemandPage implements OnInit {
       externalReferences: this.externalReferences().filter(reference => reference.type.trim() && reference.value.trim())
         .map(reference => ({ type: reference.type.trim(), value: reference.value.trim() })),
       priority: values.priority || null,
+      subitems: this.subitems().filter(item => item.description.trim() || item.amount !== null)
+        .map(item => ({ description: item.description.trim(), amount: item.amount })),
     };
     this.submitting.set(true);
     this.versionConflict.set(false);
@@ -292,6 +298,18 @@ export class NewDemandPage implements OnInit {
 
   addExternalReference(): void {
     this.externalReferences.update(references => [...references, { type: '', value: '' }]);
+  }
+
+  addSubitem(): void { if (this.subitems().length < 100) this.subitems.update(items => [...items, { description: '', amount: null }]); }
+  updateSubitem(index: number, field: keyof DemandSubitemInput, value: string): void {
+    this.subitems.update(items => items.map((item, current) => current === index
+      ? { ...item, [field]: field === 'amount' ? (value.trim() === '' ? null : Number(value)) : value } : item));
+    this.subitemErrors.update(errors => { const next = { ...errors }; delete next[index]; return next; });
+  }
+  removeSubitem(index: number): void {
+    this.subitems.update(items => items.filter((_, current) => current !== index));
+    this.subitemErrors.update(errors => Object.fromEntries(Object.entries(errors).filter(([key]) => Number(key) !== index)
+      .map(([key, value]) => [Number(key) > index ? Number(key) - 1 : Number(key), value])));
   }
 
   updateExternalReference(index: number, field: keyof ExternalReferenceInput, value: string): void {
@@ -322,7 +340,16 @@ export class NewDemandPage implements OnInit {
       else if (reference.value.trim().length > 100) errors[index] = 'O valor deve ter até 100 caracteres.';
     });
     this.externalReferenceErrors.set(errors);
-    return Object.keys(errors).length === 0;
+    const subitemErrors: Record<number, string> = {};
+    this.subitems().forEach((item, index) => {
+      const hasDescription = !!item.description.trim();
+      if (!hasDescription && item.amount === null) return;
+      if (!hasDescription) subitemErrors[index] = 'Informe a descrição do subitem.';
+      else if (item.description.trim().length > 1000) subitemErrors[index] = 'A descrição deve ter até 1.000 caracteres.';
+      else if (item.amount !== null && (!Number.isFinite(item.amount) || item.amount < 0 || Math.round(item.amount * 100) !== item.amount * 100)) subitemErrors[index] = 'Informe um valor válido com até duas casas decimais.';
+    });
+    this.subitemErrors.set(subitemErrors);
+    return Object.keys(errors).length === 0 && Object.keys(subitemErrors).length === 0;
   }
 
   private handleSaveError(error: HttpErrorResponse): void {
