@@ -52,7 +52,7 @@ describe('DemandsHome', () => {
       description: 'Revisar bomba hidráulica', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida',
       externalReferences: [{ type: 'Chamado/OS', value: 'CH-42' }],
       assignedToUserId: null, assignedToDisplayName: null, createdByUserId: 'user-a',
-      createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 2, activities: [{ id: 'activity-a', authorUserId: 'user-a',
+      createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 2, subitems: [], activities:  [{ id: 'activity-a', authorUserId: 'user-a',
         authorDisplayName: 'Gestora', eventType: 'DemandCreated', description: 'Demanda criada.', occurredAtUtc: '2026-11-17T12:00:00Z' }],
     });
     fixture.detectChanges();
@@ -67,7 +67,7 @@ describe('DemandsHome', () => {
       id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa', locationId: 'location-a',
       locationName: 'Obra Centro', description: 'Revisar bomba hidráulica', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida',
       externalReferences: [], assignedToUserId: null, assignedToDisplayName: null,
-      createdByUserId: 'user-a', createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 2, activities: [],
+      createdByUserId: 'user-a', createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 2, subitems: [], activities:  [],
     });
     fixture.detectChanges();
     (fixture.nativeElement.querySelector('.detail-edit-button') as HTMLButtonElement).click();
@@ -102,7 +102,7 @@ describe('DemandsHome', () => {
       id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa', locationId: 'location-a',
       locationName: 'Obra Centro', description: 'Bomba revisada', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida',
       externalReferences: [], assignedToUserId: null, assignedToDisplayName: null,
-      createdByUserId: 'user-a', createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 3, activities: [],
+      createdByUserId: 'user-a', createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 3, subitems: [], activities:  [],
     });
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('.detail-drawer[open]')).not.toBeNull();

@@ -232,10 +232,11 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
             && value.ProposalRequestId == requestId && value.State == "Converted", cancellationToken);
         try
         {
-            request.StartRevision(Guid.NewGuid(), actorUserId,
+            var revision = request.StartRevision(Guid.NewGuid(), actorUserId,
                 input.Items!.Select(item => (item.Description!, item.Amount)), input.ValidUntil, input.Notes, now, converted);
+            dbContext.ProposalRevisions.Add(revision);
             AddActivity(request, actorUserId, "RevisionCreated",
-                $"Revisão {request.Revisions.Max(value => value.Number)} criada.", now);
+                $"Revisão {revision.Number} criada.", now);
             await dbContext.SaveChangesAsync(cancellationToken);
             return new ProposalCommandResult(await FindAsync(organizationId, requestId, cancellationToken), ProposalFailure.None);
         }
@@ -290,15 +291,7 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
             .SingleOrDefaultAsync(value => value.OrganizationId == organizationId && value.Id == requestId, cancellationToken);
         if (request is null) return new ProposalCommandResult(null, ProposalFailure.NotFound);
         if (request.Version != input.Version)
-        {
-            var existingDraft = await dbContext.DemandDrafts.AsNoTracking().SingleOrDefaultAsync(value =>
-                value.OrganizationId == organizationId && value.ProposalRequestId == requestId, cancellationToken);
-            if (existingDraft is not null && existingDraft.ProposalRevisionId == input.RevisionId
-                && existingDraft.State is DemandDraft.Pending or DemandDraft.Converted
-                && request.Status == CommercialRequest.Approved)
-                return new ProposalCommandResult(await FindAsync(organizationId, requestId, cancellationToken), ProposalFailure.None, existingDraft.Id);
-            return new ProposalCommandResult(null, ProposalFailure.VersionConflict);
-        }
+            return await ResolveApprovalRetryAsync(organizationId, requestId, input.RevisionId, cancellationToken);
 
         var revision = request.Revisions.SingleOrDefault(value => value.Id == input.RevisionId);
         if (revision is null) return new ProposalCommandResult(null, ProposalFailure.InvalidData);
@@ -319,7 +312,8 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
         }
         catch (DbUpdateConcurrencyException)
         {
-            return new ProposalCommandResult(null, ProposalFailure.VersionConflict);
+            await transaction.RollbackAsync(cancellationToken);
+            return await ResolveApprovalRetryAsync(organizationId, requestId, input.RevisionId, cancellationToken);
         }
         catch (ArgumentException)
         {
@@ -329,6 +323,22 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
         {
             return new ProposalCommandResult(null, ProposalFailure.InvalidState);
         }
+    }
+
+    private async Task<ProposalCommandResult> ResolveApprovalRetryAsync(Guid organizationId, Guid requestId,
+        Guid revisionId, CancellationToken cancellationToken)
+    {
+        var draft = await dbContext.DemandDrafts.AsNoTracking().SingleOrDefaultAsync(value =>
+            value.OrganizationId == organizationId && value.ProposalRequestId == requestId
+            && value.ProposalRevisionId == revisionId
+            && (value.State == DemandDraft.Pending || value.State == DemandDraft.Converted), cancellationToken);
+        if (draft is not null)
+        {
+            var proposal = await FindAsync(organizationId, requestId, cancellationToken);
+            if (proposal?.Status == CommercialRequest.Approved)
+                return new ProposalCommandResult(proposal, ProposalFailure.None, draft.Id);
+        }
+        return new ProposalCommandResult(null, ProposalFailure.VersionConflict);
     }
 
     private void AddActivity(CommercialRequest request, Guid actorUserId, string eventType,

@@ -100,7 +100,7 @@ describe('NewDemandPage', () => {
     expect(request.request.headers.get('X-CSRF-TOKEN')).toBe('csrf-value');
     expect(request.request.body).toEqual({
       customerId: 'customer-a', locationId: 'location-a', description: 'Manutenção solicitada pelo cliente',
-      origin: 'WhatsApp', assignedToUserId: null,
+      origin: 'WhatsApp', assignedToUserId: null, subitems: [],
       externalReferences: [{ type: 'Chamado/OS', value: 'CH-15' }, { type: 'Código do Cliente', value: 'REF-9' }], priority: 'Média',
     });
     request.flush({ id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', locationId: 'location-a',
@@ -152,7 +152,7 @@ describe('NewDemandPage', () => {
       locationId: 'location-a', locationName: 'Unidade Central', description: 'Descrição atual', origin: 'WhatsApp',
       priority: 'Alta', status: 'Recebida', externalReferences: [{ type: 'Chamado/OS', value: 'CH-12' }, { type: 'Ordem de Compra', value: 'OC-8' }],
       assignedToUserId: 'user-a', assignedToDisplayName: 'Gestora', createdAtUtc: '2026-11-05T12:00:00Z',
-      createdByDisplayName: 'Gestora', activities: [], version: 3,
+      createdByDisplayName: 'Gestora', activities: [], subitems: [], version: 3,
     };
     page.ngOnInit();
     http.expectOne(request => request.url === '/api/customers' && request.params.get('pageSize') === '100')
@@ -175,7 +175,7 @@ describe('NewDemandPage', () => {
     expect(request.request.body).toEqual({
       customerId: 'customer-a', locationId: 'location-a', description: 'Descrição editada', origin: 'WhatsApp',
       assignedToUserId: 'user-a', externalReferences: [{ type: 'Chamado/OS', value: 'CH-12' }, { type: 'Ordem de Compra', value: 'OC-8' }],
-      priority: 'Alta', version: 3,
+      priority: 'Alta', version: 3, subitems: [],
     });
     request.flush({ error: 'A demanda foi alterada por outra pessoa.' }, { status: 409, statusText: 'Conflict' });
     expect(page.form.controls.description.value).toBe('Descrição editada');
@@ -190,7 +190,7 @@ describe('NewDemandPage', () => {
       locationId: 'location-a', locationName: 'Unidade Central', description: 'Antes', origin: 'Ligação',
       priority: null, status: 'Recebida', externalReferences: [],
       assignedToUserId: null, assignedToDisplayName: null, createdAtUtc: '2026-11-05T12:00:00Z',
-      createdByDisplayName: 'Gestora', activities: [], version: 3,
+      createdByDisplayName: 'Gestora', activities: [], subitems: [], version: 3,
     };
     page.ngOnInit();
     http.expectOne(request => request.url === '/api/customers' && request.params.get('pageSize') === '100')
@@ -208,7 +208,7 @@ describe('NewDemandPage', () => {
     reload.flush({
       id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa',
       locationId: 'location-a', locationName: 'Unidade Central', description: 'Versão mais recente', origin: 'E-mail',
-      priority: 'Baixa', status: 'Recebida', externalReferences: [],
+      priority: 'Baixa', status: 'Recebida', externalReferences: [], subitems: [],
       assignedToUserId: null, assignedToDisplayName: null, createdAtUtc: '2026-11-05T12:00:00Z', version: 4,
     });
     http.expectOne('/api/customers/customer-a/locations').flush([{

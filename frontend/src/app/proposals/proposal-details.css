@@ -12,3 +12,44 @@
 @media(max-width:700px){.proposal-form .form-grid .wide{grid-column:auto}}
 .proposal-form-dialog,.proposal-form-panel{font-family:Inter,"Segoe UI",system-ui,-apple-system,BlinkMacSystemFont,sans-serif;-webkit-font-smoothing:antialiased}
 
+@media (max-width: 720px) {
+  .proposal-form-dialog {
+    inset: 0;
+    width: 100%;
+    max-width: 100%;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .proposal-form-panel, .detail-panel {
+    padding: 1rem;
+  }
+
+  .facts, .item-row, .proposal-form .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .item-row input {
+    min-width: 0;
+  }
+
+  .form-actions {
+    flex-wrap: wrap;
+  }
+
+  .detail-panel {
+    overflow-wrap: anywhere;
+  }
+
+  .item-row .text-button {
+    justify-self: end;
+  }
+}
+
+
+@media (max-width: 720px) {
+  .detail-header-actions {
+    align-items: flex-end;
+    flex-direction: column;
+  }
+}

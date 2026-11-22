@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
@@ -7,6 +8,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using PitCrm.Application.Authorization;
 using PitCrm.Application.Demands;
+using PitCrm.Application.Proposals;
+using PitCrm.Domain.Proposals;
 using PitCrm.Domain.Demands;
 using PitCrm.Domain.Organizations;
 using PitCrm.Infrastructure.Identity;
@@ -632,6 +635,8 @@ public sealed class CustomersApiTests
                 (await adminClient.GetAsync("/api/customers?page=0&pageSize=20")).StatusCode);
             Assert.Equal(HttpStatusCode.BadRequest,
                 (await adminClient.GetAsync("/api/customers?page=1&pageSize=101")).StatusCode);
+
+            await VerifyCommercialConversionAsync(managerClient, operatorClient, foreignClient, created.Id, location.Id);
         }
         finally
         {
@@ -642,6 +647,85 @@ public sealed class CustomersApiTests
             command.CommandText = $"DROP SCHEMA IF EXISTS \"{schemaName}\" CASCADE";
             await command.ExecuteNonQueryAsync();
         }
+    }
+
+    private static async Task VerifyCommercialConversionAsync(HttpClient manager, HttpClient operatorClient,
+        HttpClient otherOrganization, Guid customerId, Guid locationId)
+    {
+        var request = new { customerId, origin = "E-mail", description = "Reforma de teste" };
+        using var denied = await PostJsonAsync(operatorClient, "/api/proposals", request);
+        Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
+        using var crossTenant = await PostJsonAsync(otherOrganization, "/api/proposals", request);
+        Assert.Equal(HttpStatusCode.BadRequest, crossTenant.StatusCode);
+
+        using var created = await PostJsonAsync(manager, "/api/proposals", request);
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var proposal = (await created.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        var proposalPath = $"/api/proposals/{proposal.Id}";
+        using var foreignRead = await otherOrganization.GetAsync(proposalPath);
+        Assert.Equal(HttpStatusCode.NotFound, foreignRead.StatusCode);
+
+        using var evaluated = await PostJsonAsync(manager, proposalPath + "/status",
+            new { proposal.Version, status = CommercialRequest.Evaluating });
+        evaluated.EnsureSuccessStatusCode();
+        proposal = (await evaluated.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+
+        using var revised = await PostJsonAsync(manager, proposalPath + "/revisions",
+            new { proposal.Version, items = new[] { new { description = "Pintura", amount = 120.50m } } });
+        revised.EnsureSuccessStatusCode();
+        proposal = (await revised.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        var revision = Assert.Single(proposal.Revisions);
+        var item = Assert.Single(revision.Items);
+
+        var sentAtUtc = DateTimeOffset.UtcNow.AddMinutes(-10);
+        using var sent = await PostJsonAsync(manager, proposalPath + "/send",
+            new { proposal.Version, revisionId = revision.Id, channel = "Email", sentAtUtc });
+        sent.EnsureSuccessStatusCode();
+        proposal = (await sent.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+
+        var approval = new { proposal.Version, revisionId = revision.Id, approverName = "Cliente Teste",
+            channel = "Email", approvedAtUtc = sentAtUtc.AddMinutes(1) };
+        var approvalPath = proposalPath + "/approve";
+        using var foreignApproval = await PostJsonAsync(otherOrganization, approvalPath, approval);
+        Assert.Equal(HttpStatusCode.NotFound, foreignApproval.StatusCode);
+
+        var concurrent = await Task.WhenAll(PostJsonAsync(manager, approvalPath, approval),
+            PostJsonAsync(manager, approvalPath, approval));
+        using var first = concurrent[0];
+        using var second = concurrent[1];
+        first.EnsureSuccessStatusCode();
+        second.EnsureSuccessStatusCode();
+        var draftId = (await first.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("demandDraftId").GetGuid();
+        Assert.Equal(draftId, (await second.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("demandDraftId").GetGuid());
+        using var replay = await PostJsonAsync(manager, approvalPath, approval);
+        replay.EnsureSuccessStatusCode();
+        Assert.Equal(draftId, (await replay.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("demandDraftId").GetGuid());
+
+        var draftPath = $"/api/demand-drafts/{draftId}";
+        using var foreignDraft = await otherOrganization.GetAsync(draftPath);
+        Assert.Equal(HttpStatusCode.NotFound, foreignDraft.StatusCode);
+        var draft = await operatorClient.GetFromJsonAsync<JsonElement>(draftPath);
+        using var incomplete = await PostJsonAsync(operatorClient, draftPath + "/convert",
+            new { version = draft.GetProperty("version").GetInt32() });
+        Assert.Equal(HttpStatusCode.BadRequest, incomplete.StatusCode);
+        using var updated = await PutJsonAsync(operatorClient, draftPath,
+            new { version = draft.GetProperty("version").GetInt32(), customerId, locationId,
+                description = request.description, origin = request.origin });
+        updated.EnsureSuccessStatusCode();
+        draft = await updated.Content.ReadFromJsonAsync<JsonElement>();
+        using var converted = await PostJsonAsync(operatorClient, draftPath + "/convert",
+            new { version = draft.GetProperty("version").GetInt32() });
+        converted.EnsureSuccessStatusCode();
+        var demandId = (await converted.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("demandId").GetGuid();
+        using var convertedAgain = await PostJsonAsync(operatorClient, draftPath + "/convert",
+            new { version = draft.GetProperty("version").GetInt32() });
+        convertedAgain.EnsureSuccessStatusCode();
+        Assert.Equal(demandId, (await convertedAgain.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("demandId").GetGuid());
+        var demand = await operatorClient.GetFromJsonAsync<JsonElement>($"/api/demands/{demandId}");
+        var subitem = Assert.Single(demand.GetProperty("subitems").EnumerateArray());
+        Assert.Equal(item.Id, subitem.GetProperty("sourceProposalItemId").GetGuid());
+        Assert.Equal(item.Description, subitem.GetProperty("description").GetString());
+        Assert.Equal(item.Amount, subitem.GetProperty("amount").GetDecimal());
     }
 
     private static async Task AddUserAsync(

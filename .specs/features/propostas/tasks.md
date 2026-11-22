@@ -14,4 +14,6 @@
 
 ## Handoff
 
+Em 22/11/2026, a integração PostgreSQL passou a exercitar a conversão, a aprovação repetida e simultânea, o isolamento e o acesso por perfil nos cenários descritos em [verification.md](verification.md). A validação autenticada no navegador e os critérios restantes seguem pendentes.
+
 O design mantém Comercial como dono da solicitação/proposta e Demandas como dono de rascunhos, demandas e subitens. D01 é preservada: Operador não cria/edita Cliente/Local. Em 21/11/2026, o usuário autorizou aplicar as migrações pendentes no banco local `pitcrm_dev`; T25 e T26 foram aplicadas e as tabelas principais foram verificadas. Nenhum outro banco foi alterado. O contrato idempotente de aprovação está definido em `design.md`.
