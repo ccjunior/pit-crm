@@ -35,10 +35,12 @@ describe('ProposalsPage', () => {
     const http = TestBed.inject(HttpTestingController);
     const proposal: ProposalDetails = {
       id: 'proposal-a', customerId: null, customerName: null, prospectName: 'Cliente',
+      number: 'SOL-2026-0001', responsibleUserId: null, responsibleName: null,
       description: 'Reforma', origin: 'E-mail', status: 'Sent', version: 4,
       currentRevisionNumber: 2, currentRevisionTotal: 150, updatedAtUtc: '2026-11-22T12:00:00Z',
       prospectContactName: null, prospectEmail: null, prospectPhone: null, createdAtUtc: '2026-11-22T12:00:00Z',
       outcomeReason: null, demandDraftState: null, convertedDemandId: null, activities: [],
+      references: [],
       revisions: [{ id: 'revision-b', number: 2, status: 'Sent', validUntil: null, notes: null,
         totalAmount: 150, items: [], createdAtUtc: '2026-11-22T12:00:00Z', sentAtUtc: null,
         sendChannel: null, clientApproverName: null, approvalChannel: null, approvalNotes: null, approvedAtUtc: null }],
