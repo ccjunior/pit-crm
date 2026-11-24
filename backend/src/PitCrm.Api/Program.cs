@@ -147,6 +147,16 @@ builder.Services.AddScoped<ICurrentOrganizationContext, HttpCurrentOrganizationC
 
 var app = builder.Build();
 
+await using (var migrationScope = app.Services.CreateAsyncScope())
+{
+    var dbContext = migrationScope.ServiceProvider.GetRequiredService<PitCrmDbContext>();
+    var logger = migrationScope.ServiceProvider.GetRequiredService<ILoggerFactory>()
+        .CreateLogger("DatabaseMigrations");
+    logger.LogInformation("Applying pending database migrations.");
+    await dbContext.Database.MigrateAsync();
+    logger.LogInformation("Database migrations are up to date.");
+}
+
 app.UseAuthentication();
 app.UseAuthorization();
 

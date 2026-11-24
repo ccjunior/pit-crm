@@ -9,6 +9,8 @@ export const proposalStages = [
   { id: 'NotQuoted', label: 'Não cotada' }, { id: 'Rejected', label: 'Recusada' },
   { id: 'Expired', label: 'Expirada' }, { id: 'Cancelled', label: 'Cancelada' },
 ] as const;
+export const proposalOrigins = ['E-mail', 'Telefone', 'WhatsApp', 'Indicação', 'Visita', 'Licitação', 'Outro'] as const;
+export const proposalReferenceTypes = ['RFQ/cotação', 'Chamado/OS', 'Pedido de compra', 'Outra'] as const;
 
 export interface ProposalItem { id: string; position: number; description: string; amount: number; }
 export interface ProposalRevision {
@@ -20,6 +22,7 @@ export interface ProposalRevision {
 export interface ProposalActivity { id: string; actorDisplayName: string; eventType: string; description: string; occurredAtUtc: string; }
 export interface ProposalListItem {
   id: string; customerId: string | null; customerName: string | null; prospectName: string | null;
+  number: string; responsibleUserId: string | null; responsibleName: string | null;
   description: string; origin: string; status: string; version: number; currentRevisionNumber: number | null;
   currentRevisionTotal: number | null; updatedAtUtc: string;
 }
@@ -27,17 +30,20 @@ export interface ProposalDetails extends ProposalListItem {
   prospectContactName: string | null; prospectEmail: string | null; prospectPhone: string | null;
   revisions: ProposalRevision[]; activities: ProposalActivity[]; createdAtUtc: string;
   outcomeReason: string | null; demandDraftState: string | null; convertedDemandId: string | null;
+  references: { id: string; type: string; value: string }[];
 }
 export interface ProposalPage { items: ProposalListItem[]; page: number; pageSize: number; totalCount: number; }
 export interface ProposalInput {
   customerId: string | null; prospectName: string | null; prospectContactName: string | null;
   prospectEmail: string | null; prospectPhone: string | null; origin: string; description: string;
+  responsibleUserId: string | null; references: { type: string; value: string }[];
 }
 export interface ProposalCommandResponse { proposal: ProposalDetails; demandDraftId?: string | null; }
 
 @Injectable({ providedIn: 'root' })
 export class ProposalApi {
   private readonly http = inject(HttpClient);
+  eligibleAssignees() { return this.http.get<{ id: string; displayName: string }[]>('/api/users/eligible-assignees'); }
   search(query: string, status = '', customerId = '', from = '', to = '', page = 1, pageSize = 50): Observable<ProposalPage> {
     let params = new HttpParams().set('page', page).set('pageSize', pageSize);
     if (query.trim()) params = params.set('q', query.trim());

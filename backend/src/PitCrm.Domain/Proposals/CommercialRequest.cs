@@ -4,9 +4,9 @@ public sealed class CommercialRequest
 {
     private CommercialRequest() { }
 
-    public CommercialRequest(Guid id, Guid organizationId, Guid createdByUserId, Guid? customerId,
+    public CommercialRequest(Guid id, Guid organizationId, Guid createdByUserId, string number, Guid? customerId,
         string? prospectName, string? prospectContactName, string? prospectEmail, string? prospectPhone,
-        string origin, string description, DateTimeOffset now)
+        Guid? responsibleUserId, string origin, string description, DateTimeOffset now)
     {
         if (id == Guid.Empty || organizationId == Guid.Empty || createdByUserId == Guid.Empty)
             throw new ArgumentException("Commercial request identity cannot be empty.");
@@ -17,8 +17,10 @@ public sealed class CommercialRequest
 
         Id = id;
         OrganizationId = organizationId;
+        Number = Required(number, nameof(number), 24);
         CreatedByUserId = createdByUserId;
         CustomerId = customerId;
+        ResponsibleUserId = responsibleUserId;
         ProspectName = Optional(prospectName, nameof(prospectName), 200);
         ProspectContactName = Optional(prospectContactName, nameof(prospectContactName), 200);
         ProspectEmail = Optional(prospectEmail, nameof(prospectEmail), 254);
@@ -41,20 +43,26 @@ public sealed class CommercialRequest
     public const string Rejected = "Rejected";
     public const string Expired = "Expired";
     public const string Cancelled = "Cancelled";
+    public const string ManualSource = "Manual";
+    public const string EmailSource = "Email";
 
     public static readonly string[] Statuses = [Received, Evaluating, Drafting, Sent, Negotiating,
         Approved, NotQuoted, Rejected, Expired, Cancelled];
-    public static readonly string[] Origins = ["WhatsApp", "Ligação", "E-mail", "Outra"];
+    public static readonly string[] Origins = ["E-mail", "Telefone", "WhatsApp", "Indicação", "Visita", "Licitação", "Outro"];
+    public static readonly string[] ReferenceTypes = ["RFQ/cotação", "Chamado/OS", "Pedido de compra", "Outra"];
     public static readonly string[] ResultStatuses = [NotQuoted, Rejected, Expired, Cancelled];
 
     public Guid Id { get; private set; }
     public Guid OrganizationId { get; private set; }
+    public string Number { get; private set; } = string.Empty;
     public Guid? CustomerId { get; private set; }
+    public Guid? ResponsibleUserId { get; private set; }
     public string? ProspectName { get; private set; }
     public string? ProspectContactName { get; private set; }
     public string? ProspectEmail { get; private set; }
     public string? ProspectPhone { get; private set; }
     public string Origin { get; private set; } = string.Empty;
+    public string SourceType { get; private set; } = ManualSource;
     public string Description { get; private set; } = string.Empty;
     public string Status { get; private set; } = string.Empty;
     public string? OutcomeReason { get; private set; }
@@ -63,6 +71,7 @@ public sealed class CommercialRequest
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
     public ICollection<ProposalRevision> Revisions { get; private set; } = new List<ProposalRevision>();
+    public ICollection<CommercialReference> References { get; private set; } = new List<CommercialReference>();
 
     public ProposalRevision StartRevision(Guid revisionId, Guid authorUserId, IEnumerable<(string Description, decimal Amount)> items,
         DateOnly? validUntil, string? notes, DateTimeOffset now, bool demandDraftConverted = false)
@@ -87,6 +96,8 @@ public sealed class CommercialRequest
             throw new InvalidOperationException("The commercial request cannot transition to the requested state.");
         if (nextStatus == NotQuoted && string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("A reason is required when deciding not to quote.", nameof(reason));
+        if (nextStatus == Evaluating && ResponsibleUserId is null)
+            throw new InvalidOperationException("A commercial responsible is required before evaluation.");
 
         TransitionTo(nextStatus, reason, now);
     }
@@ -122,7 +133,7 @@ public sealed class CommercialRequest
     }
 
     public void UpdateDetails(Guid? customerId, string? prospectName, string? prospectContactName,
-        string? prospectEmail, string? prospectPhone, string origin, string description, DateTimeOffset now)
+        string? prospectEmail, string? prospectPhone, Guid? responsibleUserId, string origin, string description, DateTimeOffset now)
     {
         if (Status is not (Received or Evaluating or Drafting))
             throw new InvalidOperationException("The commercial request can no longer be edited.");
@@ -130,7 +141,10 @@ public sealed class CommercialRequest
             throw new ArgumentException("An existing customer or prospect name is required.", nameof(prospectName));
         if (!Origins.Contains(origin, StringComparer.OrdinalIgnoreCase))
             throw new ArgumentOutOfRangeException(nameof(origin));
+        if (Status == Evaluating && responsibleUserId is null)
+            throw new InvalidOperationException("A commercial responsible is required while the request is under evaluation.");
         CustomerId = customerId;
+        ResponsibleUserId = responsibleUserId;
         ProspectName = customerId is null ? Optional(prospectName, nameof(prospectName), 200) : null;
         ProspectContactName = customerId is null ? Optional(prospectContactName, nameof(prospectContactName), 200) : null;
         ProspectEmail = customerId is null ? Optional(prospectEmail, nameof(prospectEmail), 254) : null;
@@ -139,6 +153,13 @@ public sealed class CommercialRequest
         Description = Required(description, nameof(description), 4000);
         UpdatedAtUtc = NormalizeTimestamp(now);
         Version = checked(Version + 1);
+    }
+
+    public void SetReferences(IEnumerable<(string Type, string Value)> references)
+    {
+        References.Clear();
+        foreach (var (type, value) in references)
+            References.Add(new CommercialReference(Guid.NewGuid(), OrganizationId, Id, type, value));
     }
 
     private void TransitionTo(string nextStatus, string? reason, DateTimeOffset now)

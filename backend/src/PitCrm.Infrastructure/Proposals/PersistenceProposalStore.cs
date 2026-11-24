@@ -32,6 +32,8 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
             var pattern = $"%{term}%";
             requests = requests.Where(value => EF.Functions.ILike(value.Description, pattern, "\\")
                 || (value.ProspectName != null && EF.Functions.ILike(value.ProspectName, pattern, "\\"))
+                || dbContext.CommercialReferences.Any(reference => reference.OrganizationId == organizationId
+                    && reference.CommercialRequestId == value.Id && EF.Functions.ILike(reference.Value, pattern, "\\"))
                 || dbContext.Customers.Any(customer => customer.OrganizationId == organizationId
                     && customer.Id == value.CustomerId && EF.Functions.ILike(customer.Name, pattern, "\\")));
         }
@@ -45,10 +47,14 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
             let revision = dbContext.ProposalRevisions.AsNoTracking()
                 .Where(item => item.OrganizationId == request.OrganizationId && item.CommercialRequestId == request.Id)
                 .OrderByDescending(item => item.Number).FirstOrDefault()
+            let responsibleName = dbContext.Users.AsNoTracking()
+                .Where(user => user.OrganizationId == request.OrganizationId && user.Id == request.ResponsibleUserId)
+                .Select(user => user.DisplayName).FirstOrDefault()
             select new
             {
                 Request = request,
                 CustomerName = customer == null ? null : customer.Name,
+                ResponsibleName = responsibleName,
                 RevisionNumber = revision == null ? (int?)null : revision.Number,
                 RevisionTotal = revision == null ? (decimal?)null : dbContext.ProposalItems.AsNoTracking()
                     .Where(item => item.OrganizationId == revision.OrganizationId && item.ProposalRevisionId == revision.Id)
@@ -57,7 +63,8 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
         var rows = await itemsQuery.OrderByDescending(value => value.Request.UpdatedAtUtc)
             .ThenByDescending(value => value.Request.Id).Skip((page - 1) * pageSize).Take(pageSize)
             .Select(value => new ProposalListItemDto(value.Request.Id, value.Request.CustomerId,
-                value.CustomerName, value.Request.ProspectName, value.Request.Description, value.Request.Origin,
+                value.CustomerName, value.Request.ProspectName, value.Request.Number, value.Request.ResponsibleUserId,
+                value.ResponsibleName, value.Request.Description, value.Request.Origin,
                 value.Request.Status, value.Request.Version, value.RevisionNumber, value.RevisionTotal,
                 value.Request.UpdatedAtUtc))
             .ToListAsync(cancellationToken);
@@ -72,7 +79,7 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
             {
                 value.Id, value.CustomerId, value.ProspectName, value.ProspectContactName, value.ProspectEmail,
                 value.ProspectPhone, value.Description, value.Origin, value.Status, value.Version, value.OutcomeReason,
-                value.CreatedAtUtc, value.UpdatedAtUtc
+                value.Number, value.ResponsibleUserId, value.CreatedAtUtc, value.UpdatedAtUtc
             }).SingleOrDefaultAsync(cancellationToken);
         if (request is null) return null;
 
@@ -85,6 +92,15 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
             ? await dbContext.Customers.AsNoTracking().Where(value => value.OrganizationId == organizationId && value.Id == customerId)
                 .Select(value => value.Name).SingleOrDefaultAsync(cancellationToken)
             : null;
+        var responsibleName = request.ResponsibleUserId is { } responsibleId
+            ? await dbContext.Users.AsNoTracking().Where(value => value.OrganizationId == organizationId && value.Id == responsibleId)
+                .Select(value => value.DisplayName).SingleOrDefaultAsync(cancellationToken)
+            : null;
+        var references = await dbContext.CommercialReferences.AsNoTracking()
+            .Where(value => value.OrganizationId == organizationId && value.CommercialRequestId == requestId)
+            .OrderBy(value => value.Type).ThenBy(value => value.Value)
+            .Select(value => new CommercialReferenceDto(value.Id, value.Type, value.Value))
+            .ToListAsync(cancellationToken);
         var revisionRows = await dbContext.ProposalRevisions.AsNoTracking()
             .Where(value => value.OrganizationId == organizationId && value.CommercialRequestId == requestId)
             .OrderByDescending(value => value.Number)
@@ -127,7 +143,8 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
             .ToListAsync(cancellationToken);
 
         return new ProposalDetailsDto(request.Id, request.CustomerId, customerName, request.ProspectName,
-            request.ProspectContactName, request.ProspectEmail, request.ProspectPhone, request.Description,
+            request.ProspectContactName, request.ProspectEmail, request.ProspectPhone, request.Number,
+            request.ResponsibleUserId, responsibleName, references, request.Description,
             request.Origin, request.Status, request.Version, revisions.FirstOrDefault()?.Number,
             revisions, activities, request.CreatedAtUtc, request.UpdatedAtUtc, request.OutcomeReason,
             draft?.State, draft?.ConvertedDemandId);
@@ -139,14 +156,30 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
         if (input.CustomerId is { } customerId && !await dbContext.Customers.AnyAsync(value =>
                 value.OrganizationId == organizationId && value.Id == customerId, cancellationToken))
             return new ProposalCommandResult(null, ProposalFailure.CustomerNotFound);
+        if (input.ResponsibleUserId is { } responsibleId && !await dbContext.Users.AnyAsync(value =>
+                value.OrganizationId == organizationId && value.Id == responsibleId && value.IsActive, cancellationToken))
+            return new ProposalCommandResult(null, ProposalFailure.InvalidData);
         try
         {
-            var request = new CommercialRequest(Guid.NewGuid(), organizationId, actorUserId, input.CustomerId,
+            await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+            var year = now.Year;
+            var lockKey = $"{organizationId:N}:{year}";
+            await dbContext.Database.ExecuteSqlInterpolatedAsync($"SELECT pg_advisory_xact_lock(hashtextextended({lockKey}, 0))", cancellationToken);
+            var prefix = $"SOL-{year}-";
+            var previousNumber = await dbContext.CommercialRequests.AsNoTracking()
+                .Where(value => value.OrganizationId == organizationId && value.Number.StartsWith(prefix))
+                .OrderByDescending(value => value.Number).Select(value => value.Number).FirstOrDefaultAsync(cancellationToken);
+            var nextNumber = previousNumber is null ? 1 : int.Parse(previousNumber[prefix.Length..], System.Globalization.CultureInfo.InvariantCulture) + 1;
+            var number = $"{prefix}{nextNumber:D4}";
+            var request = new CommercialRequest(Guid.NewGuid(), organizationId, actorUserId, number, input.CustomerId,
                 input.ProspectName, input.ProspectContactName, input.ProspectEmail, input.ProspectPhone,
+                input.ResponsibleUserId,
                 input.Origin!, input.Description!, now);
+            request.SetReferences(ToReferenceValues(input.References));
             dbContext.CommercialRequests.Add(request);
             AddActivity(request, actorUserId, "RequestCreated", "Solicitação comercial registrada.", now);
             await dbContext.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
             return new ProposalCommandResult(await FindAsync(organizationId, request.Id, cancellationToken), ProposalFailure.None);
         }
         catch (ArgumentException)
@@ -165,10 +198,14 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
         if (input.CustomerId is { } customerId && !await dbContext.Customers.AnyAsync(value =>
                 value.OrganizationId == organizationId && value.Id == customerId, cancellationToken))
             return new ProposalCommandResult(null, ProposalFailure.CustomerNotFound);
+        if (input.ResponsibleUserId is { } responsibleId && !await dbContext.Users.AnyAsync(value =>
+                value.OrganizationId == organizationId && value.Id == responsibleId && value.IsActive, cancellationToken))
+            return new ProposalCommandResult(null, ProposalFailure.InvalidData);
         try
         {
             request.UpdateDetails(input.CustomerId, input.ProspectName, input.ProspectContactName,
-                input.ProspectEmail, input.ProspectPhone, input.Origin!, input.Description!, now);
+                input.ProspectEmail, input.ProspectPhone, input.ResponsibleUserId, input.Origin!, input.Description!, now);
+            request.SetReferences(ToReferenceValues(input.References));
             AddActivity(request, actorUserId, "RequestUpdated", "Dados da solicitação comercial atualizados.", now);
             await dbContext.SaveChangesAsync(cancellationToken);
             return new ProposalCommandResult(await FindAsync(organizationId, requestId, cancellationToken), ProposalFailure.None);
@@ -344,6 +381,13 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
     private void AddActivity(CommercialRequest request, Guid actorUserId, string eventType,
         string description, DateTimeOffset now) => dbContext.CommercialActivities.Add(new CommercialActivity(
         Guid.NewGuid(), request.OrganizationId, request.Id, actorUserId, eventType, description, now));
+
+    private static (string Type, string Value)[] ToReferenceValues(IReadOnlyList<CommercialReferenceInput>? references)
+    {
+        if (references is null) return [];
+        return references.Where(value => !string.IsNullOrWhiteSpace(value.Type) || !string.IsNullOrWhiteSpace(value.Value))
+            .Select(value => (value.Type?.Trim() ?? "", value.Value?.Trim() ?? "")).ToArray();
+    }
 
     private static string EscapeLike(string term) => term.Replace("\\", "\\\\", StringComparison.Ordinal)
         .Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);

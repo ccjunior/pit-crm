@@ -716,6 +716,39 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.ToTable("CommercialActivities", (string)null);
                 });
 
+            modelBuilder.Entity("PitCrm.Domain.Proposals.CommercialReference", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CommercialRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("OrganizationId", "Id");
+
+                    b.HasIndex("OrganizationId", "CommercialRequestId");
+
+                    b.HasIndex("OrganizationId", "Value");
+
+                    b.ToTable("CommercialReferences", (string)null);
+                });
+
             modelBuilder.Entity("PitCrm.Domain.Proposals.CommercialRequest", b =>
                 {
                     b.Property<Guid>("Id")
@@ -736,6 +769,11 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .HasMaxLength(4000)
                         .HasColumnType("character varying(4000)");
 
+                    b.Property<string>("Number")
+                        .IsRequired()
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
@@ -743,6 +781,12 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasDefaultValue("Manual")
+                        .HasColumnType("character varying(20)");
 
                     b.Property<string>("OutcomeReason")
                         .HasMaxLength(1000)
@@ -764,6 +808,9 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
+                    b.Property<Guid?>("ResponsibleUserId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -781,6 +828,11 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrganizationId", "CreatedByUserId");
 
                     b.HasIndex("OrganizationId", "CustomerId");
+
+                    b.HasIndex("OrganizationId", "Number")
+                        .IsUnique();
+
+                    b.HasIndex("OrganizationId", "ResponsibleUserId");
 
                     b.HasIndex("OrganizationId", "Status", "UpdatedAtUtc");
 
@@ -1279,6 +1331,16 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("PitCrm.Domain.Proposals.CommercialReference", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Proposals.CommercialRequest", null)
+                        .WithMany("References")
+                        .HasForeignKey("OrganizationId", "CommercialRequestId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("PitCrm.Domain.Proposals.CommercialRequest", b =>
                 {
                     b.HasOne("PitCrm.Domain.Organizations.Organization", null)
@@ -1297,6 +1359,12 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.HasOne("PitCrm.Domain.Customers.Customer", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "CustomerId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "ResponsibleUserId")
                         .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
                 });
@@ -1359,6 +1427,8 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("PitCrm.Domain.Proposals.CommercialRequest", b =>
                 {
+                    b.Navigation("References");
+
                     b.Navigation("Revisions");
                 });
 

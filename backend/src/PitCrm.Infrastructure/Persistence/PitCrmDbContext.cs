@@ -29,6 +29,7 @@ public sealed class PitCrmDbContext(
     public DbSet<ProposalRevision> ProposalRevisions => Set<ProposalRevision>();
     public DbSet<ProposalItem> ProposalItems => Set<ProposalItem>();
     public DbSet<CommercialActivity> CommercialActivities => Set<CommercialActivity>();
+    public DbSet<CommercialReference> CommercialReferences => Set<CommercialReference>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -245,6 +246,8 @@ public sealed class PitCrmDbContext(
             request.Property(value => value.ProspectEmail).HasMaxLength(254);
             request.Property(value => value.ProspectPhone).HasMaxLength(40);
             request.Property(value => value.Origin).HasMaxLength(30).IsRequired();
+            request.Property(value => value.SourceType).HasMaxLength(20).HasDefaultValue(CommercialRequest.ManualSource).IsRequired();
+            request.Property(value => value.Number).HasMaxLength(24).IsRequired();
             request.Property(value => value.Description).HasMaxLength(4000).IsRequired();
             request.Property(value => value.Status).HasMaxLength(20).IsRequired();
             request.Property(value => value.OutcomeReason).HasMaxLength(1000);
@@ -257,8 +260,24 @@ public sealed class PitCrmDbContext(
                 .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).OnDelete(DeleteBehavior.Restrict);
             request.HasOne<ApplicationUser>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CreatedByUserId })
                 .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            request.HasOne<ApplicationUser>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.ResponsibleUserId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).OnDelete(DeleteBehavior.Restrict);
             request.HasIndex(value => new { value.OrganizationId, value.Status, value.UpdatedAtUtc });
             request.HasIndex(value => new { value.OrganizationId, value.CustomerId });
+            request.HasIndex(value => new { value.OrganizationId, value.Number }).IsUnique();
+        });
+
+        builder.Entity<CommercialReference>(reference =>
+        {
+            reference.ToTable("CommercialReferences");
+            reference.HasKey(value => value.Id);
+            reference.HasAlternateKey(value => new { value.OrganizationId, value.Id });
+            reference.Property(value => value.Type).HasMaxLength(60).IsRequired();
+            reference.Property(value => value.Value).HasMaxLength(120).IsRequired();
+            reference.HasOne<CommercialRequest>().WithMany(value => value.References)
+                .HasForeignKey(value => new { value.OrganizationId, value.CommercialRequestId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Cascade);
+            reference.HasIndex(value => new { value.OrganizationId, value.Value });
         });
 
         builder.Entity<ProposalRevision>(revision =>

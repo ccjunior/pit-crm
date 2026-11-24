@@ -653,7 +653,9 @@ public sealed class CustomersApiTests
     private static async Task VerifyCommercialConversionAsync(HttpClient manager, HttpClient operatorClient,
         HttpClient otherOrganization, Guid customerId, Guid locationId)
     {
-        var request = new { customerId, origin = "E-mail", description = "Reforma de teste" };
+        var managerSession = await manager.GetFromJsonAsync<JsonElement>("/api/auth/me");
+        var responsibleUserId = managerSession.GetProperty("id").GetGuid();
+        var request = new { customerId, responsibleUserId, origin = "E-mail", description = "Reforma de teste" };
         using var denied = await PostJsonAsync(operatorClient, "/api/proposals", request);
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         using var crossTenant = await PostJsonAsync(otherOrganization, "/api/proposals", request);
@@ -765,8 +767,10 @@ public sealed class CustomersApiTests
     private static async Task VerifyProspectRevisionAsync(HttpClient manager, HttpClient operatorClient,
         Guid customerId, Guid locationId)
     {
+        var managerSession = await manager.GetFromJsonAsync<JsonElement>("/api/auth/me");
+        var responsibleUserId = managerSession.GetProperty("id").GetGuid();
         using var created = await PostJsonAsync(manager, "/api/proposals",
-            new { prospectName = "Prospect Teste", origin = "E-mail", description = "Reforma" });
+            new { prospectName = "Prospect Teste", responsibleUserId, origin = "E-mail", description = "Reforma" });
         created.EnsureSuccessStatusCode();
         var proposal = (await created.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
         var path = $"/api/proposals/{proposal.Id}";

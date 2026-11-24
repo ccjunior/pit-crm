@@ -1,6 +1,6 @@
-# Acompanhamento comercial — desenho preliminar de AC-T01
+# Acompanhamento comercial — decisões de AC-T01
 
-**Estado:** recomendação para decisão de produto; não autoriza migração nem alteração de código.
+**Estado:** decisões de produto confirmadas pelo usuário em 22/11/2026; AC-T02 implementada localmente, pendente de validação integrada e aplicação autorizada da migração.
 
 ## Contexto auditado
 
@@ -12,11 +12,11 @@ O caminho de conversão já exige que cliente, local, descrição e origem estej
 
 | Decisão de AC-T01 | Recomendação para avaliação | Efeito se aprovada |
 |---|---|---|
-| Identificador de solicitação | `SOL-AAAA-NNNN`, único por organização e ano, sequência crescente sem reutilizar números. Uma linha de sequência por organização/ano é atualizada atomicamente na mesma transação da criação. | Adiciona número legível e índice único composto por organização/número. Registros existentes recebem números por `CreatedAtUtc` e UUID como desempate, sem alterar seus UUIDs ou vínculos. |
-| Atribuição | Atribuição manual. Pode ficar vazia enquanto `Recebida`, mas é obrigatória antes da transição para `EmAvaliacao`. Admin/Gestor escolhe um usuário ativo Admin/Gestor da mesma organização. Sem atribuição automática na primeira entrega. | Adiciona `ResponsibleUserId` anulável e validação de organização/estado no backend; mantém o fluxo comercial nas permissões atuais. |
-| Canal e origem | Separar `SourceType` (`Manual`/`Email`) do canal informado pelo cliente. Iniciar com E-mail, Telefone, WhatsApp, Indicação, Visita, Licitação e Outro. Recomenda-se permitir configuração por organização por catálogo, sem transformar texto livre em filtro inconsistente. | Exige catálogo e consulta de opções por organização. O legado atual do PIT mapeia WhatsApp, Ligação e E-mail diretamente; `Outra` passa a Outro. Nenhuma solicitação atual terá origem Email automaticamente. |
-| Referências do cliente | Permitir várias referências tipadas por solicitação, com tipo e valor, reaproveitando a convenção já usada em referências externas de demandas. Sugestões de tipo: RFQ/cotação, chamado/OS, pedido de compra e outra. | Adiciona coleção própria ao Comercial, pesquisável e isolada por organização; não altera nem presume unicidade global. Tipos de referência não são fixados como universais. |
-| Local de prospect | Manter texto livre para descrever o local solicitado enquanto ainda não existe `CustomerLocation`; preservar esse texto após associar cliente/local. Não criar local automaticamente a partir da extração ou do rascunho. | Adiciona descrição textual e vínculo anulável. Conversão continua bloqueada até que Admin/Gestor associe um local real, conforme D01 e D02. |
+| Identificador de solicitação | Confirmado: `SOL-AAAA-NNNN`, único por organização/ano, sequência crescente sem reutilização; retroativos em ordem de criação, UUID como desempate. | Sequência transacional e índice único por organização/número; UUIDs e vínculos existentes preservados. |
+| Atribuição | Confirmado: manual, pode ficar vazia em Recebida e é obrigatória antes de Em avaliação; Admin/Gestor atribui usuário ativo elegível da organização. | Campo anulável e validação de vínculo/etapa no backend. |
+| Canal e origem | Confirmado: lista fixa igual para as organizações; canal separado de origem técnica Manual/Email. Opções: E-mail, Telefone, WhatsApp, Indicação, Visita, Licitação e Outro. | Valores são validados no backend; valores legados serão mapeados para opções equivalentes. |
+| Referências do cliente | Confirmado: múltiplas referências tipadas por solicitação. Tipos iniciais: RFQ/cotação, chamado/OS, pedido de compra e outra. | Coleção própria, pesquisável e tenant-scoped, sem unicidade global. |
+| Local de prospect | Confirmado: deixar o local para completar no rascunho. Aplicar D01: Administrador/Gestor cria ou associa cliente/local; Operador completa e confirma a demanda. | Não adicionar local obrigatório à solicitação. Conversão segue bloqueada até o rascunho ter vínculo válido de cliente/local. |
 
 Prazos e próxima ação fazem parte da AC-T03, não desta decisão de dados. Recomenda-se tratá-los como datas civis (sem hora) para prazo do cliente e prazo interno; a próxima ação pode guardar instante UTC. Fuso, regra de atraso, destinatário e lembrete precisam de decisão própria antes de implementar filtros/alertas. Não se propõe job, notificações, anexos ou visitas nesta tarefa.
 
@@ -25,15 +25,9 @@ Prazos e próxima ação fazem parte da AC-T03, não desta decisão de dados. Re
 - Preservar `CommercialRequest` e as tabelas existentes; não renomear para `QuoteRequest` na Fase 2.
 - Não criar coluna de contrato sem entidade de contrato existente.
 - Não alterar a estratégia atual de isolamento explícito por organização sem desenho arquitetural abrangente. Novas operações devem manter filtro de organização em todas as consultas, escritas e vínculos e ter testes negativos.
-- A numeração retroativa e o catálogo configurável dependem da confirmação das decisões correspondentes. A migração deve ser transacional, reversível quando possível e não atribuir valores comerciais fictícios.
+- A migração preenche números retroativos por organização/ano, ordenados por criação e UUID, sem alterar UUIDs ou criar valores comerciais. O canal de origem técnica recebe `Manual` nos registros atuais; futuras entradas por integração podem registrar `Email` sem confundir essa origem com o canal comercial.
 - A aprovação técnica da implementação não substitui decisões de negócio listadas abaixo.
 
-## Decisões necessárias antes da migração
+## Limites ainda abertos
 
-1. Aprovar `SOL-AAAA-NNNN` com reinício anual por organização e atribuição retroativa determinística, ou escolher outro formato/ciclo.
-2. Confirmar responsável Admin/Gestor obrigatório antes de iniciar avaliação; informar se a atribuição automática ao criador deve ser considerada.
-3. Confirmar catálogo de canais editável por organização ou lista fixa na primeira versão. Separar canal de entrada de origem Manual/Email.
-4. Confirmar referências múltiplas tipadas ou uma referência única em texto.
-5. Confirmar o campo de descrição do local de prospect e a exigência de associação a um local real antes da conversão.
-
-Até essas respostas, AC-T01 não altera banco ou APIs. As tarefas AC-T02 e seguintes permanecem bloqueadas pelas dependências indicadas em `tasks.md`.
+As decisões de datas, timezone, lembretes, motivos estruturados, atividades, visita, auditoria e anexos permanecem para AC-T03–AC-T07. Esta confirmação não autoriza antecipar essas regras.

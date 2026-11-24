@@ -57,6 +57,7 @@ public static class ProposalEndpoints
         if (request.ProspectContactName?.Trim().Length > 200) errors[nameof(request.ProspectContactName)] = ["O contato deve ter até 200 caracteres."];
         if (request.ProspectEmail?.Trim().Length > 254) errors[nameof(request.ProspectEmail)] = ["O e-mail deve ter até 254 caracteres."];
         if (request.ProspectPhone?.Trim().Length > 40) errors[nameof(request.ProspectPhone)] = ["O telefone deve ter até 40 caracteres."];
+        ValidateReferences(request.References, errors);
         if (errors.Count > 0) return Results.ValidationProblem(errors);
         var result = await store.CreateAsync(context.OrganizationId, context.UserId, request,
             DateTimeOffset.UtcNow, cancellationToken);
@@ -70,6 +71,7 @@ public static class ProposalEndpoints
     {
         var errors = ValidateRequest(request.CustomerId, request.ProspectName, request.Origin, request.Description);
         if (request.Version < 1) errors[nameof(request.Version)] = ["A versão deve ser positiva."];
+        ValidateReferences(request.References, errors);
         if (errors.Count > 0) return Results.ValidationProblem(errors);
         var result = await store.UpdateAsync(context.OrganizationId, id, context.UserId, request,
             DateTimeOffset.UtcNow, cancellationToken);
@@ -144,6 +146,19 @@ public static class ProposalEndpoints
             errors[nameof(origin)] = ["Selecione um canal de entrada válido."];
         ValidateText(description, 1, 4000, nameof(description), "Informe o resumo do serviço solicitado.", errors);
         return errors;
+    }
+
+    private static void ValidateReferences(IReadOnlyList<CommercialReferenceInput>? references, Dictionary<string, string[]> errors)
+    {
+        if (references is null) return;
+        if (references.Count > 20) errors[nameof(references)] = ["Informe no máximo 20 referências."];
+        for (var i = 0; i < Math.Min(references.Count, 20); i++)
+        {
+            var reference = references[i];
+            if (reference is null || !CommercialRequest.ReferenceTypes.Contains(reference.Type?.Trim(), StringComparer.OrdinalIgnoreCase)
+                || string.IsNullOrWhiteSpace(reference.Value) || reference.Value.Trim().Length > 120)
+                errors[$"References[{i}]"] = ["Selecione um tipo de referência e informe seu valor (até 120 caracteres)."];
+        }
     }
 
     private static void ValidateItems(IReadOnlyList<ProposalItemInput>? items, Dictionary<string, string[]> errors)

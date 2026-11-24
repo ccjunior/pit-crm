@@ -4,11 +4,16 @@ public sealed record ProposalItemInput(string? Description, decimal Amount);
 
 public sealed record CreateCommercialRequestInput(Guid? CustomerId, string? ProspectName,
     string? ProspectContactName, string? ProspectEmail, string? ProspectPhone,
-    string? Origin, string? Description);
+    Guid? ResponsibleUserId, string? Origin, string? Description,
+    IReadOnlyList<CommercialReferenceInput>? References);
 
 public sealed record UpdateCommercialRequestInput(int Version, Guid? CustomerId, string? ProspectName,
     string? ProspectContactName, string? ProspectEmail, string? ProspectPhone,
-    string? Origin, string? Description);
+    Guid? ResponsibleUserId, string? Origin, string? Description,
+    IReadOnlyList<CommercialReferenceInput>? References);
+
+public sealed record CommercialReferenceInput(string? Type, string? Value);
+public sealed record CommercialReferenceDto(Guid Id, string Type, string Value);
 
 public sealed record CreateProposalRevisionInput(int Version, IReadOnlyList<ProposalItemInput>? Items,
     DateOnly? ValidUntil, string? Notes);
@@ -23,11 +28,12 @@ public sealed record ProposalOutcomeInput(int Version, string? Status, string? R
 public sealed record ProposalPageDto(IReadOnlyList<ProposalListItemDto> Items, int Page, int PageSize, int TotalCount);
 
 public sealed record ProposalListItemDto(Guid Id, Guid? CustomerId, string? CustomerName, string? ProspectName,
-    string Description, string Origin, string Status, int Version, int? CurrentRevisionNumber,
+    string Number, Guid? ResponsibleUserId, string? ResponsibleName, string Description, string Origin, string Status, int Version, int? CurrentRevisionNumber,
     decimal? CurrentRevisionTotal, DateTimeOffset UpdatedAtUtc);
 
 public sealed record ProposalDetailsDto(Guid Id, Guid? CustomerId, string? CustomerName,
     string? ProspectName, string? ProspectContactName, string? ProspectEmail, string? ProspectPhone,
+    string Number, Guid? ResponsibleUserId, string? ResponsibleName, IReadOnlyList<CommercialReferenceDto> References,
     string Description, string Origin, string Status, int Version, int? CurrentRevisionNumber,
     IReadOnlyList<ProposalRevisionDto> Revisions, IReadOnlyList<ProposalActivityDto> Activities,
     DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, string? OutcomeReason,

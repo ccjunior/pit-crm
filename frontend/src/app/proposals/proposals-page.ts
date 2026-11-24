@@ -5,7 +5,7 @@ import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { debounceTime, distinctUntilChanged, finalize } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Customer, CustomerApi } from '../customers/customer-api';
-import { ProposalApi, ProposalDetails, ProposalListItem, ProposalRevision, proposalStages } from './proposal-api';
+import { ProposalApi, ProposalDetails, ProposalListItem, ProposalRevision, proposalOrigins, proposalReferenceTypes, proposalStages } from './proposal-api';
 
 @Component({
   selector: 'app-proposals-page',
@@ -21,6 +21,9 @@ export class ProposalsPage implements OnInit {
   private readonly requestDialog = viewChild<ElementRef<HTMLDialogElement>>('requestDialog');
   private returnFocusTarget: HTMLElement | null = null;
   readonly stages = proposalStages;
+  readonly origins = proposalOrigins;
+  readonly referenceTypes = proposalReferenceTypes;
+  readonly assignees = signal<{ id: string; displayName: string }[]>([]);
   readonly items = signal<ProposalListItem[]>([]);
   readonly customers = signal<Customer[]>([]);
   readonly selected = signal<ProposalDetails | null>(null);
@@ -40,7 +43,7 @@ export class ProposalsPage implements OnInit {
   readonly saving = signal(false);
   readonly error = signal('');
   readonly success = signal('');
-  readonly createForm = this.fb.group({ customerId: '', prospectName: ['', Validators.maxLength(200)], contactName: ['', Validators.maxLength(200)], email: ['', [Validators.maxLength(254), Validators.email]], phone: ['', Validators.maxLength(40)], origin: ['', Validators.required], description: ['', [Validators.required, Validators.maxLength(4000)]] });
+  readonly createForm = this.fb.group({ customerId: '', prospectName: ['', Validators.maxLength(200)], contactName: ['', Validators.maxLength(200)], email: ['', [Validators.maxLength(254), Validators.email]], phone: ['', Validators.maxLength(40)], responsibleUserId: '', origin: ['', Validators.required], description: ['', [Validators.required, Validators.maxLength(4000)]], references: this.fb.array([this.makeReference()]) });
   readonly revisionForm = this.fb.group({ validUntil: '', notes: '', items: this.fb.array([this.makeItem()]) });
   readonly sendForm = this.fb.group({ channel: ['E-mail', Validators.required] });
   readonly approveForm = this.fb.group({ approverName: ['', Validators.required], channel: ['E-mail', Validators.required] });
@@ -51,11 +54,13 @@ export class ProposalsPage implements OnInit {
     this.query.valueChanges.pipe(debounceTime(250), distinctUntilChanged(), takeUntilDestroyed(this.destroyRef))
       .subscribe(() => this.load(1));
     this.customersApi.search('', 1, 100).subscribe({ next: result => this.customers.set(result.items) });
+    this.api.eligibleAssignees().subscribe({ next: result => this.assignees.set(result) });
     this.load();
   }
   openCreate(): void {
     this.error.set(''); this.success.set(''); this.editingProposal.set(false);
-    this.createForm.reset({ customerId: '', prospectName: '', contactName: '', email: '', phone: '', origin: '', description: '' });
+    this.createForm.reset({ customerId: '', prospectName: '', contactName: '', email: '', phone: '', responsibleUserId: '', origin: '', description: '' });
+    this.createForm.controls.references.clear(); this.createForm.controls.references.push(this.makeReference());
     this.openRequestDialog();
   }
   openEdit(proposal: ProposalDetails): void {
@@ -63,7 +68,10 @@ export class ProposalsPage implements OnInit {
     this.error.set(''); this.success.set(''); this.editingProposal.set(true);
     this.createForm.reset({ customerId: proposal.customerId ?? '', prospectName: proposal.prospectName ?? '',
       contactName: proposal.prospectContactName ?? '', email: proposal.prospectEmail ?? '', phone: proposal.prospectPhone ?? '',
-      origin: proposal.origin, description: proposal.description });
+      responsibleUserId: proposal.responsibleUserId ?? '', origin: proposal.origin, description: proposal.description });
+    this.createForm.controls.references.clear();
+    for (const reference of proposal.references) this.createForm.controls.references.push(this.makeReference(reference.type, reference.value));
+    if (!proposal.references.length) this.createForm.controls.references.push(this.makeReference());
     this.openRequestDialog();
   }
   closeRequestDialog(): void {
@@ -77,6 +85,8 @@ export class ProposalsPage implements OnInit {
   }
   onRequestDialogClose(): void { this.showCreate.set(false); this.restoreFocus(); }
   stageLabel(stage: string): string { return this.stages.find(value => value.id === stage)?.label ?? stage; }
+  addReference(): void { if (this.createForm.controls.references.length < 20) this.createForm.controls.references.push(this.makeReference()); }
+  removeReference(index: number): void { this.createForm.controls.references.removeAt(index); }
   stageItems(stage: string): ProposalListItem[] { return this.items().filter(item => item.status === stage); }
   load(page = this.page()): void {
     this.page.set(page);
@@ -108,16 +118,21 @@ export class ProposalsPage implements OnInit {
     }
     if (existingCustomer) this.createForm.controls.prospectName.updateValueAndValidity();
     this.createForm.markAllAsTouched(); if (this.createForm.invalid || this.saving()) return;
+    const references = value.references
+      .filter(reference => reference.type.trim() && reference.value.trim())
+      .map(reference => ({ type: reference.type.trim(), value: reference.value.trim() }));
     const input = { customerId: value.customerId || null, prospectName: existingCustomer ? null : value.prospectName.trim(),
       prospectContactName: existingCustomer ? null : value.contactName.trim() || null, prospectEmail: existingCustomer ? null : value.email.trim() || null,
-      prospectPhone: existingCustomer ? null : value.phone.trim() || null, origin: value.origin, description: value.description.trim() };
+      prospectPhone: existingCustomer ? null : value.phone.trim() || null, responsibleUserId: value.responsibleUserId || null,
+      origin: value.origin, description: value.description.trim(), references };
     const proposal = this.selected();
     const request = this.editingProposal() && proposal
       ? this.api.update(proposal.id, proposal.version, input)
       : this.api.create(input);
     this.run(request, updated => {
       this.selected.set(updated);
-      this.createForm.reset({ customerId: '', prospectName: '', contactName: '', email: '', phone: '', origin: '', description: '' });
+    this.createForm.reset({ customerId: '', prospectName: '', contactName: '', email: '', phone: '', responsibleUserId: '', origin: '', description: '' });
+    this.createForm.controls.references.clear(); this.createForm.controls.references.push(this.makeReference());
       this.closeRequestDialog();
     });
   }
@@ -154,6 +169,7 @@ export class ProposalsPage implements OnInit {
   }
   total(): number { return this.revisionItems.controls.reduce((sum, control) => sum + Number(control.get('amount')?.value || 0), 0); }
   private makeItem() { return this.fb.group({ description: ['', Validators.required], amount: [0, [Validators.required, Validators.min(0)]] }); }
+  private makeReference(type = '', value = '') { return this.fb.group({ type, value }); }
   private openRequestDialog(): void {
     const dialog = this.requestDialog()?.nativeElement;
     if (!dialog || dialog.open) return;

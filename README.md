@@ -70,13 +70,14 @@ npm start
 
 O Angular fica em `http://localhost:4200` e encaminha `/api` para a API local em `http://localhost:5006`. O PostgreSQL do Compose fica disponível em `localhost:5433`; a porta evita conflito com uma instalação local padrão em `5432`. Para a imagem PostgreSQL 18, o volume nomeado `pitcrm_postgres_data` é montado em `/var/lib/postgresql`, caminho que mantém o diretório de dados versionado da imagem. `docker compose down` interrompe o PostgreSQL sem remover esse volume.
 
-As ferramentas de migração ficam no manifesto local `backend/dotnet-tools.json`. O projeto inclui o `DbContext` e as migrações de organização, conta, papéis-base (Administrador, Gestor e Operador), clientes, locais, demandas e troca obrigatória de senha inicial. A configuração local acima aplica as migrações já existentes. Para **criar uma migração depois de alterar o modelo**, use o comando abaixo no mesmo terminal:
+Ao iniciar, a API aplica automaticamente as migrações pendentes antes de aceitar requisições ou executar o comando `provision`. Se uma migração falhar, a inicialização falha e a API não começa a atender. A conta da connection string precisa ter permissão para criar e alterar tabelas. As ferramentas ficam no manifesto local `backend/dotnet-tools.json`. Para **criar uma migração depois de alterar o modelo**, use:
 
 ```powershell
 dotnet tool restore
 dotnet ef migrations add MinhaAlteracao --project src/PitCrm.Infrastructure --startup-project src/PitCrm.Api --output-dir Persistence/Migrations
-dotnet ef database update --project src/PitCrm.Infrastructure --startup-project src/PitCrm.Api
 ```
+
+`dotnet ef database update` continua disponível para aplicar uma migração manualmente em um ambiente específico; no fluxo normal, o próximo start da API a aplica automaticamente.
 
 Se abrir um terminal novo, defina novamente `PITCRM_CONNECTION_STRING` antes de iniciar a API, executar testes ou aplicar migrações.
 
@@ -84,7 +85,7 @@ Não coloque a connection string ou senha em arquivos versionados. O valor de ex
 
 ### Provisionar a primeira organização e Administrador
 
-Depois de aplicar a migração, mantenha o mesmo ID da organização em qualquer repetição do comando. A senha é solicitada sem eco no terminal e fica apenas no ambiente do processo:
+Mantenha o mesmo ID da organização em qualquer repetição do comando. A senha é solicitada sem eco no terminal e fica apenas no ambiente do processo:
 
 ```powershell
 $env:PITCRM_SETUP_ORGANIZATION_ID = [guid]::NewGuid().ToString()

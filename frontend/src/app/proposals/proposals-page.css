@@ -10,6 +10,7 @@
 @media(max-width:720px){.page-heading{align-items:flex-start;flex-direction:column}.page-heading .primary-button{width:100%}.form-grid{grid-template-columns:minmax(0,1fr)}.search-box{grid-column:auto}.view-toggle{align-self:flex-start}}
 @media(max-width:520px){.pagination{align-items:flex-start;flex-direction:column;gap:.75rem;margin-top:1.4rem;padding-top:1rem}.pagination-controls{width:100%;justify-content:space-between}}
 
+
 @media (max-width: 720px) {
   .directory-filters {
     grid-template-columns: minmax(0, 1fr);
