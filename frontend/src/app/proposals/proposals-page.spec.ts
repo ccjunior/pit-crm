@@ -1,10 +1,13 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { AuthService } from '../core/auth.service';
 import { ProposalsPage } from './proposals-page';
 import { ProposalDetails, ProposalHistoryEvent } from './proposal-api';
 
 describe('ProposalsPage', () => {
+  beforeEach(() => sessionStorage.clear());
+
   const proposal: ProposalDetails = {
     id: 'proposal-a', customerId: null, customerName: null, prospectName: 'Cliente Exemplo',
     number: 'SOL-2026-0001', responsibleUserId: null, responsibleName: null,
@@ -17,7 +20,7 @@ describe('ProposalsPage', () => {
   function createPage() {
     TestBed.configureTestingModule({
       imports: [ProposalsPage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), { provide: AuthService, useValue: { session: () => ({ id: 'user-a', organization: { id: 'org-a' } }) } }],
     });
     const fixture = TestBed.createComponent(ProposalsPage);
     const http = TestBed.inject(HttpTestingController);
@@ -42,7 +45,7 @@ describe('ProposalsPage', () => {
   it('allows an existing customer after the missing prospect validation', () => {
     TestBed.configureTestingModule({
       imports: [ProposalsPage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), { provide: AuthService, useValue: { session: () => ({ id: 'user-a', organization: { id: 'org-a' } }) } }],
     });
     const page = TestBed.createComponent(ProposalsPage).componentInstance;
     const http = TestBed.inject(HttpTestingController);
@@ -63,7 +66,7 @@ describe('ProposalsPage', () => {
   it('registers the approval for the latest revision and updates the selected request', () => {
     TestBed.configureTestingModule({
       imports: [ProposalsPage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), { provide: AuthService, useValue: { session: () => ({ id: 'user-a', organization: { id: 'org-a' } }) } }],
     });
     const page = TestBed.createComponent(ProposalsPage).componentInstance;
     const http = TestBed.inject(HttpTestingController);
@@ -115,6 +118,7 @@ describe('ProposalsPage', () => {
     await openDetail(fixture, http);
     page.activityForm.setValue({ type: 'Ligação', text: 'Retornar amanhã', mentionedUserIds: [] });
     page.recordActivity();
+    await new Promise(resolve => setTimeout(resolve, 10));
     const request = http.expectOne('/api/proposals/proposal-a/activities');
     expect(request.request.body).toEqual({ type: 'Ligação', text: 'Retornar amanhã', mentionedUserIds: [] });
     expect(request.request.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
@@ -124,6 +128,35 @@ describe('ProposalsPage', () => {
     expect(page.activityForm.controls.text.value).toBe('');
     expect(page.historySuccess()).toContain('salvo');
     http.verify();
+  });
+
+  it('reuses the persisted idempotency key after a lost response and component reload', async () => {
+    const first = createPage();
+    first.fixture.nativeElement.querySelector('tbody tr').click();
+    await openDetail(first.fixture, first.http);
+    first.page.activityForm.setValue({ type: 'Ligação', text: 'Retornar amanhã', mentionedUserIds: [] });
+    first.page.recordActivity();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const lostResponseRequest = first.http.expectOne('/api/proposals/proposal-a/activities');
+    const originalKey = lostResponseRequest.request.headers.get('Idempotency-Key');
+    lostResponseRequest.error(new ProgressEvent('network error'));
+    first.http.verify();
+    first.fixture.destroy();
+
+    TestBed.resetTestingModule();
+    const second = createPage();
+    second.fixture.nativeElement.querySelector('tbody tr').click();
+    await openDetail(second.fixture, second.http);
+    second.page.activityForm.setValue({ type: 'Ligação', text: 'Retornar amanhã', mentionedUserIds: [] });
+    second.page.recordActivity();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const retryRequest = second.http.expectOne('/api/proposals/proposal-a/activities');
+    expect(retryRequest.request.headers.get('Idempotency-Key')).toBe(originalKey);
+    retryRequest.flush({ id: 'event-a' });
+    second.http.expectOne('/api/proposals/proposal-a/timeline?page=1&pageSize=20').flush({ items: [], page: 1, pageSize: 20, totalCount: 0 });
+    second.fixture.detectChanges();
+    expect(sessionStorage.getItem('pitcrm:pending-idempotency:v1')).toBeNull();
+    second.http.verify();
   });
 
   it('keeps outcome reason input intact after a 409 status conflict', async () => {
@@ -137,6 +170,7 @@ describe('ProposalsPage', () => {
     fixture.detectChanges();
     page.resultForm.controls.reasonId.setValue('reason-a');
     page.markOutcome();
+    await new Promise(resolve => setTimeout(resolve, 10));
     const request = http.expectOne('/api/proposals/proposal-a/status');
     expect(request.request.body).toEqual({ version: 1, status: 'NotQuoted', reasonId: 'reason-a' });
     request.flush({ error: 'A solicitação foi alterada. Atualize os dados antes de tentar novamente.' }, { status: 409, statusText: 'Conflict' });

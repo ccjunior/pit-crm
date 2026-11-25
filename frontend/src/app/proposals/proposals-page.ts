@@ -5,8 +5,11 @@ import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { debounceTime, distinctUntilChanged, finalize } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Customer, CustomerApi } from '../customers/customer-api';
-import { createUuidV7 } from '../core/uuid-v7';
+import { AuthService } from '../core/auth.service';
+import { fingerprintPayload, SessionIdempotencyStore } from '../core/session-idempotency';
 import { ProposalApi, ProposalDetails, ProposalHistoryEvent, ProposalListItem, ProposalReason, ProposalRevision, proposalOrigins, proposalReferenceTypes, proposalStages } from './proposal-api';
+
+interface PendingIdempotencyKey { scope: string; fingerprint: string; key: string; }
 
 @Component({
   selector: 'app-proposals-page',
@@ -17,6 +20,8 @@ import { ProposalApi, ProposalDetails, ProposalHistoryEvent, ProposalListItem, P
 export class ProposalsPage implements OnInit {
   private readonly api = inject(ProposalApi);
   private readonly customersApi = inject(CustomerApi);
+  private readonly auth = inject(AuthService);
+  private readonly idempotencyStore = new SessionIdempotencyStore();
   private readonly fb = inject(FormBuilder).nonNullable;
   private readonly destroyRef = inject(DestroyRef);
   private readonly injector = inject(Injector);
@@ -26,7 +31,6 @@ export class ProposalsPage implements OnInit {
   private returnFocusTarget: HTMLElement | null = null;
   private detailReturnFocusTarget: HTMLElement | null = null;
   private timelineRequestId = 0;
-  private readonly pendingIdempotencyKeys = new Map<string, { fingerprint: string; key: string }>();
   readonly stages = proposalStages;
   readonly origins = proposalOrigins;
   readonly referenceTypes = proposalReferenceTypes;
@@ -248,16 +252,20 @@ export class ProposalsPage implements OnInit {
   private submitStatus(status: string, reasonId: string | null): void {
     const proposal = this.selected(); if (!proposal || this.saving()) return;
     const input = { version: proposal.version, status, reasonId };
-    const action = `status:${proposal.id}`;
-    const key = this.idempotencyKey(action, input);
     this.saving.set(true); this.error.set(''); this.historyError.set(''); this.historyConflict.set(false);
-    this.api.changeStatus(proposal.id, input, key).pipe(finalize(() => this.saving.set(false))).subscribe({
-      next: updated => {
-        this.pendingIdempotencyKeys.delete(action);
-        this.selected.set(updated); this.setOutcomeDefault(updated.status); this.load(); this.loadTimeline(1);
-        this.historySuccess.set('Resultado registrado.');
-      },
-      error: error => { this.historyError.set(this.errorMessage(error)); this.historyConflict.set(error.status === 409); },
+    void this.pendingIdempotencyKey(proposal.id, 'status', input).then(pending => {
+      if (this.selected()?.id !== proposal.id) { this.saving.set(false); return; }
+      this.api.changeStatus(proposal.id, input, pending.key).pipe(finalize(() => this.saving.set(false))).subscribe({
+        next: updated => {
+          this.idempotencyStore.clear(pending.scope, pending.fingerprint);
+          this.selected.set(updated); this.setOutcomeDefault(updated.status); this.load(); this.loadTimeline(1);
+          this.historySuccess.set('Resultado registrado.');
+        },
+        error: error => { this.historyError.set(this.errorMessage(error)); this.historyConflict.set(error.status === 409); },
+      });
+    }).catch(() => {
+      this.saving.set(false);
+      this.historyError.set('Não foi possível preparar a operação idempotente nesta sessão. Verifique o armazenamento do navegador e tente novamente.');
     });
   }
   advanceTo(status: string): void {
@@ -318,10 +326,16 @@ export class ProposalsPage implements OnInit {
     if (!proposal || this.activityForm.invalid || this.historySaving()) return;
     const value = this.activityForm.getRawValue();
     if (!value.type.trim() || !value.text.trim()) return;
-    const input = { type: value.type.trim(), text: value.text.trim(), mentionedUserIds: value.mentionedUserIds };
-    const action = `activity:${proposal.id}`; const key = this.idempotencyKey(action, input);
-    this.submitHistoryMutation(action, this.api.recordActivity(proposal.id, input, key), () => {
-      this.activityForm.reset({ type: '', text: '', mentionedUserIds: [] });
+    const input = { type: value.type.trim(), text: value.text.trim(), mentionedUserIds: [...value.mentionedUserIds].sort() };
+    this.historySaving.set(true);
+    void this.pendingIdempotencyKey(proposal.id, 'activity', input).then(pending => {
+      if (this.selected()?.id !== proposal.id) { this.historySaving.set(false); return; }
+      this.submitHistoryMutation(pending, this.api.recordActivity(proposal.id, input, pending.key), () => {
+        this.activityForm.reset({ type: '', text: '', mentionedUserIds: [] });
+      });
+    }).catch(() => {
+      this.historySaving.set(false);
+      this.historyError.set('Não foi possível preparar a operação idempotente nesta sessão. Verifique o armazenamento do navegador e tente novamente.');
     });
   }
   recordComment(): void {
@@ -329,10 +343,16 @@ export class ProposalsPage implements OnInit {
     if (!proposal || this.commentForm.invalid || this.historySaving()) return;
     const value = this.commentForm.getRawValue();
     if (!value.text.trim()) return;
-    const input = { text: value.text.trim(), mentionedUserIds: value.mentionedUserIds };
-    const action = `comment:${proposal.id}`; const key = this.idempotencyKey(action, input);
-    this.submitHistoryMutation(action, this.api.recordComment(proposal.id, input, key), () => {
-      this.commentForm.reset({ text: '', mentionedUserIds: [] });
+    const input = { text: value.text.trim(), mentionedUserIds: [...value.mentionedUserIds].sort() };
+    this.historySaving.set(true);
+    void this.pendingIdempotencyKey(proposal.id, 'comment', input).then(pending => {
+      if (this.selected()?.id !== proposal.id) { this.historySaving.set(false); return; }
+      this.submitHistoryMutation(pending, this.api.recordComment(proposal.id, input, pending.key), () => {
+        this.commentForm.reset({ text: '', mentionedUserIds: [] });
+      });
+    }).catch(() => {
+      this.historySaving.set(false);
+      this.historyError.set('Não foi possível preparar a operação idempotente nesta sessão. Verifique o armazenamento do navegador e tente novamente.');
     });
   }
   toggleMention(form: 'activity' | 'comment', userId: string, event: Event): void {
@@ -341,22 +361,22 @@ export class ProposalsPage implements OnInit {
     const current = control.value;
     control.setValue(checked ? [...new Set([...current, userId])] : current.filter(id => id !== userId));
   }
-  private submitHistoryMutation(action: string, request: import('rxjs').Observable<ProposalHistoryEvent>, reset: () => void): void {
+  private submitHistoryMutation(pending: PendingIdempotencyKey, request: import('rxjs').Observable<ProposalHistoryEvent>, reset: () => void): void {
     this.historySaving.set(true); this.historyError.set(''); this.historySuccess.set(''); this.historyConflict.set(false);
     request.pipe(finalize(() => this.historySaving.set(false))).subscribe({
       next: () => {
-        this.pendingIdempotencyKeys.delete(action); reset(); this.historySuccess.set('Registro salvo.'); this.loadTimeline(1);
+        this.idempotencyStore.clear(pending.scope, pending.fingerprint);
+        reset(); this.historySuccess.set('Registro salvo.'); this.loadTimeline(1);
       },
       error: error => { this.historyError.set(this.errorMessage(error)); this.historyConflict.set(error.status === 409); },
     });
   }
-  private idempotencyKey(action: string, payload: unknown): string {
-    const fingerprint = JSON.stringify(payload);
-    const existing = this.pendingIdempotencyKeys.get(action);
-    if (existing?.fingerprint === fingerprint) return existing.key;
-    const key = createUuidV7();
-    this.pendingIdempotencyKeys.set(action, { fingerprint, key });
-    return key;
+  private async pendingIdempotencyKey(proposalId: string, operation: string, payload: unknown): Promise<PendingIdempotencyKey> {
+    const session = this.auth.session();
+    if (!session) throw new Error('Authenticated session unavailable.');
+    const scope = `${session.organization.id}:${session.id}:${proposalId}:${operation}`;
+    const fingerprint = await fingerprintPayload(payload);
+    return { scope, fingerprint, key: this.idempotencyStore.getOrCreate(scope, fingerprint) };
   }
   reloadSelected(): void {
     const proposal = this.selected(); if (!proposal || this.saving() || this.historySaving()) return;
