@@ -23,7 +23,7 @@ public sealed record RecordProposalSentInput(int Version, Guid RevisionId, strin
 public sealed record RecordProposalApprovalInput(int Version, Guid RevisionId, string? ApproverName,
     string? Channel, string? Notes, DateTimeOffset ApprovedAtUtc);
 
-public sealed record ProposalOutcomeInput(int Version, string? Status, string? Reason);
+public sealed record ProposalOutcomeInput(int Version, string? Status, string? Reason, Guid? ReasonId = null);
 
 public sealed record ProposalPageDto(IReadOnlyList<ProposalListItemDto> Items, int Page, int PageSize, int TotalCount);
 
@@ -80,8 +80,6 @@ public interface IProposalStore
         CreateCommercialRequestInput input, DateTimeOffset now, CancellationToken cancellationToken);
     Task<ProposalCommandResult> UpdateAsync(Guid organizationId, Guid requestId, Guid actorUserId,
         UpdateCommercialRequestInput input, DateTimeOffset now, CancellationToken cancellationToken);
-    Task<ProposalCommandResult> ChangeStatusAsync(Guid organizationId, Guid requestId, Guid actorUserId,
-        ProposalOutcomeInput input, DateTimeOffset now, CancellationToken cancellationToken);
     Task<ProposalCommandResult> CreateRevisionAsync(Guid organizationId, Guid requestId, Guid actorUserId,
         CreateProposalRevisionInput input, DateTimeOffset now, CancellationToken cancellationToken);
     Task<ProposalCommandResult> RecordSentAsync(Guid organizationId, Guid requestId, Guid actorUserId,

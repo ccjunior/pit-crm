@@ -130,6 +130,18 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AuthorizationPolicies.ManageProposals, policy =>
         policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
             .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
+    options.AddPolicy(AuthorizationPolicies.ManageProposalReasons, policy =>
+        policy.RequireRole(RoleNames.Administrator)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
+    options.AddPolicy(AuthorizationPolicies.MentionProposalUsers, policy =>
+        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
+    options.AddPolicy(AuthorizationPolicies.ViewProposalAudit, policy =>
+        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
+    options.AddPolicy(AuthorizationPolicies.RestoreProposalTimeline, policy =>
+        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
     options.AddPolicy(AuthorizationPolicies.ChangeOwnPassword, policy =>
         policy.RequireRole(RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator));
 });
@@ -142,6 +154,9 @@ builder.Services.AddScoped<ICustomerContactStore, PersistenceCustomerContactStor
 builder.Services.AddScoped<IDemandStore, PersistenceDemandStore>();
 builder.Services.AddScoped<IDemandDraftStore, PersistenceDemandDraftStore>();
 builder.Services.AddScoped<IProposalStore, PersistenceProposalStore>();
+builder.Services.AddScoped<IProposalHistoryStore, PersistenceProposalHistoryStore>();
+builder.Services.AddScoped<IProposalRetentionProcessor, ProposalRetentionProcessor>();
+builder.Services.AddHostedService<ProposalRetentionBackgroundService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentOrganizationContext, HttpCurrentOrganizationContext>();
 
@@ -313,6 +328,7 @@ CustomerLocationEndpoints.Map(app);
 CustomerContactEndpoints.Map(app);
 DemandEndpoints.Map(app);
 ProposalEndpoints.Map(app);
+ProposalHistoryEndpoints.Map(app);
 DemandDraftEndpoints.Map(app);
 TeamEndpoints.Map(app);
 

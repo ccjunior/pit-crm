@@ -1,0 +1,31 @@
+# AC-T05 — contrato e implementação backend
+
+Estado: implementação em PR draft; não aceita até validação PostgreSQL descartável e integração da interface.
+
+## API
+
+- `GET /api/proposals/{id}/timeline?page=1&pageSize=20`: paginação estável por sequência crescente. Retorna `items`, `page`, `pageSize` e `totalCount`. Cada item contém `id`, `sequence`, `type`, `occurredAtUtc`, `occurredAtKnown`, `actorName`, `fromStatus`, `toStatus`, `reason`, `activityType`, `text` e `mentionedUserIds`.
+- `POST /api/proposals/{id}/status`: exige `ManageProposals`, CSRF e `Idempotency-Key` UUIDv7. O payload usa `version`, `status` e `reasonId`; motivo livre é rejeitado. Resultado `NotQuoted` requer motivo ativo da mesma organização e do mesmo resultado. Responde com a proposta atual; versão desatualizada ou conflito real retorna 409 sem persistir a transição.
+- `POST /api/proposals/{id}/activities` e `/comments`: exigem `ManageProposals`, CSRF e UUIDv7. O corpo tem `type`, `text` e `mentionedUserIds`; comentário não aceita `type`. Menções exigem a policy `MentionProposalUsers` e usuários ativos da organização.
+- `GET /api/proposals/reasons?resultStatus=...`: lista motivos ativos da organização. `POST /api/proposals/reasons` e `POST /api/proposals/reasons/{reasonId}/deactivate` são restritos a Admin e mantêm trilha de auditoria; não há exclusão física.
+- `GET /api/proposals/{id}/audit?page=1&pageSize=20`: somente Admin/Gestor com `ViewProposalAudit` explícita.
+- `GET /api/proposals/{id}/timeline/archive?page=1&pageSize=20`: somente Admin/Gestor com `RestoreProposalTimeline`; registra a leitura antes de devolver dados do arquivo.
+- `GET /api/demands/{id}/proposal-timeline?page=1&pageSize=20`: policy `OperateDemands`; escopo deriva da organização autenticada e de vínculo válido demanda→revisão→proposta. A projeção allowlist inclui apenas tipo, data conhecida/UTC e status anterior/novo; não expõe comentário, atividade, motivo, menções nem ator.
+
+Todos os `page` são positivos; `pageSize` aceita 1–100 e offsets que excedem `Int32` são rejeitados. Leituras e vínculos sempre filtram pela organização autenticada.
+
+## Eventos, transações e idempotência
+
+Os eventos operacionais são `StageChanged`, `ActivityRecorded` e `CommentAdded`; os dados pré-existentes migram como `LegacyActivity`, preservando IDs de origem e marcando a data como conhecida. O actor é `Human` com usuário ou `System` com código tipado. A aplicação grava evento, sequência, auditoria, alteração de estado e chave de idempotência na mesma transação. Escritas concorrentes por proposta serializam pelo lock da linha e continuam protegidas por `Version`.
+
+`Idempotency-Key` deve ser UUIDv7, não pode exceder 5 minutos no futuro e expira no instante `timestamp + 30 dias`. A chave é única por organização. Mesmo alvo/operação e fingerprint devolvem o resultado gravado; alvo ou payload diferente retorna 409. O worker remove registros vencidos; uma chave vencida continua inválida mesmo após a remoção.
+
+## Migração e retenção
+
+A migration copia `CommercialActivities` para `ProposalTimelineEvents`, preserva ID/data/ator, ordena sequência por `OccurredAtUtc, Id`, registra linhas com vínculo inválido em quarentena sem as expor por API e grava contagens de origem/migradas/quarentena por organização. Ela aborta a transação se as contagens por organização ou globais não reconciliarem. O histórico passa a ser lido da tabela nova; a cópia compatível em `CommercialActivities` é removida atomicamente quando a timeline entra em arquivo. Propostas em estado terminal recebem ciclo com data de encerramento administrativa igual ao corte UTC da migration e `ClosedAtKnown=false`.
+
+O worker arquiva timeline após 24 meses civis no fuso `America/Sao_Paulo`; descarta arquivo 12 meses após arquivamento efetivo; reabertura elegível restaura IDs e sequência. Dados de auditoria têm detalhes e identificadores removidos após 12 meses; só agrega contagem distinta por organização/mês/categoria quando há pelo menos 10 propostas. Não há endpoint para os agregados nesta fatia, evitando totais complementares. Nenhum scheduler de expiração de proposta ou entrega de notificação está incluído.
+
+## Verificação pendente
+
+Build e testes unitários locais não exercitam SQL PostgreSQL, locks, migration, reconciliação nem políticas de autorização em HTTP. Antes do aceite, executar migration e testes de integração apenas em schema descartável aprovado, incluindo race/idempotência, isolamento entre organizações, acesso do Operador, archive/restore/discard e reconciliação de legado. A interface ainda precisa consumir DTOs, lista de motivos e projeção do Operador.
