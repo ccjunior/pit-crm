@@ -16,6 +16,7 @@ export const routes: Routes = [
       { path: 'clientes', loadComponent: () => import('./customers/customers-page').then(page => page.CustomersPage) },
       { path: 'demandas/nova', loadComponent: () => import('./demands/new-demand-page').then(page => page.NewDemandPage) },
       { path: 'propostas', canActivate: [manageProposalsGuard], loadComponent: () => import('./proposals/proposals-page').then(page => page.ProposalsPage) },
+      { path: 'minhas-acoes', loadComponent: () => import('./proposals/my-actions-page').then(page => page.MyActionsPage) },
       { path: 'demandas/rascunhos', loadComponent: () => import('./demands/demand-drafts-page').then(page => page.DemandDraftsPage) },
       { path: 'equipe', canActivate: [manageTeamGuard], loadComponent: () => import('./team/team-page').then(page => page.TeamPage) },
     ],

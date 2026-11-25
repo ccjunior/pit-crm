@@ -53,3 +53,5 @@
     flex-direction: column;
   }
 }
+
+.action-section form input,.action-section form select{min-height:2.75rem}.action-section .primary-button{justify-self:start}.detail-section .notice{margin:.5rem 0}.overdue-badge,.overdue-inline{color:var(--status-danger);font-size:.72rem;font-weight:750}.lane-pagination{display:flex;align-items:center;justify-content:space-between;gap:.25rem;border-top:1px solid var(--brand-border);margin-top:.65rem;padding-top:.45rem;color:var(--brand-muted);font-size:.68rem}.lane-pagination button{font-size:.7rem}.lane-error{color:var(--status-danger);font-size:.72rem}
