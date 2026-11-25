@@ -758,6 +758,9 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateOnly?>("CustomerDeadline")
+                        .HasColumnType("date");
+
                     b.Property<Guid>("CreatedByUserId")
                         .HasColumnType("uuid");
 
@@ -777,6 +780,9 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
+                    b.Property<DateOnly?>("InternalDeadline")
+                        .HasColumnType("date");
+
                     b.Property<string>("Origin")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -791,6 +797,13 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.Property<string>("OutcomeReason")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("NextActionAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NextActionDescription")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("ProspectContactName")
                         .HasMaxLength(200)
@@ -811,6 +824,12 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("ResponsibleUserId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ReminderOccurrenceId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ReminderOccurrenceRevision")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -829,14 +848,24 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("OrganizationId", "CustomerId");
 
+                    b.HasIndex("OrganizationId", "CustomerDeadline");
+
+                    b.HasIndex("OrganizationId", "InternalDeadline");
+
                     b.HasIndex("OrganizationId", "Number")
                         .IsUnique();
 
                     b.HasIndex("OrganizationId", "ResponsibleUserId");
 
+                    b.HasIndex("OrganizationId", "ResponsibleUserId", "NextActionAtUtc");
+
                     b.HasIndex("OrganizationId", "Status", "UpdatedAtUtc");
 
-                    b.ToTable("CommercialRequests", (string)null);
+                    b.ToTable("CommercialRequests", (string)null, t =>
+                        {
+                            t.HasCheckConstraint("CK_CommercialRequests_NextAction_Complete", "(\"NextActionDescription\" IS NULL AND \"NextActionAtUtc\" IS NULL AND \"ReminderOccurrenceId\" IS NULL) OR (\"NextActionDescription\" IS NOT NULL AND \"NextActionAtUtc\" IS NOT NULL AND \"ReminderOccurrenceId\" IS NOT NULL)");
+                            t.HasCheckConstraint("CK_CommercialRequests_ReminderOccurrenceRevision_NonNegative", "\"ReminderOccurrenceRevision\" >= 0");
+                        });
                 });
 
             modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalItem", b =>

@@ -254,6 +254,20 @@ public sealed class PitCrmDbContext(
             request.Property(value => value.Version).IsConcurrencyToken().IsRequired();
             request.Property(value => value.CreatedAtUtc).IsRequired();
             request.Property(value => value.UpdatedAtUtc).IsRequired();
+            request.Property(value => value.NextActionDescription).HasMaxLength(500);
+            request.Property(value => value.NextActionAtUtc);
+            request.Property(value => value.ReminderOccurrenceId);
+            request.Property(value => value.ReminderOccurrenceRevision).IsRequired();
+            request.HasIndex(value => new { value.OrganizationId, value.CustomerDeadline });
+            request.HasIndex(value => new { value.OrganizationId, value.InternalDeadline });
+            request.HasIndex(value => new { value.OrganizationId, value.ResponsibleUserId, value.NextActionAtUtc });
+            request.ToTable(table =>
+            {
+                table.HasCheckConstraint("CK_CommercialRequests_NextAction_Complete",
+                    "(\"NextActionDescription\" IS NULL AND \"NextActionAtUtc\" IS NULL AND \"ReminderOccurrenceId\" IS NULL) OR (\"NextActionDescription\" IS NOT NULL AND \"NextActionAtUtc\" IS NOT NULL AND \"ReminderOccurrenceId\" IS NOT NULL)");
+                table.HasCheckConstraint("CK_CommercialRequests_ReminderOccurrenceRevision_NonNegative",
+                    "\"ReminderOccurrenceRevision\" >= 0");
+            });
             request.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
                 .IsRequired().OnDelete(DeleteBehavior.Restrict);
             request.HasOne<Customer>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.CustomerId })
