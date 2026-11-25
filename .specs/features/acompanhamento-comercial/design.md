@@ -1,6 +1,6 @@
 # Acompanhamento comercial — decisões de AC-T01
 
-**Estado:** decisões de produto confirmadas pelo usuário em 22/11/2026; AC-T02 implementada localmente, pendente de validação integrada e aplicação autorizada da migração.
+**Estado:** decisões de produto confirmadas pelo usuário em 22/11/2026; AC-T02 concluída. Validação integrada em PostgreSQL descartável reportada por Carlos no [commit `5280438`](https://github.com/ccjunior/pit-crm/commit/5280438c6f168edfdd263ca93b9ca3702f1e325e). A [PR #3](https://github.com/ccjunior/pit-crm/pull/3) foi incorporada à `main`.
 
 ## Contexto auditado
 
