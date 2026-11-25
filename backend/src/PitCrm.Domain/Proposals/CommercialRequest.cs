@@ -1,5 +1,13 @@
 namespace PitCrm.Domain.Proposals;
 
+public sealed class CommercialResponsibleRequiredException : InvalidOperationException
+{
+    public CommercialResponsibleRequiredException()
+        : base("A commercial responsible is required before evaluation.")
+    {
+    }
+}
+
 public sealed class CommercialRequest
 {
     private CommercialRequest() { }
@@ -97,7 +105,7 @@ public sealed class CommercialRequest
         if (nextStatus == NotQuoted && string.IsNullOrWhiteSpace(reason))
             throw new ArgumentException("A reason is required when deciding not to quote.", nameof(reason));
         if (nextStatus == Evaluating && ResponsibleUserId is null)
-            throw new InvalidOperationException("A commercial responsible is required before evaluation.");
+            throw new CommercialResponsibleRequiredException();
 
         TransitionTo(nextStatus, reason, now);
     }

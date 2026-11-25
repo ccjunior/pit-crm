@@ -1,0 +1,11 @@
+FROM --platform=linux/arm64 mcr.microsoft.com/dotnet/sdk:10.0.302-azurelinux3.0@sha256:dbcd91573287583286212aaa14ae39ccf04f80818b33e2770dbbd5d948d23230
+
+WORKDIR /opt/ac-t02
+COPY NuGet.Config /opt/ac-t02/NuGet.Config
+COPY connection-probe/ /opt/ac-t02/connection-probe/
+COPY runner-entrypoint.sh /usr/local/bin/ac-t02-runner
+RUN chmod 0555 /usr/local/bin/ac-t02-runner \
+    && mkdir -p /work \
+    && chmod 1777 /work
+
+ENTRYPOINT ["/usr/local/bin/ac-t02-runner"]
