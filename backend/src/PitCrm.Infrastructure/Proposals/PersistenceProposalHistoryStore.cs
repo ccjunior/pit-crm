@@ -296,7 +296,8 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext, I
         if (!await dbContext.CommercialRequests.AsNoTracking().AnyAsync(value =>
                 value.OrganizationId == organizationId && value.Id == requestId, cancellationToken)) return null;
         var query = dbContext.ProposalAuditEvents.AsNoTracking().Where(value =>
-            value.OrganizationId == organizationId && value.CommercialRequestId == requestId);
+            value.OrganizationId == organizationId && value.CommercialRequestId == requestId
+            && value.RedactedAtUtc == null);
         var count = await query.CountAsync(cancellationToken);
         var rows = await (from audit in query
             join user in dbContext.Users.AsNoTracking()
