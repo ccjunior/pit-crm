@@ -139,16 +139,16 @@ describe('ProposalsPage', () => {
   });
 
   it('shows server overdue flags for each deadline in both list and Kanban', () => {
-    const overdueProposal = { ...proposal, customerDeadline: '2026-11-24', internalDeadline: '2026-11-23',
-      overdue: { customer: true, internal: true, either: true, asOfLocalDate: '2026-11-25' } };
+    const overdueProposal = { ...proposal, customerDeadline: '2026-11-24', internalDeadline: '2026-11-25',
+      overdue: { customer: true, internal: false, either: true, asOfLocalDate: '2026-11-25' } };
     const { fixture, http, page } = createPage('list');
     page.items.set([overdueProposal]);
     fixture.detectChanges();
     const row = fixture.nativeElement.querySelector('tbody tr') as HTMLElement;
-    expect(row.querySelectorAll('.overdue-inline').length).toBe(2);
+    expect(row.querySelectorAll('.overdue-inline').length).toBe(1);
     expect(row.querySelector('.overdue-badge')?.textContent).toContain('Algum prazo vencido');
     expect(row.textContent).toContain('24/11/2026');
-    expect(row.textContent).toContain('23/11/2026');
+    expect(row.textContent).toContain('25/11/2026');
 
     page.setMode('kanban');
     const request = http.expectOne(candidate => candidate.url === '/api/proposals/kanban');
@@ -156,10 +156,10 @@ describe('ProposalsPage', () => {
       items: stage.id === 'Received' ? [overdueProposal] : [], totalCount: stage.id === 'Received' ? 1 : 0, nextCursor: null })) });
     fixture.detectChanges();
     const card = fixture.nativeElement.querySelector('.proposal-card') as HTMLElement;
-    expect(card.querySelectorAll('.overdue-inline').length).toBe(2);
+    expect(card.querySelectorAll('.overdue-inline').length).toBe(1);
     expect(card.querySelector('.overdue-badge')?.textContent).toContain('Algum prazo vencido');
     expect(card.textContent).toContain('24/11/2026');
-    expect(card.textContent).toContain('23/11/2026');
+    expect(card.textContent).toContain('25/11/2026');
     http.verify();
   });
 
