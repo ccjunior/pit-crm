@@ -16,6 +16,7 @@ export const proposalReferenceTypes = ['RFQ/cotação', 'Chamado/OS', 'Pedido de
 export interface ProposalOverdue {
   customer: boolean;
   internal: boolean;
+  either: boolean;
   asOfLocalDate: string;
 }
 
@@ -56,7 +57,7 @@ export interface ProposalKanban { totalCount: number; columns: ProposalKanbanCol
 export interface ProposalSearchFilters {
   query?: string; status?: string; customerId?: string; responsibleUserId?: string; origin?: string;
   from?: string; to?: string; overdueFor?: 'customer' | 'internal' | 'either';
-  sortBy?: 'updatedAtUtc' | 'customerDeadline' | 'internalDeadline' | 'nextActionAtUtc' | 'number';
+  sortBy?: 'updatedAt' | 'customerDeadline' | 'internalDeadline' | 'nextActionAtUtc' | 'number';
   sortDirection?: 'asc' | 'desc';
 }
 export interface ProposalInput {

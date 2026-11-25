@@ -23,6 +23,7 @@
             <div><dt>Prazo do cliente</dt><dd>{{ formatDateOnly(item.customerDeadline) }} @if (item.overdue.customer) { <span class="overdue-inline">Vencido</span> }</dd></div>
             <div><dt>Prazo interno</dt><dd>{{ formatDateOnly(item.internalDeadline) }} @if (item.overdue.internal) { <span class="overdue-inline">Vencido</span> }</dd></div>
           </dl>
+          @if (item.overdue.either) { <span class="overdue-badge">Algum prazo vencido</span> }
         </li>
       }
     </ul>

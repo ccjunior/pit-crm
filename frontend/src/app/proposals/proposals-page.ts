@@ -49,7 +49,7 @@ export class ProposalsPage implements OnInit {
   readonly filterResponsible = this.fb.control('');
   readonly filterOrigin = this.fb.control('');
   readonly filterOverdue = this.fb.control('');
-  readonly filterSortBy = this.fb.control('updatedAtUtc');
+  readonly filterSortBy = this.fb.control('updatedAt');
   readonly filterSortDirection = this.fb.control('desc');
   readonly filterFrom = this.fb.control('');
   readonly filterTo = this.fb.control('');
@@ -135,12 +135,15 @@ export class ProposalsPage implements OnInit {
   }
   applyFilters(): void {
     this.page.set(1);
-    this.lanes.set({});
+    if (this.mode() === 'kanban') { this.loadKanban(true); return; }
     this.load(1);
   }
   previousPage(): void { if (this.page() > 1) this.loadList(this.page() - 1); }
   nextPage(): void { if (this.page() * this.pageSize() < this.totalCount()) this.loadList(this.page() + 1); }
-  setPageSize(value: string): void { this.pageSize.set(Number(value)); this.load(1); }
+  setPageSize(value: string): void {
+    this.pageSize.set(Number(value));
+    if (this.mode() === 'kanban') this.loadKanban(true); else this.loadList(1);
+  }
   rangeStart(): number { return this.totalCount() ? (this.page() - 1) * this.pageSize() + 1 : 0; }
   rangeEnd(): number { return Math.min(this.page() * this.pageSize(), this.totalCount()); }
   hasLanes(): boolean { return Object.keys(this.lanes()).length > 0; }
@@ -180,7 +183,10 @@ export class ProposalsPage implements OnInit {
     });
   }
   private loadKanban(clear = false): void {
-    if (clear) this.lanes.set({});
+    if (clear) {
+      for (const stage of this.stages) this.laneRequestIds[stage.id] = (this.laneRequestIds[stage.id] ?? 0) + 1;
+      this.lanes.set({});
+    }
     const requestId = ++this.kanbanRequestId;
     this.loading.set(true); this.error.set('');
     this.api.kanban(this.currentFilters(), this.pageSize()).pipe(finalize(() => {

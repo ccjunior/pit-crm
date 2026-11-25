@@ -11,7 +11,7 @@ describe('ProposalsPage', () => {
     description: 'Reforma', origin: 'E-mail', status: 'Received', version: 1,
     currentRevisionNumber: null, currentRevisionTotal: null, updatedAtUtc: '2026-11-22T12:00:00Z',
     customerDeadline: null, internalDeadline: null,
-    overdue: { customer: false, internal: false, asOfLocalDate: '2026-11-25' },
+    overdue: { customer: false, internal: false, either: false, asOfLocalDate: '2026-11-25' },
     nextAction: null,
     prospectContactName: null, prospectEmail: null, prospectPhone: null, createdAtUtc: '2026-11-22T12:00:00Z',
     outcomeReason: null, demandDraftState: null, convertedDemandId: null, activities: [], references: [], revisions: [],
@@ -82,7 +82,7 @@ describe('ProposalsPage', () => {
       description: 'Reforma', origin: 'E-mail', status: 'Sent', version: 4,
       currentRevisionNumber: 2, currentRevisionTotal: 150, updatedAtUtc: '2026-11-22T12:00:00Z',
       customerDeadline: null, internalDeadline: null,
-      overdue: { customer: false, internal: false, asOfLocalDate: '2026-11-25' },
+      overdue: { customer: false, internal: false, either: false, asOfLocalDate: '2026-11-25' },
       nextAction: null,
       prospectContactName: null, prospectEmail: null, prospectPhone: null, createdAtUtc: '2026-11-22T12:00:00Z',
       outcomeReason: null, demandDraftState: null, convertedDemandId: null, activities: [],
@@ -128,14 +128,25 @@ describe('ProposalsPage', () => {
     http.verify();
   });
 
+  it('uses the agreed updatedAt sort key by default', () => {
+    const { http, page } = createPage();
+    page.applyFilters();
+    const request = http.expectOne(candidate => candidate.url === '/api/proposals');
+    expect(request.request.params.get('sortBy')).toBe('updatedAt');
+    expect(request.request.params.get('sortDirection')).toBe('desc');
+    request.flush({ items: [], page: 1, pageSize: 12, totalCount: 0 });
+    http.verify();
+  });
+
   it('shows server overdue flags for each deadline in both list and Kanban', () => {
     const overdueProposal = { ...proposal, customerDeadline: '2026-11-24', internalDeadline: '2026-11-23',
-      overdue: { customer: true, internal: true, asOfLocalDate: '2026-11-25' } };
+      overdue: { customer: true, internal: true, either: true, asOfLocalDate: '2026-11-25' } };
     const { fixture, http, page } = createPage('list');
     page.items.set([overdueProposal]);
     fixture.detectChanges();
     const row = fixture.nativeElement.querySelector('tbody tr') as HTMLElement;
     expect(row.querySelectorAll('.overdue-inline').length).toBe(2);
+    expect(row.querySelector('.overdue-badge')?.textContent).toContain('Algum prazo vencido');
     expect(row.textContent).toContain('24/11/2026');
     expect(row.textContent).toContain('23/11/2026');
 
@@ -146,6 +157,7 @@ describe('ProposalsPage', () => {
     fixture.detectChanges();
     const card = fixture.nativeElement.querySelector('.proposal-card') as HTMLElement;
     expect(card.querySelectorAll('.overdue-inline').length).toBe(2);
+    expect(card.querySelector('.overdue-badge')?.textContent).toContain('Algum prazo vencido');
     expect(card.textContent).toContain('24/11/2026');
     expect(card.textContent).toContain('23/11/2026');
     http.verify();
@@ -166,6 +178,24 @@ describe('ProposalsPage', () => {
     expect(page.stageItems('Received')[0].number).toBe('SOL-2026-0002');
     expect(page.lane('Evaluating')?.items).toEqual([]);
     expect(page.lane('Received')?.totalCount).toBe(2);
+    http.verify();
+  });
+
+  it('invalidates an in-flight lane cursor request when shared filters change', () => {
+    const { http, page } = createPage('kanban');
+    page.loadNextLanePage('Received');
+    const staleRequest = http.expectOne(candidate => candidate.url === '/api/proposals/kanban');
+    page.filterOrigin.setValue('Telefone');
+    page.applyFilters();
+    const filteredRequest = http.expectOne(candidate => candidate.url === '/api/proposals/kanban');
+    expect(filteredRequest.request.params.has('cursors')).toBe(false);
+    const newItem = { ...proposal, id: 'new-filter-item', number: 'SOL-NEW' };
+    filteredRequest.flush({ totalCount: 1, columns: proposalStages.map(stage => ({ status: stage.id,
+      items: stage.id === 'Received' ? [newItem] : [], totalCount: stage.id === 'Received' ? 1 : 0, nextCursor: null })) });
+    const staleItem = { ...proposal, id: 'stale-item', number: 'SOL-STALE' };
+    staleRequest.flush({ totalCount: 2, columns: proposalStages.map(stage => ({ status: stage.id,
+      items: stage.id === 'Received' ? [staleItem] : [], totalCount: stage.id === 'Received' ? 2 : 0, nextCursor: null })) });
+    expect(page.stageItems('Received')[0].number).toBe('SOL-NEW');
     http.verify();
   });
 
