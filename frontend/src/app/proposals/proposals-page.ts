@@ -1,6 +1,6 @@
 import { CurrencyPipe, DatePipe } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, DestroyRef, ElementRef, OnInit, computed, inject, signal, viewChild } from '@angular/core';
+import { afterNextRender, Component, DestroyRef, ElementRef, Injector, OnInit, computed, inject, signal, viewChild } from '@angular/core';
 import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { debounceTime, distinctUntilChanged, finalize } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
@@ -18,8 +18,12 @@ export class ProposalsPage implements OnInit {
   private readonly customersApi = inject(CustomerApi);
   private readonly fb = inject(FormBuilder).nonNullable;
   private readonly destroyRef = inject(DestroyRef);
+  private readonly injector = inject(Injector);
   private readonly requestDialog = viewChild<ElementRef<HTMLDialogElement>>('requestDialog');
+  private readonly detailDialog = viewChild<ElementRef<HTMLElement>>('detailDialog');
+  private readonly newProposalButton = viewChild<ElementRef<HTMLButtonElement>>('newProposalButton');
   private returnFocusTarget: HTMLElement | null = null;
+  private detailReturnFocusTarget: HTMLElement | null = null;
   readonly stages = proposalStages;
   readonly origins = proposalOrigins;
   readonly referenceTypes = proposalReferenceTypes;
@@ -76,8 +80,8 @@ export class ProposalsPage implements OnInit {
   }
   closeRequestDialog(): void {
     const dialog = this.requestDialog()?.nativeElement;
-    if (dialog?.open) dialog.close();
-    else { this.showCreate.set(false); this.restoreFocus(); }
+    if (dialog?.open && typeof dialog.close === 'function') dialog.close();
+    else { dialog?.removeAttribute('open'); this.showCreate.set(false); this.restoreFocus(); }
   }
   requestClose(): void {
     if (this.createForm.dirty && !window.confirm('Descartar as alterações deste formulário?')) return;
@@ -102,11 +106,64 @@ export class ProposalsPage implements OnInit {
   setPageSize(value: string): void { this.pageSize.set(Number(value)); this.load(1); }
   rangeStart(): number { return this.totalCount() ? (this.page() - 1) * this.pageSize() + 1 : 0; }
   rangeEnd(): number { return Math.min(this.page() * this.pageSize(), this.totalCount()); }
-  open(item: ProposalListItem): void {
+  open(item: ProposalListItem, event?: Event): void {
     this.error.set(''); this.success.set('');
-    this.api.find(item.id).subscribe({ next: value => { this.selected.set(value); this.setOutcomeDefault(value.status); }, error: error => this.error.set(this.errorMessage(error)) });
+    const trigger = event?.currentTarget;
+    this.detailReturnFocusTarget = trigger instanceof HTMLElement ? trigger : null;
+    this.api.find(item.id).subscribe({ next: value => {
+      this.selected.set(value); this.setOutcomeDefault(value.status);
+      afterNextRender(() => this.detailDialog()?.nativeElement.querySelector<HTMLElement>('#proposal-detail-title')?.focus(), { injector: this.injector });
+    }, error: error => this.error.set(this.errorMessage(error)) });
   }
-  close(): void { this.selected.set(null); }
+  onProposalRowKeydown(event: KeyboardEvent, item: ProposalListItem): void {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    this.open(item, event);
+  }
+  close(): void {
+    if (!this.selected()) return;
+    this.selected.set(null);
+    afterNextRender(() => {
+      const target = this.detailReturnFocusTarget;
+      this.detailReturnFocusTarget = null;
+      const focusTarget = target?.isConnected ? target : this.newProposalButton()?.nativeElement;
+      focusTarget?.focus();
+    }, { injector: this.injector });
+  }
+  onDetailOverlayClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) this.close();
+  }
+  onDetailKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.close();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const dialog = this.detailDialog()?.nativeElement;
+    if (!dialog) return;
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+      'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+    )).filter(element => element.tabIndex >= 0 && element.getAttribute('aria-hidden') !== 'true');
+    if (!focusable.length) {
+      event.preventDefault();
+      dialog.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !dialog.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+      event.preventDefault();
+      first.focus();
+    } else if (event.shiftKey && active instanceof HTMLElement && active.id === 'proposal-detail-title') {
+      event.preventDefault();
+      last.focus();
+    }
+  }
   create(): void {
     const value = this.createForm.getRawValue();
     const existingCustomer = !!value.customerId;
@@ -181,7 +238,7 @@ export class ProposalsPage implements OnInit {
   }
   private restoreFocus(): void {
     const target = this.returnFocusTarget; this.returnFocusTarget = null;
-    queueMicrotask(() => { if (target?.isConnected) target.focus(); });
+    afterNextRender(() => { if (target?.isConnected) target.focus(); }, { injector: this.injector });
   }
   private setOutcomeDefault(status: string): void { this.resultForm.controls.status.setValue(status === 'Evaluating' ? 'NotQuoted' : 'Rejected'); }
   private run<T extends ProposalDetails>(request: import('rxjs').Observable<T>, done: (value: T) => void): void {
