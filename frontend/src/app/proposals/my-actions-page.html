@@ -16,13 +16,12 @@
       @for (item of items(); track item.proposalId) {
         <li class="action-card">
           <div class="action-heading"><div><span class="request-number">{{ item.number }}</span><span class="stage-label">{{ statusLabel(item.status) }}</span></div>
-            @if (item.isOverdue) { <span class="overdue-badge">Prazo vencido</span> }
           </div>
           <h2>{{ item.nextAction.description }}</h2>
           <p class="action-time">Próxima ação: <strong>{{ formatScheduledAt(item.nextAction.scheduledAtUtc) }}</strong> <span>(horário de São Paulo)</span></p>
           <dl class="deadlines">
-            <div><dt>Prazo do cliente</dt><dd>{{ formatDateOnly(item.customerDeadline) }}</dd></div>
-            <div><dt>Prazo interno</dt><dd>{{ formatDateOnly(item.internalDeadline) }}</dd></div>
+            <div><dt>Prazo do cliente</dt><dd>{{ formatDateOnly(item.customerDeadline) }} @if (item.overdue.customer) { <span class="overdue-inline">Vencido</span> }</dd></div>
+            <div><dt>Prazo interno</dt><dd>{{ formatDateOnly(item.internalDeadline) }} @if (item.overdue.internal) { <span class="overdue-inline">Vencido</span> }</dd></div>
           </dl>
         </li>
       }

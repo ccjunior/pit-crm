@@ -11,6 +11,7 @@ describe('ProposalsPage', () => {
     description: 'Reforma', origin: 'E-mail', status: 'Received', version: 1,
     currentRevisionNumber: null, currentRevisionTotal: null, updatedAtUtc: '2026-11-22T12:00:00Z',
     customerDeadline: null, internalDeadline: null,
+    overdue: { customer: false, internal: false, asOfLocalDate: '2026-11-25' },
     nextAction: null,
     prospectContactName: null, prospectEmail: null, prospectPhone: null, createdAtUtc: '2026-11-22T12:00:00Z',
     outcomeReason: null, demandDraftState: null, convertedDemandId: null, activities: [], references: [], revisions: [],
@@ -81,6 +82,7 @@ describe('ProposalsPage', () => {
       description: 'Reforma', origin: 'E-mail', status: 'Sent', version: 4,
       currentRevisionNumber: 2, currentRevisionTotal: 150, updatedAtUtc: '2026-11-22T12:00:00Z',
       customerDeadline: null, internalDeadline: null,
+      overdue: { customer: false, internal: false, asOfLocalDate: '2026-11-25' },
       nextAction: null,
       prospectContactName: null, prospectEmail: null, prospectPhone: null, createdAtUtc: '2026-11-22T12:00:00Z',
       outcomeReason: null, demandDraftState: null, convertedDemandId: null, activities: [],
@@ -123,6 +125,29 @@ describe('ProposalsPage', () => {
     request.flush({ items: [], page: 1, pageSize: 12, totalCount: 0 });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Nenhuma solicitação corresponde aos filtros.');
+    http.verify();
+  });
+
+  it('shows server overdue flags for each deadline in both list and Kanban', () => {
+    const overdueProposal = { ...proposal, customerDeadline: '2026-11-24', internalDeadline: '2026-11-23',
+      overdue: { customer: true, internal: true, asOfLocalDate: '2026-11-25' } };
+    const { fixture, http, page } = createPage('list');
+    page.items.set([overdueProposal]);
+    fixture.detectChanges();
+    const row = fixture.nativeElement.querySelector('tbody tr') as HTMLElement;
+    expect(row.querySelectorAll('.overdue-inline').length).toBe(2);
+    expect(row.textContent).toContain('24/11/2026');
+    expect(row.textContent).toContain('23/11/2026');
+
+    page.setMode('kanban');
+    const request = http.expectOne(candidate => candidate.url === '/api/proposals/kanban');
+    request.flush({ totalCount: 1, columns: proposalStages.map(stage => ({ status: stage.id,
+      items: stage.id === 'Received' ? [overdueProposal] : [], totalCount: stage.id === 'Received' ? 1 : 0, nextCursor: null })) });
+    fixture.detectChanges();
+    const card = fixture.nativeElement.querySelector('.proposal-card') as HTMLElement;
+    expect(card.querySelectorAll('.overdue-inline').length).toBe(2);
+    expect(card.textContent).toContain('24/11/2026');
+    expect(card.textContent).toContain('23/11/2026');
     http.verify();
   });
 

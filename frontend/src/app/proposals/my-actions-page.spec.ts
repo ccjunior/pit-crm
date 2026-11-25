@@ -16,14 +16,14 @@ describe('MyActionsPage', () => {
     expect(request.request.params.has('organizationId')).toBe(false);
     request.flush({ items: [{ proposalId: 'proposal-a', number: 'SOL-2026-0001', status: 'Received',
       customerDeadline: '2026-11-27', internalDeadline: null,
-      isOverdue: true,
+      overdue: { customer: true, internal: false, asOfLocalDate: '2026-11-25' },
       nextAction: { reminderOccurrenceId: 'occurrence-a', revision: 1, description: 'Confirmar medidas', scheduledAtUtc: '2026-11-30T12:15:00Z' } }],
       page: 1, pageSize: 12, totalCount: 1 });
     fixture.detectChanges();
     expect(fixture.nativeElement.textContent).toContain('Confirmar medidas');
     expect(fixture.nativeElement.textContent).toContain('27/11/2026');
     expect(fixture.nativeElement.textContent).toContain('09:15');
-    expect(fixture.nativeElement.textContent).toContain('Prazo vencido');
+    expect(fixture.nativeElement.textContent).toContain('Vencido');
     http.verify();
   });
 

@@ -13,6 +13,12 @@ export const proposalOrganizationTimeZone = 'America/Sao_Paulo';
 export const proposalOrigins = ['E-mail', 'Telefone', 'WhatsApp', 'Indicação', 'Visita', 'Licitação', 'Outro'] as const;
 export const proposalReferenceTypes = ['RFQ/cotação', 'Chamado/OS', 'Pedido de compra', 'Outra'] as const;
 
+export interface ProposalOverdue {
+  customer: boolean;
+  internal: boolean;
+  asOfLocalDate: string;
+}
+
 export interface ProposalNextAction {
   reminderOccurrenceId: string;
   revision: number;
@@ -33,7 +39,7 @@ export interface ProposalListItem {
   number: string; responsibleUserId: string | null; responsibleName: string | null;
   description: string; origin: string; status: string; version: number; currentRevisionNumber: number | null;
   currentRevisionTotal: number | null; updatedAtUtc: string;
-  customerDeadline: string | null; internalDeadline: string | null;
+  customerDeadline: string | null; internalDeadline: string | null; overdue: ProposalOverdue;
   nextAction: ProposalNextAction | null;
 }
 export interface ProposalDetails extends ProposalListItem {
@@ -71,7 +77,7 @@ export interface ProposalTrackingResponse {
 }
 export interface MyActionItem {
   proposalId: string; number: string; status: string; customerDeadline: string | null;
-  internalDeadline: string | null; isOverdue: boolean;
+  internalDeadline: string | null; overdue: ProposalOverdue;
   nextAction: ProposalNextAction;
 }
 export interface MyActionsPage { items: MyActionItem[]; page: number; pageSize: number; totalCount: number; }
