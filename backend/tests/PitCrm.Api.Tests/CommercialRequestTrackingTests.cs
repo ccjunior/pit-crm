@@ -81,16 +81,18 @@ public sealed class CommercialRequestTrackingTests
         var overdue = ProposalDeadlineOverdueDto.Calculate(new DateOnly(2026, 11, 24), today, today);
         Assert.True(overdue.Customer);
         Assert.False(overdue.Internal);
+        Assert.True(overdue.Either);
         Assert.Equal(today, overdue.AsOfLocalDate);
         var clear = ProposalDeadlineOverdueDto.Calculate(null, null, today);
         Assert.False(clear.Customer);
         Assert.False(clear.Internal);
+        Assert.False(clear.Either);
     }
 
     [Fact]
     public void My_actions_contract_exposes_per_deadline_flags_without_ambiguous_overdue_alias()
     {
-        var overdue = new ProposalDeadlineOverdueDto(true, false, new DateOnly(2026, 11, 25));
+        var overdue = new ProposalDeadlineOverdueDto(true, false, true, new DateOnly(2026, 11, 25));
         var item = new MyActionItemDto(Guid.NewGuid(), "SOL-2026-0001", "Negotiating", null, null,
             new ProposalNextActionDto(Guid.NewGuid(), 1, "Ligar", DateTimeOffset.Parse("2026-11-25T12:00:00Z")),
             overdue);
@@ -101,9 +103,9 @@ public sealed class CommercialRequestTrackingTests
         var overdueJson = itemJson.GetProperty("overdue");
         Assert.True(overdueJson.GetProperty("customer").GetBoolean());
         Assert.False(overdueJson.GetProperty("internal").GetBoolean());
+        Assert.True(overdueJson.GetProperty("either").GetBoolean());
         Assert.Equal("2026-11-25", overdueJson.GetProperty("asOfLocalDate").GetString());
         Assert.False(itemJson.TryGetProperty("isOverdue", out _));
-        Assert.False(overdueJson.TryGetProperty("either", out _));
     }
 
     [Fact]

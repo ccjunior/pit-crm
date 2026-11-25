@@ -31,14 +31,15 @@ public sealed record ProposalTrackingInput(int Version, DateOnly? CustomerDeadli
 public sealed record ProposalNextActionInput(string? Description, string? ScheduledAtLocal, string? SelectedOffset);
 public sealed record ProposalNextActionDto(Guid ReminderOccurrenceId, int Revision, string Description,
     DateTimeOffset ScheduledAtUtc);
-public sealed record ProposalDeadlineOverdueDto(bool Customer, bool Internal, DateOnly AsOfLocalDate)
+public sealed record ProposalDeadlineOverdueDto(bool Customer, bool Internal, bool Either, DateOnly AsOfLocalDate)
 {
     public static ProposalDeadlineOverdueDto Calculate(DateOnly? customerDeadline, DateOnly? internalDeadline,
         DateOnly asOfLocalDate)
     {
         var customer = customerDeadline is { } customerDate && customerDate < asOfLocalDate;
         var internalDeadlineOverdue = internalDeadline is { } internalDate && internalDate < asOfLocalDate;
-        return new ProposalDeadlineOverdueDto(customer, internalDeadlineOverdue, asOfLocalDate);
+        return new ProposalDeadlineOverdueDto(customer, internalDeadlineOverdue,
+            customer || internalDeadlineOverdue, asOfLocalDate);
     }
 }
 public static class ProposalDateRules
