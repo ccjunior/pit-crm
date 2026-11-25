@@ -424,7 +424,7 @@ Cada fase produz especificação e tarefas com critérios verificáveis quando s
 ### Fase 2 — Operação comercial
 - Responsável, prazos, validade, follow-up, número da solicitação, referência do cliente, canal de origem.
 - Histórico de atividades e comentários; visita técnica.
-- Motivos estruturados (não cotada/perda).
+- Motivo estruturado obrigatório para `NaoCotada` e opcional para `Recusada`, `Cancelada` e `Expirada`.
 - Anexos (infraestrutura transversal básica) e auditoria geral, se ainda não existirem.
 
 ### Fase 3 — Composição de preço e revisões
@@ -470,7 +470,7 @@ Cada fase produz especificação e tarefas com critérios verificáveis quando s
 | Área | Estado observado no código | Consequência para as próximas fases |
 |---|---|---|
 | Modelo e nomes | A entidade central é `CommercialRequest`, revisões são inteiras (`1, 2, 3`) e itens guardam descrição/valor. Há rascunho com vínculos à solicitação e revisão aprovadas. | Manter um mapeamento explícito para a terminologia da especificação. Rebatizar entidades não é necessário para implementar a fase seguinte. Unidade, quantidade, custo, margem e BDI não existem ainda e pertencem à Fase 3. |
-| Etapas e histórico | `CommercialRequest` centraliza as transições permitidas no domínio. `CommercialActivity` guarda ator, horário, tipo e texto, mas não campos estruturados de estado anterior/novo. O motivo de resultado é texto livre; apenas “não cotada” exige motivo no domínio atual. | A Fase 2 precisa preservar atividades legadas e projetar histórico de transição tipado antes de migrar dados. Motivos estruturados e regras para os outros encerramentos permanecem decisão de produto. |
+| Etapas e histórico | `CommercialRequest` centraliza as transições permitidas no domínio. `CommercialActivity` guarda ator, horário, tipo e texto, mas não campos estruturados de estado anterior/novo. O motivo de resultado é texto livre; apenas “não cotada” exige motivo no domínio atual. | A Fase 2 precisa preservar atividades legadas e projetar histórico de transição tipado antes de migrar dados. A decisão de produto da AC-T04 exige motivo estruturado somente para `NaoCotada`. Em `Recusada`, `Cancelada` e `Expirada`, ele é opcional nesta etapa. |
 | Acompanhamento | A solicitação atual não tem número legível, responsável comercial, local, referência do cliente, prazos, próxima ação ou origem e-mail/manual separada. A busca atual usa etapa, cliente, período de atualização e texto. | Campos, número e filtros da Fase 2 requerem desenho e migração compatível com registros existentes. |
 | Segurança multiempresa | Não foi encontrado `HasQueryFilter` no EF Core. Os repositórios comerciais e de rascunho recebem `OrganizationId` e filtram explicitamente as consultas; relacionamentos do banco incluem chaves compostas com organização e a suíte PostgreSQL testa acessos cruzados. | A exigência documental de filtro global diverge da arquitetura atual. Não trocar o padrão sem análise de efeitos em todo o sistema; manter verificações negativas e avaliar uma segunda camada antes de anexos/e-mail. |
 | Funcionalidades ainda ausentes | Não há visita técnica comercial, anexo comercial, comentário/atividade editável, lista configurável de motivos, job de expiração ou lembrete comercial. | Implementar somente depois de resolver desenho, autorização e infraestrutura das fases correspondentes. |
