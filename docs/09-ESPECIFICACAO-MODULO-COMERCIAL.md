@@ -79,7 +79,7 @@ Encerramentos: `NaoCotada`, `Recusada`, `Expirada`, `Cancelada`.
 - As **transições válidas ficam definidas em um único lugar** do domínio (máquina de estados explícita), não espalhadas por handlers.
 - Cada transição registra: usuário (ou `Sistema`/`Conector`), data/hora, estado anterior, estado novo e motivo quando aplicável.
 - `NaoCotada` exige **motivo estruturado** (lista configurável por organização + observação livre).
-- `Recusada`, `Cancelada` e `Expirada` também exigem motivo estruturado.
+- Para `Recusada`, `Cancelada` e `Expirada`, o motivo estruturado é opcional nesta etapa.
 - Transições para `Enviada`, `Aprovada` e encerramentos são **registradas manualmente** por usuário autorizado (na v1 o envio é externo).
 - `Expirada` pode ser aplicada por job agendado quando a validade da última revisão enviada vencer (seção 5.3).
 - Reabertura de solicitação encerrada: decidir (ver "Decisões em aberto"); se permitida, exige permissão específica e registro.
@@ -344,7 +344,7 @@ Base legal, retenção, exportação e exclusão por organização para dados pe
 - **Domínio:** transições válidas/inválidas da máquina de estados; cálculo de preço/BDI/margem e arredondamento; imutabilidade de revisão enviada; regra de alçada.
 - **Integração (API + banco):**
   - fluxo completo: criar solicitação → avaliar → elaborar revisão → enviar → negociar → aprovar → rascunho → conferência → demanda confirmada;
-  - encerramentos (`NaoCotada`, `Recusada`, `Expirada`, `Cancelada`) com motivo obrigatório;
+  - encerramentos com motivo estruturado obrigatório somente para `NaoCotada`;
   - aprovação **idempotente** (repetição e **concorrência** simultânea geram um único rascunho);
   - itens aprovados preservados como subitens snapshot com referência de origem;
   - validade e job de expiração;
