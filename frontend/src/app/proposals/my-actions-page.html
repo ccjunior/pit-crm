@@ -1,0 +1,35 @@
+<section class="my-actions-page">
+  <header class="page-heading">
+    <div><p class="eyebrow">Comercial</p><h1>Minhas ações</h1><p class="intro">Próximas ações atribuídas a você.</p></div>
+    <button class="secondary-button" type="button" (click)="load()" [disabled]="loading()">Atualizar</button>
+  </header>
+
+  @if (loading() && !items().length) {
+    <p class="state-message" role="status">Carregando suas ações…</p>
+  } @else if (error() && !items().length) {
+    <section class="state-panel" role="alert"><h2>Não foi possível carregar</h2><p>{{ error() }}</p><button class="secondary-button" type="button" (click)="load()">Tentar novamente</button></section>
+  } @else if (!items().length) {
+    <section class="state-panel"><h2>Nenhuma próxima ação</h2><p>Quando houver uma ação atribuída a você, ela aparecerá aqui.</p></section>
+  } @else {
+    @if (error()) { <p class="notice error" role="alert">{{ error() }} <button class="text-button" type="button" (click)="load()">Tentar novamente</button></p> }
+    <ul class="action-list" aria-label="Próximas ações atribuídas a você">
+      @for (item of items(); track item.proposalId) {
+        <li class="action-card">
+          <div class="action-heading"><div><span class="request-number">{{ item.number }}</span><span class="stage-label">{{ statusLabel(item.status) }}</span></div>
+          </div>
+          <h2>{{ item.nextAction.description }}</h2>
+          <p class="action-time">Próxima ação: <strong>{{ formatScheduledAt(item.nextAction.scheduledAtUtc) }}</strong> <span>(horário de São Paulo)</span></p>
+          <dl class="deadlines">
+            <div><dt>Prazo do cliente</dt><dd>{{ formatDateOnly(item.customerDeadline) }} @if (item.overdue.customer) { <span class="overdue-inline">Vencido</span> }</dd></div>
+            <div><dt>Prazo interno</dt><dd>{{ formatDateOnly(item.internalDeadline) }} @if (item.overdue.internal) { <span class="overdue-inline">Vencido</span> }</dd></div>
+          </dl>
+          @if (item.overdue.either) { <span class="overdue-badge">Algum prazo vencido</span> }
+        </li>
+      }
+    </ul>
+    <footer class="pagination">
+      <span>Mostrando {{ rangeStart() }}–{{ rangeEnd() }} de {{ totalCount() }}</span>
+      <div class="pagination-controls"><button type="button" (click)="previousPage()" [disabled]="page() === 1 || loading()" aria-label="Página anterior">‹</button><span>Página {{ page() }}</span><button type="button" (click)="nextPage()" [disabled]="page() * pageSize >= totalCount() || loading()" aria-label="Próxima página">›</button></div>
+    </footer>
+  }
+</section>
