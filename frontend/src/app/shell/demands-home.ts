@@ -5,8 +5,9 @@ import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { debounceTime, distinctUntilChanged, finalize, tap } from 'rxjs';
 import { Customer, CustomerApi, CustomerLocation } from '../customers/customer-api';
+import { AuthService } from '../core/auth.service';
 import { NewDemandPage } from '../demands/new-demand-page';
-import { CreatedDemand, DemandApi, DemandDetails, DemandListItem, EligibleAssignee, UpdatedDemand } from '../demands/demand-api';
+import { CreatedDemand, DemandApi, DemandDetails, DemandListItem, DemandProposalTimelineEvent, EligibleAssignee, UpdatedDemand } from '../demands/demand-api';
 
 @Component({
   selector: 'app-demands-home',
@@ -72,6 +73,7 @@ import { CreatedDemand, DemandApi, DemandDetails, DemandListItem, EligibleAssign
             <div class="detail-status-row"><span class="status-pill" [attr.data-status]="statusToken(item.status)">{{ item.status }}</span><span [attr.title]="fullDate(item.createdAtUtc)">{{ relativeDate(item.createdAtUtc) }}</span></div>
             <dl class="detail-list"><div><dt>Local</dt><dd>{{ item.locationName }}</dd></div><div><dt>Origem</dt><dd>{{ item.origin }}</dd></div><div><dt>Prioridade</dt><dd><span class="priority-pill" [attr.data-priority]="priorityToken(item.priority)">{{ item.priority || 'Não definida' }}</span></dd></div><div><dt>Responsável</dt><dd>{{ item.assignedToDisplayName || 'Sem responsável' }}</dd></div><div class="detail-wide"><dt>Referências externas</dt><dd>@if (item.externalReferences.length) { @for (reference of item.externalReferences; track $index) { <span class="demand-external-reference"><strong>{{ reference.type }}</strong> · {{ reference.value }}</span> } } @else { Não informadas }</dd></div><div class="detail-wide"><dt>Descrição</dt><dd>{{ item.description }}</dd></div><div class="detail-wide"><dt>Subitens</dt><dd>@if (item.subitems.length) { @for (subitem of item.subitems; track subitem.id) { <span class="demand-external-reference"><strong>{{ subitem.position }}.</strong> {{ subitem.description }} @if (subitem.amount !== null) { · {{ subitem.amount | currency:'BRL' }} }</span> } } @else { Nenhum subitem registrado }</dd></div><div><dt>Criada por</dt><dd>{{ item.createdByDisplayName }}</dd></div></dl>
             <section class="activity-section"><h3>Atividades</h3>@if (item.activities.length) { <ol>@for (activity of item.activities; track activity.id) { <li><div><strong>{{ activity.description }}</strong><small>{{ activity.authorDisplayName }} · {{ activity.occurredAtUtc | date:'dd/MM/yyyy HH:mm' }}</small></div></li> }</ol> } @else { <p>Nenhuma atividade registrada.</p> }</section>
+            @if (isOperator()) { <section class="proposal-operator-timeline" aria-labelledby="operator-proposal-timeline-title"><h3 id="operator-proposal-timeline-title">Histórico da solicitação comercial</h3>@if (proposalTimelineError()) { <p class="error-banner" role="alert">{{ proposalTimelineError() }} @if (!proposalTimelineNotFound()) { <button class="text-button" type="button" (click)="loadProposalTimeline(item.id)">Tentar novamente</button> }</p> }@if (proposalTimelineLoading()) { <p role="status">Carregando histórico…</p> }@else if (!proposalTimelineError() && !proposalTimeline().length) { <p role="status">Nenhum evento comercial disponível.</p> }@else if (proposalTimeline().length) { <ol class="operator-timeline-list">@for (event of proposalTimeline(); track $index) { <li><strong>{{ operatorTimelineTypeLabel(event.type) }}</strong><small>{{ operatorTimelineDateLabel(event) }}</small>@if (event.fromStatus || event.toStatus) { <p>Etapa: {{ proposalStageLabel(event.fromStatus) }} → {{ proposalStageLabel(event.toStatus) }}</p> }</li> }</ol><div class="operator-timeline-pagination"><span>Página {{ proposalTimelinePage() }} · {{ proposalTimelineTotalCount() }} eventos</span><button type="button" class="text-button" (click)="loadProposalTimeline(item.id, proposalTimelinePage() - 1)" [disabled]="proposalTimelineLoading() || proposalTimelinePage() <= 1">Anterior</button><button type="button" class="text-button" (click)="loadProposalTimeline(item.id, proposalTimelinePage() + 1)" [disabled]="proposalTimelineLoading() || proposalTimelinePage() * proposalTimelinePageSize >= proposalTimelineTotalCount()">Próxima</button></div> }</section> }
           </article>
         }
       </dialog>
@@ -84,6 +86,7 @@ export class DemandsHome implements OnInit {
   private readonly customerApi = inject(CustomerApi);
   private readonly formBuilder = inject(FormBuilder);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly auth = inject(AuthService);
   private readonly createDialog = viewChild<ElementRef<HTMLDialogElement>>('createDialog');
   private readonly detailDialog = viewChild<ElementRef<HTMLDialogElement>>('detailDialog');
   private returnFocusTarget: HTMLElement | null = null;
@@ -108,6 +111,13 @@ export class DemandsHome implements OnInit {
   readonly rangeEnd = computed(() => Math.min(this.page() * this.pageSize(), this.totalCount()));
   readonly totalPages = computed(() => Math.max(1, Math.ceil(this.totalCount() / this.pageSize())));
   readonly detail = signal<DemandDetails | null>(null);
+  readonly proposalTimeline = signal<DemandProposalTimelineEvent[]>([]);
+  readonly proposalTimelinePage = signal(1);
+  readonly proposalTimelinePageSize = 20;
+  readonly proposalTimelineTotalCount = signal(0);
+  readonly proposalTimelineLoading = signal(false);
+  readonly proposalTimelineError = signal('');
+  readonly proposalTimelineNotFound = signal(false);
   readonly detailLoading = signal(false);
   readonly detailError = signal('');
   readonly editingDemand = signal(false);
@@ -115,6 +125,7 @@ export class DemandsHome implements OnInit {
   readonly recentDemandId = signal('');
   readonly createFormOpen = signal(false);
   private loadRequestId = 0;
+  private proposalTimelineRequestId = 0;
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
 
   ngOnInit(): void {
@@ -211,6 +222,9 @@ export class DemandsHome implements OnInit {
   }
   private openDetailsById(id: string): void {
     this.editingDemand.set(false);
+    this.proposalTimelineRequestId++;
+    this.proposalTimeline.set([]); this.proposalTimelinePage.set(1); this.proposalTimelineTotalCount.set(0);
+    this.proposalTimelineError.set(''); this.proposalTimelineNotFound.set(false);
     this.openDialog(this.detailDialog()?.nativeElement);
     this.loadDetails(id);
   }
@@ -219,17 +233,67 @@ export class DemandsHome implements OnInit {
     this.demandApi.find(id).pipe(finalize(() => this.detailLoading.set(false))).subscribe({
       next: detail => {
         this.detail.set(detail);
+        if (this.isOperator()) {
+          this.proposalTimeline.set([]); this.proposalTimelinePage.set(1); this.proposalTimelineTotalCount.set(0);
+          this.proposalTimelineError.set(''); this.proposalTimelineNotFound.set(false);
+          this.loadProposalTimeline(id);
+        }
         if (focusTitle) queueMicrotask(() => document.getElementById('demand-detail-title')?.focus());
       },
       error: () => this.detailError.set('A demanda pode ter sido removida ou não está disponível para sua organização.'),
     });
   }
   closeDetails(): void {
+    this.proposalTimelineRequestId++;
+    this.proposalTimelineLoading.set(false);
     const dialog = this.detailDialog()?.nativeElement;
     if (dialog && typeof dialog.close === 'function') dialog.close();
     else { dialog?.removeAttribute('open'); this.restoreFocus(); }
   }
   onDetailBackdrop(event: MouseEvent): void { if (event.target === event.currentTarget) this.closeDetails(); }
+  isOperator(): boolean { return this.auth.session()?.roles.includes('Operador') ?? false; }
+  loadProposalTimeline(demandId: string, page = 1): void {
+    if (!this.isOperator() || page < 1) return;
+    const requestId = ++this.proposalTimelineRequestId;
+    this.proposalTimelinePage.set(page); this.proposalTimelineLoading.set(true);
+    this.proposalTimelineError.set(''); this.proposalTimelineNotFound.set(false);
+    this.demandApi.proposalTimeline(demandId, page, this.proposalTimelinePageSize).pipe(finalize(() => {
+      if (requestId === this.proposalTimelineRequestId) this.proposalTimelineLoading.set(false);
+    })).subscribe({
+      next: result => {
+        if (requestId !== this.proposalTimelineRequestId) return;
+        this.proposalTimeline.set(result.items); this.proposalTimelineTotalCount.set(result.totalCount);
+      },
+      error: error => {
+        if (requestId !== this.proposalTimelineRequestId) return;
+        if (error.status === 404) {
+          this.proposalTimelineNotFound.set(true);
+          this.proposalTimelineError.set('Esta demanda não tem histórico comercial vinculado.');
+        } else this.proposalTimelineError.set(error.status === 403
+          ? 'Seu perfil não tem acesso ao histórico comercial desta demanda.'
+          : 'Não foi possível carregar o histórico comercial. Tente novamente.');
+      },
+    });
+  }
+  operatorTimelineTypeLabel(type: string): string {
+    if (type === 'StageChanged') return 'Etapa alterada';
+    if (type === 'LegacyActivity') return 'Atividade anterior';
+    if (type === 'ActivityRecorded') return 'Atividade registrada';
+    if (type === 'CommentAdded') return 'Comentário';
+    return 'Evento da solicitação';
+  }
+  proposalStageLabel(status: string | null): string {
+    const labels: Record<string, string> = {
+      Received: 'Recebida', Evaluating: 'Em avaliação', Drafting: 'Elaborando proposta', Sent: 'Enviada',
+      Negotiating: 'Em negociação', Approved: 'Aprovada', NotQuoted: 'Não cotada', Rejected: 'Recusada',
+      Expired: 'Expirada', Cancelled: 'Cancelada',
+    };
+    return status ? labels[status] ?? status : '—';
+  }
+  operatorTimelineDateLabel(event: DemandProposalTimelineEvent): string {
+    if (!event.occurredAtKnown || !event.occurredAtUtc) return 'Data histórica desconhecida';
+    return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date(event.occurredAtUtc));
+  }
   restoreFocus(): void { const target = this.returnFocusTarget; this.returnFocusTarget = null; queueMicrotask(() => { if (target?.isConnected) target.focus(); }); }
   private openDialog(dialog?: HTMLDialogElement): void {
     if (!dialog || dialog.open) return;

@@ -55,6 +55,19 @@ export interface DemandActivity {
   description: string;
   occurredAtUtc: string;
 }
+export interface DemandProposalTimelineEvent {
+  type: string;
+  occurredAtUtc: string | null;
+  occurredAtKnown: boolean;
+  fromStatus: string | null;
+  toStatus: string | null;
+}
+export interface DemandProposalTimelinePage {
+  items: DemandProposalTimelineEvent[];
+  page: number;
+  pageSize: number;
+  totalCount: number;
+}
 export interface DemandDetails extends DemandListItem {
   version: number;
   createdByDisplayName: string;
@@ -87,6 +100,10 @@ export class DemandApi {
   }
   find(id: string): Observable<DemandDetails> {
     return this.http.get<DemandDetails>(`/api/demands/${id}`);
+  }
+  proposalTimeline(demandId: string, page = 1, pageSize = 20): Observable<DemandProposalTimelinePage> {
+    const params = new HttpParams().set('page', page).set('pageSize', pageSize);
+    return this.http.get<DemandProposalTimelinePage>(`/api/demands/${demandId}/proposal-timeline`, { params });
   }
   eligibleAssignees(): Observable<EligibleAssignee[]> {
     return this.http.get<EligibleAssignee[]>('/api/users/eligible-assignees');

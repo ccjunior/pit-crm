@@ -2,7 +2,7 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 import { ProposalsPage } from './proposals-page';
-import { ProposalDetails } from './proposal-api';
+import { ProposalDetails, ProposalHistoryEvent } from './proposal-api';
 
 describe('ProposalsPage', () => {
   const proposal: ProposalDetails = {
@@ -33,6 +33,7 @@ describe('ProposalsPage', () => {
   async function openDetail(fixture: ReturnType<typeof createPage>['fixture'], http: HttpTestingController, item = proposal) {
     const request = http.expectOne(`/api/proposals/${item.id}`);
     request.flush(item);
+    http.expectOne(request => request.url === `/api/proposals/${item.id}/timeline`).flush({ items: [], page: 1, pageSize: 20, totalCount: 0 });
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -91,6 +92,61 @@ describe('ProposalsPage', () => {
     http.verify();
   });
 
+  it('loads and renders the paged commercial timeline', async () => {
+    const { fixture, http } = createPage();
+    fixture.nativeElement.querySelector('tbody tr').click();
+    const event: ProposalHistoryEvent = { id: 'event-a', sequence: 1, type: 'StageChanged', occurredAtUtc: '2026-11-22T12:00:00Z',
+      occurredAtKnown: true, actorName: 'Gestora', fromStatus: 'Received', toStatus: 'Evaluating', reason: null,
+      activityType: null, text: null, mentionedUserIds: [] };
+    http.expectOne('/api/proposals/proposal-a').flush(proposal);
+    http.expectOne('/api/proposals/proposal-a/timeline?page=1&pageSize=20').flush({ items: [event], page: 1, pageSize: 20, totalCount: 1 });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.history-list')?.textContent).toContain('Etapa alterada');
+    expect(fixture.nativeElement.querySelector('.history-list')?.textContent).toContain('Recebida → Em avaliação');
+    expect(fixture.nativeElement.querySelector('.history-list')?.textContent).toContain('Gestora');
+    http.verify();
+  });
+
+  it('posts an activity with a UUIDv7 idempotency key, then refreshes the timeline', async () => {
+    const { fixture, http, page } = createPage();
+    fixture.nativeElement.querySelector('tbody tr').click();
+    await openDetail(fixture, http);
+    page.activityForm.setValue({ type: 'Ligação', text: 'Retornar amanhã', mentionedUserIds: [] });
+    page.recordActivity();
+    const request = http.expectOne('/api/proposals/proposal-a/activities');
+    expect(request.request.body).toEqual({ type: 'Ligação', text: 'Retornar amanhã', mentionedUserIds: [] });
+    expect(request.request.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    request.flush({ id: 'event-a' });
+    http.expectOne('/api/proposals/proposal-a/timeline?page=1&pageSize=20').flush({ items: [], page: 1, pageSize: 20, totalCount: 0 });
+    fixture.detectChanges();
+    expect(page.activityForm.controls.text.value).toBe('');
+    expect(page.historySuccess()).toContain('salvo');
+    http.verify();
+  });
+
+  it('keeps outcome reason input intact after a 409 status conflict', async () => {
+    const { fixture, http, page } = createPage();
+    const evaluating = { ...proposal, status: 'Evaluating', demandDraftState: 'Converted' };
+    fixture.nativeElement.querySelector('tbody tr').click();
+    await openDetail(fixture, http, evaluating);
+    http.expectOne('/api/proposals/reasons?resultStatus=NotQuoted').flush([
+      { id: 'reason-a', resultStatus: 'NotQuoted', label: 'Sem viabilidade', isActive: true },
+    ]);
+    fixture.detectChanges();
+    page.resultForm.controls.reasonId.setValue('reason-a');
+    page.markOutcome();
+    const request = http.expectOne('/api/proposals/proposal-a/status');
+    expect(request.request.body).toEqual({ version: 1, status: 'NotQuoted', reasonId: 'reason-a' });
+    request.flush({ error: 'A solicitação foi alterada. Atualize os dados antes de tentar novamente.' }, { status: 409, statusText: 'Conflict' });
+    fixture.detectChanges();
+    expect(page.resultForm.controls.reasonId.value).toBe('reason-a');
+    expect(page.historyConflict()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Recarregar dados atuais');
+    http.verify();
+  });
+
   it('opens the List row with Enter and Space and exposes a named modal dialog', async () => {
     const { fixture, http } = createPage();
     const row = fixture.nativeElement.querySelector('tbody tr') as HTMLTableRowElement;
@@ -124,9 +180,11 @@ describe('ProposalsPage', () => {
     row.click();
     await openDetail(fixture, http);
     const dialog = fixture.nativeElement.querySelector('[role="dialog"]') as HTMLElement;
-    const buttons = Array.from(dialog.querySelectorAll('button')) as HTMLButtonElement[];
-    const first = buttons[0];
-    const last = buttons[buttons.length - 1];
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+      'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+    )).filter(element => element.tabIndex >= 0);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
 
     first.focus();
     first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true, shiftKey: true }));

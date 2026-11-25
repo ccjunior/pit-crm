@@ -5,7 +5,8 @@ import { FormArray, FormBuilder, ReactiveFormsModule, Validators } from '@angula
 import { debounceTime, distinctUntilChanged, finalize } from 'rxjs';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Customer, CustomerApi } from '../customers/customer-api';
-import { ProposalApi, ProposalDetails, ProposalListItem, ProposalRevision, proposalOrigins, proposalReferenceTypes, proposalStages } from './proposal-api';
+import { createUuidV7 } from '../core/uuid-v7';
+import { ProposalApi, ProposalDetails, ProposalHistoryEvent, ProposalListItem, ProposalReason, ProposalRevision, proposalOrigins, proposalReferenceTypes, proposalStages } from './proposal-api';
 
 @Component({
   selector: 'app-proposals-page',
@@ -24,6 +25,8 @@ export class ProposalsPage implements OnInit {
   private readonly newProposalButton = viewChild<ElementRef<HTMLButtonElement>>('newProposalButton');
   private returnFocusTarget: HTMLElement | null = null;
   private detailReturnFocusTarget: HTMLElement | null = null;
+  private timelineRequestId = 0;
+  private readonly pendingIdempotencyKeys = new Map<string, { fingerprint: string; key: string }>();
   readonly stages = proposalStages;
   readonly origins = proposalOrigins;
   readonly referenceTypes = proposalReferenceTypes;
@@ -32,6 +35,18 @@ export class ProposalsPage implements OnInit {
   readonly customers = signal<Customer[]>([]);
   readonly selected = signal<ProposalDetails | null>(null);
   readonly selectedRevision = computed(() => this.selected()?.revisions[0] ?? null);
+  readonly history = signal<ProposalHistoryEvent[]>([]);
+  readonly historyPage = signal(1);
+  readonly historyPageSize = 20;
+  readonly historyTotalCount = signal(0);
+  readonly historyLoading = signal(false);
+  readonly historyError = signal('');
+  readonly historySuccess = signal('');
+  readonly historySaving = signal(false);
+  readonly historyConflict = signal(false);
+  readonly reasons = signal<ProposalReason[]>([]);
+  readonly reasonsLoading = signal(false);
+  readonly reasonsError = signal('');
   readonly query = this.fb.control('');
   readonly filterStage = this.fb.control('');
   readonly filterCustomer = this.fb.control('');
@@ -51,7 +66,9 @@ export class ProposalsPage implements OnInit {
   readonly revisionForm = this.fb.group({ validUntil: '', notes: '', items: this.fb.array([this.makeItem()]) });
   readonly sendForm = this.fb.group({ channel: ['E-mail', Validators.required] });
   readonly approveForm = this.fb.group({ approverName: ['', Validators.required], channel: ['E-mail', Validators.required] });
-  readonly resultForm = this.fb.group({ status: ['Rejected'], reason: [''] });
+  readonly resultForm = this.fb.group({ status: ['Rejected'], reasonId: [''] });
+  readonly activityForm = this.fb.group({ type: ['', [Validators.required, Validators.maxLength(60)]], text: ['', [Validators.required, Validators.maxLength(4000)]], mentionedUserIds: this.fb.control<string[]>([]) });
+  readonly commentForm = this.fb.group({ text: ['', [Validators.required, Validators.maxLength(4000)]], mentionedUserIds: this.fb.control<string[]>([]) });
   readonly revisionItems = this.revisionForm.controls.items as FormArray;
 
   ngOnInit(): void {
@@ -112,6 +129,11 @@ export class ProposalsPage implements OnInit {
     this.detailReturnFocusTarget = trigger instanceof HTMLElement ? trigger : null;
     this.api.find(item.id).subscribe({ next: value => {
       this.selected.set(value); this.setOutcomeDefault(value.status);
+      this.history.set([]); this.historyPage.set(1); this.historyTotalCount.set(0);
+      this.activityForm.reset({ type: '', text: '', mentionedUserIds: [] });
+      this.commentForm.reset({ text: '', mentionedUserIds: [] });
+      this.historyError.set(''); this.historySuccess.set(''); this.historyConflict.set(false);
+      this.loadTimeline();
       afterNextRender(() => this.detailDialog()?.nativeElement.querySelector<HTMLElement>('#proposal-detail-title')?.focus(), { injector: this.injector });
     }, error: error => this.error.set(this.errorMessage(error)) });
   }
@@ -122,6 +144,8 @@ export class ProposalsPage implements OnInit {
   }
   close(): void {
     if (!this.selected()) return;
+    this.timelineRequestId++;
+    this.historyLoading.set(false);
     this.selected.set(null);
     afterNextRender(() => {
       const target = this.detailReturnFocusTarget;
@@ -216,13 +240,28 @@ export class ProposalsPage implements OnInit {
       }, error: error => this.error.set(this.errorMessage(error)) });
   }
   markOutcome(): void {
-    const proposal = this.selected(); if (!proposal) return;
+    this.resultForm.markAllAsTouched();
     const value = this.resultForm.getRawValue();
-    this.run(this.api.changeStatus(proposal.id, proposal.version, value.status, value.reason.trim() || null), updated => { this.selected.set(updated); this.load(); });
+    if (this.resultForm.invalid || (value.status === 'NotQuoted' && !value.reasonId) || this.saving()) return;
+    this.submitStatus(value.status, value.status === 'NotQuoted' ? value.reasonId : null);
+  }
+  private submitStatus(status: string, reasonId: string | null): void {
+    const proposal = this.selected(); if (!proposal || this.saving()) return;
+    const input = { version: proposal.version, status, reasonId };
+    const action = `status:${proposal.id}`;
+    const key = this.idempotencyKey(action, input);
+    this.saving.set(true); this.error.set(''); this.historyError.set(''); this.historyConflict.set(false);
+    this.api.changeStatus(proposal.id, input, key).pipe(finalize(() => this.saving.set(false))).subscribe({
+      next: updated => {
+        this.pendingIdempotencyKeys.delete(action);
+        this.selected.set(updated); this.setOutcomeDefault(updated.status); this.load(); this.loadTimeline(1);
+        this.historySuccess.set('Resultado registrado.');
+      },
+      error: error => { this.historyError.set(this.errorMessage(error)); this.historyConflict.set(error.status === 409); },
+    });
   }
   advanceTo(status: string): void {
-    const proposal = this.selected(); if (!proposal) return;
-    this.run(this.api.changeStatus(proposal.id, proposal.version, status, null), updated => { this.selected.set(updated); this.setOutcomeDefault(updated.status); });
+    this.submitStatus(status, null);
   }
   total(): number { return this.revisionItems.controls.reduce((sum, control) => sum + Number(control.get('amount')?.value || 0), 0); }
   private makeItem() { return this.fb.group({ description: ['', Validators.required], amount: [0, [Validators.required, Validators.min(0)]] }); }
@@ -240,7 +279,108 @@ export class ProposalsPage implements OnInit {
     const target = this.returnFocusTarget; this.returnFocusTarget = null;
     afterNextRender(() => { if (target?.isConnected) target.focus(); }, { injector: this.injector });
   }
-  private setOutcomeDefault(status: string): void { this.resultForm.controls.status.setValue(status === 'Evaluating' ? 'NotQuoted' : 'Rejected'); }
+  private setOutcomeDefault(status: string): void {
+    this.resultForm.controls.status.setValue(status === 'Evaluating' ? 'NotQuoted' : 'Rejected');
+    this.onOutcomeStatusChanged();
+  }
+  onOutcomeStatusChanged(): void {
+    if (this.resultForm.controls.status.value === 'NotQuoted') this.loadReasons();
+    else { this.reasons.set([]); this.resultForm.controls.reasonId.setValue(''); }
+  }
+  private loadReasons(): void {
+    this.reasonsError.set('');
+    this.reasonsLoading.set(true);
+    this.api.reasons('NotQuoted').pipe(finalize(() => this.reasonsLoading.set(false))).subscribe({
+      next: result => this.reasons.set(result),
+      error: error => this.reasonsError.set(this.errorMessage(error)),
+    });
+  }
+  private loadTimeline(page = this.historyPage()): void {
+    const proposal = this.selected(); if (!proposal) return;
+    const requestId = ++this.timelineRequestId;
+    this.historyPage.set(page); this.historyLoading.set(true); this.historyError.set('');
+    this.api.timeline(proposal.id, page, this.historyPageSize).pipe(finalize(() => {
+      if (requestId === this.timelineRequestId) this.historyLoading.set(false);
+    })).subscribe({
+      next: result => {
+        if (requestId !== this.timelineRequestId) return;
+        this.history.set(result.items); this.historyTotalCount.set(result.totalCount);
+      },
+      error: error => { if (requestId === this.timelineRequestId) this.historyError.set(this.errorMessage(error)); },
+    });
+  }
+  previousHistoryPage(): void { if (this.historyPage() > 1 && !this.historyLoading()) this.loadTimeline(this.historyPage() - 1); }
+  nextHistoryPage(): void { if (this.historyPage() * this.historyPageSize < this.historyTotalCount() && !this.historyLoading()) this.loadTimeline(this.historyPage() + 1); }
+  historyRangeStart(): number { return this.historyTotalCount() ? (this.historyPage() - 1) * this.historyPageSize + 1 : 0; }
+  historyRangeEnd(): number { return Math.min(this.historyPage() * this.historyPageSize, this.historyTotalCount()); }
+  recordActivity(): void {
+    const proposal = this.selected(); this.activityForm.markAllAsTouched();
+    if (!proposal || this.activityForm.invalid || this.historySaving()) return;
+    const value = this.activityForm.getRawValue();
+    if (!value.type.trim() || !value.text.trim()) return;
+    const input = { type: value.type.trim(), text: value.text.trim(), mentionedUserIds: value.mentionedUserIds };
+    const action = `activity:${proposal.id}`; const key = this.idempotencyKey(action, input);
+    this.submitHistoryMutation(action, this.api.recordActivity(proposal.id, input, key), () => {
+      this.activityForm.reset({ type: '', text: '', mentionedUserIds: [] });
+    });
+  }
+  recordComment(): void {
+    const proposal = this.selected(); this.commentForm.markAllAsTouched();
+    if (!proposal || this.commentForm.invalid || this.historySaving()) return;
+    const value = this.commentForm.getRawValue();
+    if (!value.text.trim()) return;
+    const input = { text: value.text.trim(), mentionedUserIds: value.mentionedUserIds };
+    const action = `comment:${proposal.id}`; const key = this.idempotencyKey(action, input);
+    this.submitHistoryMutation(action, this.api.recordComment(proposal.id, input, key), () => {
+      this.commentForm.reset({ text: '', mentionedUserIds: [] });
+    });
+  }
+  toggleMention(form: 'activity' | 'comment', userId: string, event: Event): void {
+    const control = form === 'activity' ? this.activityForm.controls.mentionedUserIds : this.commentForm.controls.mentionedUserIds;
+    const checked = (event.target as HTMLInputElement).checked;
+    const current = control.value;
+    control.setValue(checked ? [...new Set([...current, userId])] : current.filter(id => id !== userId));
+  }
+  private submitHistoryMutation(action: string, request: import('rxjs').Observable<ProposalHistoryEvent>, reset: () => void): void {
+    this.historySaving.set(true); this.historyError.set(''); this.historySuccess.set(''); this.historyConflict.set(false);
+    request.pipe(finalize(() => this.historySaving.set(false))).subscribe({
+      next: () => {
+        this.pendingIdempotencyKeys.delete(action); reset(); this.historySuccess.set('Registro salvo.'); this.loadTimeline(1);
+      },
+      error: error => { this.historyError.set(this.errorMessage(error)); this.historyConflict.set(error.status === 409); },
+    });
+  }
+  private idempotencyKey(action: string, payload: unknown): string {
+    const fingerprint = JSON.stringify(payload);
+    const existing = this.pendingIdempotencyKeys.get(action);
+    if (existing?.fingerprint === fingerprint) return existing.key;
+    const key = createUuidV7();
+    this.pendingIdempotencyKeys.set(action, { fingerprint, key });
+    return key;
+  }
+  reloadSelected(): void {
+    const proposal = this.selected(); if (!proposal || this.saving() || this.historySaving()) return;
+    this.api.find(proposal.id).subscribe({
+      next: updated => { this.selected.set(updated); this.historyConflict.set(false); this.loadTimeline(1); this.load(); },
+      error: error => this.historyError.set(this.errorMessage(error)),
+    });
+  }
+  historyEventLabel(event: ProposalHistoryEvent): string {
+    if (event.type === 'StageChanged') return 'Etapa alterada';
+    if (event.type === 'ActivityRecorded') return event.activityType || 'Atividade registrada';
+    if (event.type === 'CommentAdded') return 'Comentário';
+    if (event.type === 'LegacyActivity') return 'Atividade anterior';
+    return 'Evento da solicitação';
+  }
+  historyStatusLabel(status: string | null): string { return status ? this.stageLabel(status) : '—'; }
+  historyActorLabel(event: ProposalHistoryEvent): string { return event.actorName || 'Autor indisponível'; }
+  historyDateLabel(event: ProposalHistoryEvent): string {
+    if (!event.occurredAtKnown || !event.occurredAtUtc) return 'Data histórica desconhecida';
+    return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' }).format(new Date(event.occurredAtUtc));
+  }
+  mentionNames(userIds: string[]): string {
+    return userIds.map(id => this.assignees().find(user => user.id === id)?.displayName).filter((name): name is string => !!name).join(', ');
+  }
   private run<T extends ProposalDetails>(request: import('rxjs').Observable<T>, done: (value: T) => void): void {
     this.saving.set(true); this.error.set(''); this.success.set('');
     request.pipe(finalize(() => this.saving.set(false))).subscribe({ next: value => {

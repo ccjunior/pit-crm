@@ -10,15 +10,17 @@ import { DemandsHome } from './demands-home';
 describe('DemandsHome', () => {
   let fixture: ComponentFixture<DemandsHome>;
   let http: HttpTestingController;
+  let sessionRoles = ['Gestor'];
 
   beforeEach(async () => {
+    sessionRoles = ['Gestor'];
     await TestBed.configureTestingModule({
       imports: [DemandsHome],
       providers: [
         provideRouter([]),
         provideHttpClient(withInterceptors([apiInterceptor])),
         provideHttpClientTesting(),
-        { provide: AuthService, useValue: { getCsrfToken: () => of('csrf-value'), expireSession: () => undefined } },
+        { provide: AuthService, useValue: { session: () => ({ roles: sessionRoles }), getCsrfToken: () => of('csrf-value'), expireSession: () => undefined } },
       ],
     }).compileComponents();
     http = TestBed.inject(HttpTestingController);
@@ -59,6 +61,29 @@ describe('DemandsHome', () => {
     expect(fixture.nativeElement.querySelector('.detail-drawer[open]')).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Demanda criada.');
     expect(fixture.nativeElement.textContent).toContain('CH-42');
+  });
+
+  it('shows only the allowlisted commercial timeline fields to an Operator', () => {
+    sessionRoles = ['Operador'];
+    (fixture.nativeElement.querySelector('.demand-card-main') as HTMLButtonElement).click();
+    http.expectOne('/api/demands/demand-a').flush({
+      id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa', locationId: 'location-a',
+      locationName: 'Obra Centro', description: 'Revisar bomba hidráulica', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida',
+      externalReferences: [], assignedToUserId: null, assignedToDisplayName: null, createdByUserId: 'user-a',
+      createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 2, subitems: [], activities: [],
+    });
+    const timeline = http.expectOne('/api/demands/demand-a/proposal-timeline?page=1&pageSize=20');
+    timeline.flush({ items: [{ type: 'StageChanged', occurredAtUtc: '2026-11-17T12:00:00Z', occurredAtKnown: true,
+      fromStatus: 'Received', toStatus: 'Evaluating', actorName: 'PRIVATE_ACTOR', text: 'PRIVATE_TEXT',
+      reason: 'PRIVATE_REASON', mentionedUserIds: ['PRIVATE_MENTION'] }], page: 1, pageSize: 20, totalCount: 1 });
+    fixture.detectChanges();
+    const projection = fixture.nativeElement.querySelector('.proposal-operator-timeline') as HTMLElement;
+    expect(projection.textContent).toContain('Etapa alterada');
+    expect(projection.textContent).toContain('Recebida → Em avaliação');
+    expect(projection.textContent).not.toContain('PRIVATE_ACTOR');
+    expect(projection.textContent).not.toContain('PRIVATE_TEXT');
+    expect(projection.textContent).not.toContain('PRIVATE_REASON');
+    expect(projection.textContent).not.toContain('PRIVATE_MENTION');
   });
 
   it('opens the existing demand in edit mode and returns to its refreshed detail after saving', () => {
