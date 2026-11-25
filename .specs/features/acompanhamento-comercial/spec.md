@@ -51,12 +51,12 @@ Os critérios a seguir descrevem resultados da fase. Decisões identificadas aba
 
 1. Formato e ciclo da numeração da solicitação, inclusive dados legados e importação.
 2. Atribuição manual ou automática, usuários elegíveis, ausência/desativação do responsável e impacto em solicitações existentes.
-3. Fuso, precisão e regra de comparação dos prazos; destinatário, canal e periodicidade dos lembretes.
+3. **Confirmada para AC-T03:** prazos civis em `America/Sao_Paulo`, vencidos a partir do dia seguinte; próxima ação em UTC, aviso in-app único ao responsável elegível. Entrega real e scheduler dependem de AC-T07/08.
 4. Origem configurável por organização, valores iniciais e conversão das origens existentes; referências múltiplas e tipadas ou referência única na solicitação.
 5. Obrigatoriedade e lista de motivos por resultado, inclusive expiração automática, desativação de motivos e registros históricos sem motivo estruturado.
 6. Quem pode registrar atividades, mencionar usuários e agendar ou concluir visita; formato e transições de remarcação.
 7. Local de prospect ainda sem cadastro e relação com local cadastrado após associação ao cliente.
-8. Regra de validade e expiração em negociação ativa, job e contabilização de fuso.
+8. **Regra de produto confirmada:** validade suspensa durante `Negotiating`; ao sair, reavaliar somente para destino não terminal e preservar resultado terminal. Implementação automática continua pendente do ator System e da persistência/auditoria atômica da AC-T04 e do scheduler AC-T07/08.
 9. Mecanismo transversal de auditoria, retenção e visibilidade; política de armazenamento, tipos, limites, varredura e autorização dos anexos.
 10. Matriz de permissões granulares e configuração por organização, com plano de migração dos perfis atuais.
 

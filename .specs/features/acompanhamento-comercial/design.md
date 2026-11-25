@@ -18,7 +18,9 @@ O caminho de conversão já exige que cliente, local, descrição e origem estej
 | Referências do cliente | Confirmado: múltiplas referências tipadas por solicitação. Tipos iniciais: RFQ/cotação, chamado/OS, pedido de compra e outra. | Coleção própria, pesquisável e tenant-scoped, sem unicidade global. |
 | Local de prospect | Confirmado: deixar o local para completar no rascunho. Aplicar D01: Administrador/Gestor cria ou associa cliente/local; Operador completa e confirma a demanda. | Não adicionar local obrigatório à solicitação. Conversão segue bloqueada até o rascunho ter vínculo válido de cliente/local. |
 
-Prazos e próxima ação fazem parte da AC-T03, não desta decisão de dados. Recomenda-se tratá-los como datas civis (sem hora) para prazo do cliente e prazo interno; a próxima ação pode guardar instante UTC. Fuso, regra de atraso, destinatário e lembrete precisam de decisão própria antes de implementar filtros/alertas. Não se propõe job, notificações, anexos ou visitas nesta tarefa.
+Prazos e próxima ação fazem parte da AC-T03. Decisões confirmadas por Carlos: prazo do cliente e prazo interno são `DateOnly`; o fuso v1 é fixo em `America/Sao_Paulo`; cada prazo fica vencido a partir do dia seguinte à data civil; `overdueFor=either` seleciona propostas com qualquer um dos prazos vencido. A próxima ação guarda instante UTC; horário local inexistente é rejeitado e horário ambíguo exige offset explícito. Uma ação no passado gera lembrete único imediato quando houver responsável elegível; sem responsável no horário, permanece elegível para envio único quando houver responsável enquanto a ocorrência continuar válida. Remover a ação cancela a ocorrência; reatribuir troca o destinatário sem incrementar a revisão da ocorrência. Entrega e scheduler ficam em AC-T07/08.
+
+**Limite desta implementação AC-T03:** `ValidUntil` permanece armazenado sem transição automática. Expiração durante negociação fica suspensa e reavaliar validade ao sair de `Negotiating` exige ator `System` tipado e persistência/auditoria atômica definidos pela AC-T04/AC-14; scheduler pertence à AC-T07/08. A transição automática de expiração não é critério concluído nesta branch.
 
 ## Compatibilidade e limites
 
@@ -30,4 +32,4 @@ Prazos e próxima ação fazem parte da AC-T03, não desta decisão de dados. Re
 
 ## Limites ainda abertos
 
-As decisões de datas, timezone, lembretes, motivos estruturados, atividades, visita, auditoria e anexos permanecem para AC-T03–AC-T07. Esta confirmação não autoriza antecipar essas regras.
+Motivos estruturados, atividades, visita, auditoria e anexos permanecem para AC-T04–AC-T08. O contrato de entrega de lembretes e de expiração automatizada depende dos desenhos AC-T04 e AC-T07/08; AC-T03 não implementa dispatcher, scheduler ou ator de sistema.

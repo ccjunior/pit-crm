@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
+using System.Data;
 using PitCrm.Application.Demands;
 using PitCrm.Application.Proposals;
 using PitCrm.Domain.Demands;
@@ -10,12 +12,23 @@ namespace PitCrm.Infrastructure.Proposals;
 public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandDraftStore demandDraftStore) : IProposalStore
 {
     public async Task<ProposalPageDto> SearchAsync(Guid organizationId, string? searchTerm, string? status,
-        Guid? customerId, DateOnly? from, DateOnly? to, int page, int pageSize, CancellationToken cancellationToken)
+        Guid? customerId, Guid? responsibleUserId, string? origin, string? overdueFor,
+        DateOnly? from, DateOnly? to, string sortBy, bool sortAscending,
+        int page, int pageSize, DateOnly today, CancellationToken cancellationToken)
     {
+        await using var snapshot = dbContext.Database.CurrentTransaction is null
+            ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken)
+            : null;
         var requests = dbContext.CommercialRequests.AsNoTracking()
             .Where(value => value.OrganizationId == organizationId);
         if (status is not null) requests = requests.Where(value => value.Status == status);
         if (customerId is { } customerFilter) requests = requests.Where(value => value.CustomerId == customerFilter);
+        if (responsibleUserId is { } responsibleFilter) requests = requests.Where(value => value.ResponsibleUserId == responsibleFilter);
+        if (origin is not null) requests = requests.Where(value => value.Origin == origin);
+        if (overdueFor == "customer") requests = requests.Where(value => value.CustomerDeadline < today);
+        else if (overdueFor == "internal") requests = requests.Where(value => value.InternalDeadline < today);
+        else if (overdueFor == "either") requests = requests.Where(value =>
+            value.CustomerDeadline < today || value.InternalDeadline < today);
         if (from is { } fromDate)
         {
             var fromUtc = new DateTimeOffset(fromDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
@@ -60,15 +73,108 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
                     .Where(item => item.OrganizationId == revision.OrganizationId && item.ProposalRevisionId == revision.Id)
                     .Sum(item => (decimal?)item.Amount)
             };
-        var rows = await itemsQuery.OrderByDescending(value => value.Request.UpdatedAtUtc)
-            .ThenByDescending(value => value.Request.Id).Skip((page - 1) * pageSize).Take(pageSize)
+        var orderedItems = sortBy switch
+        {
+            "customerDeadline" => sortAscending ? itemsQuery.OrderBy(value => value.Request.CustomerDeadline).ThenBy(value => value.Request.Id)
+                : itemsQuery.OrderByDescending(value => value.Request.CustomerDeadline).ThenBy(value => value.Request.Id),
+            "internalDeadline" => sortAscending ? itemsQuery.OrderBy(value => value.Request.InternalDeadline).ThenBy(value => value.Request.Id)
+                : itemsQuery.OrderByDescending(value => value.Request.InternalDeadline).ThenBy(value => value.Request.Id),
+            "nextActionAtUtc" => sortAscending ? itemsQuery.OrderBy(value => value.Request.NextActionAtUtc).ThenBy(value => value.Request.Id)
+                : itemsQuery.OrderByDescending(value => value.Request.NextActionAtUtc).ThenBy(value => value.Request.Id),
+            "number" => sortAscending ? itemsQuery.OrderBy(value => value.Request.Number).ThenBy(value => value.Request.Id)
+                : itemsQuery.OrderByDescending(value => value.Request.Number).ThenBy(value => value.Request.Id),
+            _ => sortAscending ? itemsQuery.OrderBy(value => value.Request.UpdatedAtUtc).ThenBy(value => value.Request.Id)
+                : itemsQuery.OrderByDescending(value => value.Request.UpdatedAtUtc).ThenByDescending(value => value.Request.Id),
+        };
+        var rows = await orderedItems.Skip((page - 1) * pageSize).Take(pageSize)
             .Select(value => new ProposalListItemDto(value.Request.Id, value.Request.CustomerId,
                 value.CustomerName, value.Request.ProspectName, value.Request.Number, value.Request.ResponsibleUserId,
                 value.ResponsibleName, value.Request.Description, value.Request.Origin,
                 value.Request.Status, value.Request.Version, value.RevisionNumber, value.RevisionTotal,
-                value.Request.UpdatedAtUtc))
+                value.Request.UpdatedAtUtc, value.Request.CustomerDeadline, value.Request.InternalDeadline,
+                value.Request.ReminderOccurrenceId == null ? null : new ProposalNextActionDto(
+                    value.Request.ReminderOccurrenceId.Value, value.Request.ReminderOccurrenceRevision,
+                    value.Request.NextActionDescription!, value.Request.NextActionAtUtc!.Value)))
             .ToListAsync(cancellationToken);
+        if (snapshot is not null) await snapshot.CommitAsync(cancellationToken);
         return new ProposalPageDto(rows, page, pageSize, totalCount);
+    }
+
+    public async Task<ProposalTrackingCommandResult> UpdateTrackingAsync(Guid organizationId, Guid requestId, int version,
+        DateOnly? customerDeadline, DateOnly? internalDeadline, string? nextActionDescription,
+        DateTimeOffset? nextActionAtUtc, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var request = await dbContext.CommercialRequests.SingleOrDefaultAsync(value =>
+            value.OrganizationId == organizationId && value.Id == requestId, cancellationToken);
+        if (request is null) return new ProposalTrackingCommandResult(null, ProposalFailure.NotFound);
+        if (request.Version != version) return new ProposalTrackingCommandResult(null, ProposalFailure.VersionConflict);
+        try
+        {
+            request.UpdateTracking(customerDeadline, internalDeadline, nextActionDescription, nextActionAtUtc, now);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            var nextAction = request.ReminderOccurrenceId is null ? null : new ProposalNextActionDto(
+                request.ReminderOccurrenceId.Value, request.ReminderOccurrenceRevision,
+                request.NextActionDescription!, request.NextActionAtUtc!.Value);
+            return new ProposalTrackingCommandResult(new ProposalTrackingDto(request.Id, request.Version,
+                request.CustomerDeadline, request.InternalDeadline, request.ReminderOccurrenceRevision, nextAction), ProposalFailure.None);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            return new ProposalTrackingCommandResult(null, ProposalFailure.VersionConflict);
+        }
+        catch (ArgumentException)
+        {
+            return new ProposalTrackingCommandResult(null, ProposalFailure.InvalidData);
+        }
+    }
+
+    public async Task<MyActionsPageDto> MyActionsAsync(Guid organizationId, Guid userId, int page, int pageSize,
+        DateOnly today, CancellationToken cancellationToken)
+    {
+        var query = dbContext.CommercialRequests.AsNoTracking().Where(value => value.OrganizationId == organizationId
+            && value.ResponsibleUserId == userId && value.ReminderOccurrenceId != null);
+        var count = await query.CountAsync(cancellationToken);
+        var rows = await query.OrderBy(value => value.NextActionAtUtc).ThenBy(value => value.Id)
+            .Skip((page - 1) * pageSize).Take(pageSize)
+            .Select(value => new MyActionItemDto(value.Id, value.Number, value.Status, value.CustomerDeadline,
+                value.InternalDeadline, (value.CustomerDeadline != null && value.CustomerDeadline < today)
+                    || (value.InternalDeadline != null && value.InternalDeadline < today),
+                new ProposalNextActionDto(value.ReminderOccurrenceId!.Value, value.ReminderOccurrenceRevision,
+                    value.NextActionDescription!, value.NextActionAtUtc!.Value)))
+            .ToListAsync(cancellationToken);
+        return new MyActionsPageDto(rows, page, pageSize, count);
+    }
+
+    public async Task<ProposalKanbanDto> KanbanAsync(Guid organizationId, string? searchTerm, Guid? customerId,
+        Guid? responsibleUserId, string? origin, string? overdueFor, DateOnly? from, DateOnly? to,
+        string sortBy, bool sortAscending, int pageSizePerColumn, IReadOnlyDictionary<string, string?> cursors, DateOnly today,
+        CancellationToken cancellationToken)
+    {
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var columns = new List<ProposalKanbanColumnDto>();
+        foreach (var status in CommercialRequest.Statuses)
+        {
+            var page = DecodeCursor(cursors.GetValueOrDefault(status));
+            var results = await SearchAsync(organizationId, searchTerm, status, customerId, responsibleUserId,
+                origin, overdueFor, from, to, sortBy, sortAscending, page, pageSizePerColumn, today, cancellationToken);
+            var next = page * (long)pageSizePerColumn < results.TotalCount
+                ? Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes((page + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)))
+                : null;
+            columns.Add(new ProposalKanbanColumnDto(status, results.Items, results.TotalCount, next));
+        }
+        await transaction.CommitAsync(cancellationToken);
+        return new ProposalKanbanDto(pageSizePerColumn, columns.Sum(value => value.TotalCount), columns);
+    }
+
+    private static int DecodeCursor(string? cursor)
+    {
+        if (string.IsNullOrWhiteSpace(cursor)) return 1;
+        try
+        {
+            var value = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
+            return int.TryParse(value, out var page) && page >= 1 && page <= int.MaxValue / 100 ? page : throw new FormatException();
+        }
+        catch (FormatException) { throw new ArgumentException("Cursor inválido.", nameof(cursor)); }
     }
 
     public async Task<ProposalDetailsDto?> FindAsync(Guid organizationId, Guid requestId, CancellationToken cancellationToken)
@@ -79,7 +185,9 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
             {
                 value.Id, value.CustomerId, value.ProspectName, value.ProspectContactName, value.ProspectEmail,
                 value.ProspectPhone, value.Description, value.Origin, value.Status, value.Version, value.OutcomeReason,
-                value.Number, value.ResponsibleUserId, value.CreatedAtUtc, value.UpdatedAtUtc
+                value.Number, value.ResponsibleUserId, value.CreatedAtUtc, value.UpdatedAtUtc,
+                value.CustomerDeadline, value.InternalDeadline, value.ReminderOccurrenceRevision,
+                value.ReminderOccurrenceId, value.NextActionDescription, value.NextActionAtUtc
             }).SingleOrDefaultAsync(cancellationToken);
         if (request is null) return null;
 
@@ -147,7 +255,10 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
             request.ResponsibleUserId, responsibleName, references, request.Description,
             request.Origin, request.Status, request.Version, revisions.FirstOrDefault()?.Number,
             revisions, activities, request.CreatedAtUtc, request.UpdatedAtUtc, request.OutcomeReason,
-            draft?.State, draft?.ConvertedDemandId);
+            draft?.State, draft?.ConvertedDemandId, request.CustomerDeadline, request.InternalDeadline,
+            request.ReminderOccurrenceRevision, request.ReminderOccurrenceId is null ? null : new ProposalNextActionDto(
+                request.ReminderOccurrenceId.Value, request.ReminderOccurrenceRevision,
+                request.NextActionDescription!, request.NextActionAtUtc!.Value));
     }
 
     public async Task<ProposalCommandResult> CreateAsync(Guid organizationId, Guid actorUserId,

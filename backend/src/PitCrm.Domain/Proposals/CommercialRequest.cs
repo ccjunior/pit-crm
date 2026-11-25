@@ -78,6 +78,12 @@ public sealed class CommercialRequest
     public int Version { get; private set; }
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public DateTimeOffset UpdatedAtUtc { get; private set; }
+    public DateOnly? CustomerDeadline { get; private set; }
+    public DateOnly? InternalDeadline { get; private set; }
+    public string? NextActionDescription { get; private set; }
+    public DateTimeOffset? NextActionAtUtc { get; private set; }
+    public Guid? ReminderOccurrenceId { get; private set; }
+    public int ReminderOccurrenceRevision { get; private set; }
     public ICollection<ProposalRevision> Revisions { get; private set; } = new List<ProposalRevision>();
     public ICollection<CommercialReference> References { get; private set; } = new List<CommercialReference>();
 
@@ -168,6 +174,39 @@ public sealed class CommercialRequest
         References.Clear();
         foreach (var (type, value) in references)
             References.Add(new CommercialReference(Guid.NewGuid(), OrganizationId, Id, type, value));
+    }
+
+    public void UpdateTracking(DateOnly? customerDeadline, DateOnly? internalDeadline,
+        string? nextActionDescription, DateTimeOffset? nextActionAtUtc, DateTimeOffset now)
+    {
+        var hasAction = nextActionDescription is not null || nextActionAtUtc is not null;
+        if (hasAction && (string.IsNullOrWhiteSpace(nextActionDescription) || nextActionAtUtc is null))
+            throw new ArgumentException("A next action requires both a description and a scheduled time.");
+        if (nextActionDescription?.Trim().Length > 500)
+            throw new ArgumentOutOfRangeException(nameof(nextActionDescription));
+
+        var actionChanged = NextActionDescription != nextActionDescription?.Trim()
+            || NextActionAtUtc != nextActionAtUtc?.ToUniversalTime();
+        CustomerDeadline = customerDeadline;
+        InternalDeadline = internalDeadline;
+        if (actionChanged)
+        {
+            ReminderOccurrenceRevision = checked(ReminderOccurrenceRevision + 1);
+            if (hasAction)
+            {
+                ReminderOccurrenceId ??= Guid.NewGuid();
+                NextActionDescription = nextActionDescription!.Trim();
+                NextActionAtUtc = nextActionAtUtc!.Value.ToUniversalTime();
+            }
+            else
+            {
+                ReminderOccurrenceId = null;
+                NextActionDescription = null;
+                NextActionAtUtc = null;
+            }
+        }
+        UpdatedAtUtc = NormalizeTimestamp(now);
+        Version = checked(Version + 1);
     }
 
     private void TransitionTo(string nextStatus, string? reason, DateTimeOffset now)
