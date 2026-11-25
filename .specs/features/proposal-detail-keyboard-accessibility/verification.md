@@ -22,7 +22,7 @@
 
 ## Verificação manual no navegador
 
-Executada em 24/11/2026 no Chromium embutido, rota `/propostas`, viewport 1265×700, com servidor API temporário que forneceu sessão Administrador e respostas sintéticas em memória. Não iniciou nem consultou API real, banco, Docker ou AC-T02. Foram exercitados: abrir Lista com Enter e Espaço; abrir Kanban com Enter e Espaço; foco inicial no título; ciclo Tab/Shift+Tab; Escape; Fechar por Enter; backdrop; restauração ao invocador; e Escape do editor com o painel de detalhe preservado. O navegador confirmou todos esses resultados.
+Executada em 24/11/2026 no Chromium embutido, rota `/propostas`, viewport 1265×700, com servidor API temporário que forneceu sessão Administrador e respostas sintéticas em memória. Não iniciou nem consultou API real, banco, Docker ou AC-T02. Foram exercitados: abrir Lista com Enter e Espaço; abrir Kanban com Enter e Espaço; foco inicial no título; ciclo Tab/Shift+Tab; Escape; Fechar por Enter; backdrop; restauração ao invocador; e Escape do editor com o painel de detalhe preservado. O navegador confirmou todos esses resultados e mostrou o indicador de foco da linha quando alcançada por teclado.
 
 ## Limites
 

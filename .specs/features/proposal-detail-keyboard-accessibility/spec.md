@@ -1,6 +1,6 @@
 # Acessibilidade por teclado — detalhe de Solicitações
 
-**Status:** implementada e verificada localmente; publicação e PR pendentes.
+**Status:** implementada, verificada e publicada na PR [#2](https://github.com/ccjunior/pit-crm/pull/2); aguarda revisão do Tech Lead.
 **Fonte/autorização:** card Trello “Acessibilidade por teclado — detalhe de Solicitações (Lista/Kanban)”, escopo confirmado pelo Product Manager e Tech Lead; implementação autorizada por Atlas em 24/11/2026.
 
 ## Resultado
