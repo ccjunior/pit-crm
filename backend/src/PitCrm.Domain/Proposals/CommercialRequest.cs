@@ -187,6 +187,8 @@ public sealed class CommercialRequest
 
         var actionChanged = NextActionDescription != nextActionDescription?.Trim()
             || NextActionAtUtc != nextActionAtUtc?.ToUniversalTime();
+        var deadlineChanged = CustomerDeadline != customerDeadline || InternalDeadline != internalDeadline;
+        if (!actionChanged && !deadlineChanged) return;
         CustomerDeadline = customerDeadline;
         InternalDeadline = internalDeadline;
         if (actionChanged)

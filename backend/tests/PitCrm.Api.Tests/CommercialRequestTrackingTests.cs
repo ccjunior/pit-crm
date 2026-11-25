@@ -1,5 +1,6 @@
 using PitCrm.Domain.Proposals;
 using PitCrm.Api.Features.Proposals;
+using PitCrm.Application.Proposals;
 using Microsoft.EntityFrameworkCore;
 using PitCrm.Infrastructure.Persistence;
 
@@ -22,6 +23,36 @@ public sealed class CommercialRequestTrackingTests
     }
 
     [Fact]
+    public void PostgreSql_translates_keyset_predicates_for_nullable_sort_values_and_id_ties()
+    {
+        var options = new DbContextOptionsBuilder<PitCrmDbContext>()
+            .UseNpgsql("Host=127.0.0.1;Database=not_used;Username=not_used")
+            .Options;
+        using var db = new PitCrmDbContext(options);
+        var id = Guid.NewGuid();
+        var deadline = new DateOnly(2026, 11, 24);
+        var query = db.CommercialRequests.Where(value => value.CustomerDeadline == null
+            || value.CustomerDeadline > deadline
+            || (value.CustomerDeadline == deadline && value.Id.CompareTo(id) > 0));
+
+        var sql = query.ToQueryString();
+        Assert.Contains("CustomerDeadline", sql);
+        Assert.Contains("Id", sql);
+
+        var instant = DateTimeOffset.Parse("2026-11-25T12:00:00Z");
+        var actionQuery = db.CommercialRequests.Where(value =>
+            EF.Property<DateTimeOffset?>(value, nameof(CommercialRequest.NextActionAtUtc)) == null
+            || EF.Property<DateTimeOffset?>(value, nameof(CommercialRequest.NextActionAtUtc)) > instant
+            || (EF.Property<DateTimeOffset?>(value, nameof(CommercialRequest.NextActionAtUtc)) == instant
+                && value.Id.CompareTo(id) > 0));
+        Assert.Contains("NextActionAtUtc", actionQuery.ToQueryString());
+
+        var numberQuery = db.CommercialRequests.Where(value => value.Number.CompareTo("SOL-2026-0001") > 0
+            || (value.Number == "SOL-2026-0001" && value.Id.CompareTo(id) > 0));
+        Assert.Contains("Number", numberQuery.ToQueryString());
+    }
+
+    [Fact]
     public void Local_schedule_time_enforces_Sao_Paulo_daylight_saving_rules()
     {
         Assert.False(OrganizationLocalScheduleTime.TryConvert("2018-11-04T00:30:00", null, out _, out var invalidField));
@@ -35,6 +66,23 @@ public sealed class CommercialRequestTrackingTests
 
         Assert.False(OrganizationLocalScheduleTime.TryConvert("2018-02-17T23:30:00", "-04:00", out _, out var mismatchField));
         Assert.Equal("selectedOffset", mismatchField);
+    }
+
+    [Fact]
+    public void Deadline_overdue_flags_use_the_organization_local_date_and_keep_each_deadline_distinct()
+    {
+        var beforeMidnightUtc = DateTimeOffset.Parse("2026-11-25T02:59:59Z");
+        var afterMidnightUtc = DateTimeOffset.Parse("2026-11-25T03:00:00Z");
+        Assert.Equal(new DateOnly(2026, 11, 24), ProposalDateRules.Today(beforeMidnightUtc));
+        var today = ProposalDateRules.Today(afterMidnightUtc);
+        Assert.Equal(new DateOnly(2026, 11, 25), today);
+
+        var overdue = ProposalDeadlineOverdueDto.Calculate(new DateOnly(2026, 11, 24), today, today);
+        Assert.True(overdue.Customer);
+        Assert.False(overdue.Internal);
+        Assert.True(overdue.Either);
+        Assert.Equal(today, overdue.AsOfLocalDate);
+        Assert.False(ProposalDeadlineOverdueDto.Calculate(null, null, today).Either);
     }
 
     [Fact]
@@ -60,7 +108,14 @@ public sealed class CommercialRequestTrackingTests
         Assert.Equal(occurrenceId, request.ReminderOccurrenceId);
         Assert.Equal(2, request.ReminderOccurrenceRevision);
 
-        request.UpdateTracking(new DateOnly(2026, 1, 11), new DateOnly(2026, 1, 12), null, null, now.AddMinutes(4));
+        var versionBeforeNoOp = request.Version;
+        var updatedBeforeNoOp = request.UpdatedAtUtc;
+        request.UpdateTracking(new DateOnly(2026, 1, 11), new DateOnly(2026, 1, 12), "Enviar proposta", scheduled.AddHours(1), now.AddMinutes(30));
+        Assert.Equal(versionBeforeNoOp, request.Version);
+        Assert.Equal(updatedBeforeNoOp, request.UpdatedAtUtc);
+        Assert.Equal(2, request.ReminderOccurrenceRevision);
+
+        request.UpdateTracking(new DateOnly(2026, 1, 11), new DateOnly(2026, 1, 12), null, null, now.AddMinutes(40));
         Assert.Null(request.ReminderOccurrenceId);
         Assert.Null(request.NextActionAtUtc);
         Assert.Equal(3, request.ReminderOccurrenceRevision);

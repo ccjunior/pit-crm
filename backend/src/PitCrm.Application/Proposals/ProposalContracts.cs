@@ -31,6 +31,23 @@ public sealed record ProposalTrackingInput(int Version, DateOnly? CustomerDeadli
 public sealed record ProposalNextActionInput(string? Description, string? ScheduledAtLocal, string? SelectedOffset);
 public sealed record ProposalNextActionDto(Guid ReminderOccurrenceId, int Revision, string Description,
     DateTimeOffset ScheduledAtUtc);
+public sealed record ProposalDeadlineOverdueDto(bool Customer, bool Internal, bool Either, DateOnly AsOfLocalDate)
+{
+    public static ProposalDeadlineOverdueDto Calculate(DateOnly? customerDeadline, DateOnly? internalDeadline,
+        DateOnly asOfLocalDate)
+    {
+        var customer = customerDeadline is { } customerDate && customerDate < asOfLocalDate;
+        var internalDeadlineOverdue = internalDeadline is { } internalDate && internalDate < asOfLocalDate;
+        return new ProposalDeadlineOverdueDto(customer, internalDeadlineOverdue,
+            customer || internalDeadlineOverdue, asOfLocalDate);
+    }
+}
+public static class ProposalDateRules
+{
+    public const string OrganizationTimeZoneId = "America/Sao_Paulo";
+    public static DateOnly Today(DateTimeOffset now) => DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(now,
+        TimeZoneInfo.FindSystemTimeZoneById(OrganizationTimeZoneId)).DateTime);
+}
 public sealed record ProposalTrackingDto(Guid Id, int Version, DateOnly? CustomerDeadline,
     DateOnly? InternalDeadline, int ReminderOccurrenceRevision, ProposalNextActionDto? NextAction);
 public sealed record ProposalTrackingCommandResult(ProposalTrackingDto? Tracking, ProposalFailure Failure);
@@ -39,13 +56,14 @@ public sealed record ProposalKanbanColumnDto(string Status, IReadOnlyList<Propos
 public sealed record ProposalKanbanDto(int PageSizePerColumn, int TotalCount,
     IReadOnlyList<ProposalKanbanColumnDto> Columns);
 public sealed record MyActionItemDto(Guid ProposalId, string Number, string Status, DateOnly? CustomerDeadline,
-    DateOnly? InternalDeadline, bool IsOverdue, ProposalNextActionDto NextAction);
+    DateOnly? InternalDeadline, bool IsOverdue, ProposalNextActionDto NextAction,
+    ProposalDeadlineOverdueDto Overdue);
 public sealed record MyActionsPageDto(IReadOnlyList<MyActionItemDto> Items, int Page, int PageSize, int TotalCount);
 
 public sealed record ProposalListItemDto(Guid Id, Guid? CustomerId, string? CustomerName, string? ProspectName,
     string Number, Guid? ResponsibleUserId, string? ResponsibleName, string Description, string Origin, string Status, int Version, int? CurrentRevisionNumber,
     decimal? CurrentRevisionTotal, DateTimeOffset UpdatedAtUtc, DateOnly? CustomerDeadline,
-    DateOnly? InternalDeadline, ProposalNextActionDto? NextAction);
+    DateOnly? InternalDeadline, ProposalNextActionDto? NextAction, ProposalDeadlineOverdueDto Overdue);
 
 public sealed record ProposalDetailsDto(Guid Id, Guid? CustomerId, string? CustomerName,
     string? ProspectName, string? ProspectContactName, string? ProspectEmail, string? ProspectPhone,
@@ -54,7 +72,8 @@ public sealed record ProposalDetailsDto(Guid Id, Guid? CustomerId, string? Custo
     IReadOnlyList<ProposalRevisionDto> Revisions, IReadOnlyList<ProposalActivityDto> Activities,
     DateTimeOffset CreatedAtUtc, DateTimeOffset UpdatedAtUtc, string? OutcomeReason,
     string? DemandDraftState, Guid? ConvertedDemandId, DateOnly? CustomerDeadline,
-    DateOnly? InternalDeadline, int ReminderOccurrenceRevision, ProposalNextActionDto? NextAction);
+    DateOnly? InternalDeadline, int ReminderOccurrenceRevision, ProposalNextActionDto? NextAction,
+    ProposalDeadlineOverdueDto Overdue);
 
 public sealed record ProposalRevisionDto(Guid Id, int Number, string Status, DateOnly? ValidUntil,
     string? Notes, decimal TotalAmount, IReadOnlyList<ProposalItemDto> Items,
@@ -92,7 +111,9 @@ public interface IProposalStore
 {
     Task<ProposalPageDto> SearchAsync(Guid organizationId, string? searchTerm, string? status,
         Guid? customerId, Guid? responsibleUserId, string? origin, string? overdueFor,
-        DateOnly? from, DateOnly? to, string sortBy, bool sortAscending,
+        DateOnly? from, DateOnly? to, DateOnly? customerDeadlineFrom, DateOnly? customerDeadlineTo,
+        DateOnly? internalDeadlineFrom, DateOnly? internalDeadlineTo,
+        DateTimeOffset? nextActionFromUtc, DateTimeOffset? nextActionToUtc, string sortBy, bool sortAscending,
         int page, int pageSize, DateOnly today, CancellationToken cancellationToken);
     Task<ProposalTrackingCommandResult> UpdateTrackingAsync(Guid organizationId, Guid requestId, int version,
         DateOnly? customerDeadline, DateOnly? internalDeadline, string? nextActionDescription,
@@ -101,6 +122,8 @@ public interface IProposalStore
         DateOnly today, CancellationToken cancellationToken);
     Task<ProposalKanbanDto> KanbanAsync(Guid organizationId, string? searchTerm, Guid? customerId,
         Guid? responsibleUserId, string? origin, string? overdueFor, DateOnly? from, DateOnly? to,
+        DateOnly? customerDeadlineFrom, DateOnly? customerDeadlineTo, DateOnly? internalDeadlineFrom,
+        DateOnly? internalDeadlineTo, DateTimeOffset? nextActionFromUtc, DateTimeOffset? nextActionToUtc,
         string sortBy, bool sortAscending, int pageSizePerColumn, IReadOnlyDictionary<string, string?> cursors, DateOnly today,
         CancellationToken cancellationToken);
     Task<ProposalDetailsDto?> FindAsync(Guid organizationId, Guid requestId, CancellationToken cancellationToken);

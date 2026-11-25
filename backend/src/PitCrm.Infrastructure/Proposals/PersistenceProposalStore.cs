@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using System.Data;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using PitCrm.Application.Demands;
 using PitCrm.Application.Proposals;
 using PitCrm.Domain.Demands;
@@ -13,8 +16,25 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
 {
     public async Task<ProposalPageDto> SearchAsync(Guid organizationId, string? searchTerm, string? status,
         Guid? customerId, Guid? responsibleUserId, string? origin, string? overdueFor,
-        DateOnly? from, DateOnly? to, string sortBy, bool sortAscending,
+        DateOnly? from, DateOnly? to, DateOnly? customerDeadlineFrom, DateOnly? customerDeadlineTo,
+        DateOnly? internalDeadlineFrom, DateOnly? internalDeadlineTo,
+        DateTimeOffset? nextActionFromUtc, DateTimeOffset? nextActionToUtc, string sortBy, bool sortAscending,
         int page, int pageSize, DateOnly today, CancellationToken cancellationToken)
+    {
+        var result = await SearchCoreAsync(organizationId, searchTerm, status, customerId, responsibleUserId,
+            origin, overdueFor, from, to, customerDeadlineFrom, customerDeadlineTo, internalDeadlineFrom,
+            internalDeadlineTo, nextActionFromUtc, nextActionToUtc, sortBy, sortAscending,
+            page, pageSize, today, null, false, cancellationToken);
+        return result.Page;
+    }
+
+    private async Task<SearchPageWindow> SearchCoreAsync(Guid organizationId, string? searchTerm, string? status,
+        Guid? customerId, Guid? responsibleUserId, string? origin, string? overdueFor,
+        DateOnly? from, DateOnly? to, DateOnly? customerDeadlineFrom, DateOnly? customerDeadlineTo,
+        DateOnly? internalDeadlineFrom, DateOnly? internalDeadlineTo,
+        DateTimeOffset? nextActionFromUtc, DateTimeOffset? nextActionToUtc, string sortBy, bool sortAscending,
+        int page, int pageSize, DateOnly today, KanbanCursor? seekCursor, bool includeHasMore,
+        CancellationToken cancellationToken)
     {
         await using var snapshot = dbContext.Database.CurrentTransaction is null
             ? await dbContext.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken)
@@ -29,6 +49,12 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
         else if (overdueFor == "internal") requests = requests.Where(value => value.InternalDeadline < today);
         else if (overdueFor == "either") requests = requests.Where(value =>
             value.CustomerDeadline < today || value.InternalDeadline < today);
+        if (customerDeadlineFrom is { } customerStart) requests = requests.Where(value => value.CustomerDeadline >= customerStart);
+        if (customerDeadlineTo is { } customerEnd) requests = requests.Where(value => value.CustomerDeadline <= customerEnd);
+        if (internalDeadlineFrom is { } internalStart) requests = requests.Where(value => value.InternalDeadline >= internalStart);
+        if (internalDeadlineTo is { } internalEnd) requests = requests.Where(value => value.InternalDeadline <= internalEnd);
+        if (nextActionFromUtc is { } actionStart) requests = requests.Where(value => value.NextActionAtUtc >= actionStart);
+        if (nextActionToUtc is { } actionEnd) requests = requests.Where(value => value.NextActionAtUtc < actionEnd);
         if (from is { } fromDate)
         {
             var fromUtc = new DateTimeOffset(fromDate.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
@@ -52,8 +78,9 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
         }
 
         var totalCount = await requests.CountAsync(cancellationToken);
+        var selectedRequests = seekCursor is null ? requests : ApplySeekCursor(requests, sortBy, sortAscending, seekCursor);
         var itemsQuery =
-            from request in requests
+            from request in selectedRequests
             join customer in dbContext.Customers.AsNoTracking()
                 on new { request.OrganizationId, request.CustomerId } equals new { customer.OrganizationId, CustomerId = (Guid?)customer.Id } into customers
             from customer in customers.DefaultIfEmpty()
@@ -75,18 +102,26 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
             };
         var orderedItems = sortBy switch
         {
-            "customerDeadline" => sortAscending ? itemsQuery.OrderBy(value => value.Request.CustomerDeadline).ThenBy(value => value.Request.Id)
-                : itemsQuery.OrderByDescending(value => value.Request.CustomerDeadline).ThenBy(value => value.Request.Id),
-            "internalDeadline" => sortAscending ? itemsQuery.OrderBy(value => value.Request.InternalDeadline).ThenBy(value => value.Request.Id)
-                : itemsQuery.OrderByDescending(value => value.Request.InternalDeadline).ThenBy(value => value.Request.Id),
-            "nextActionAtUtc" => sortAscending ? itemsQuery.OrderBy(value => value.Request.NextActionAtUtc).ThenBy(value => value.Request.Id)
-                : itemsQuery.OrderByDescending(value => value.Request.NextActionAtUtc).ThenBy(value => value.Request.Id),
+            "customerDeadline" => sortAscending ? itemsQuery.OrderBy(value => value.Request.CustomerDeadline == null)
+                    .ThenBy(value => value.Request.CustomerDeadline).ThenBy(value => value.Request.Id)
+                : itemsQuery.OrderBy(value => value.Request.CustomerDeadline == null)
+                    .ThenByDescending(value => value.Request.CustomerDeadline).ThenBy(value => value.Request.Id),
+            "internalDeadline" => sortAscending ? itemsQuery.OrderBy(value => value.Request.InternalDeadline == null)
+                    .ThenBy(value => value.Request.InternalDeadline).ThenBy(value => value.Request.Id)
+                : itemsQuery.OrderBy(value => value.Request.InternalDeadline == null)
+                    .ThenByDescending(value => value.Request.InternalDeadline).ThenBy(value => value.Request.Id),
+            "nextActionAtUtc" => sortAscending ? itemsQuery.OrderBy(value => value.Request.NextActionAtUtc == null)
+                    .ThenBy(value => value.Request.NextActionAtUtc).ThenBy(value => value.Request.Id)
+                : itemsQuery.OrderBy(value => value.Request.NextActionAtUtc == null)
+                    .ThenByDescending(value => value.Request.NextActionAtUtc).ThenBy(value => value.Request.Id),
             "number" => sortAscending ? itemsQuery.OrderBy(value => value.Request.Number).ThenBy(value => value.Request.Id)
                 : itemsQuery.OrderByDescending(value => value.Request.Number).ThenBy(value => value.Request.Id),
             _ => sortAscending ? itemsQuery.OrderBy(value => value.Request.UpdatedAtUtc).ThenBy(value => value.Request.Id)
                 : itemsQuery.OrderByDescending(value => value.Request.UpdatedAtUtc).ThenByDescending(value => value.Request.Id),
         };
-        var rows = await orderedItems.Skip((page - 1) * pageSize).Take(pageSize)
+        var rowLimit = includeHasMore ? pageSize + 1 : pageSize;
+        var selectedItems = seekCursor is null ? orderedItems.Skip((page - 1) * pageSize) : orderedItems;
+        var projectedRows = await selectedItems.Take(rowLimit)
             .Select(value => new ProposalListItemDto(value.Request.Id, value.Request.CustomerId,
                 value.CustomerName, value.Request.ProspectName, value.Request.Number, value.Request.ResponsibleUserId,
                 value.ResponsibleName, value.Request.Description, value.Request.Origin,
@@ -94,10 +129,14 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
                 value.Request.UpdatedAtUtc, value.Request.CustomerDeadline, value.Request.InternalDeadline,
                 value.Request.ReminderOccurrenceId == null ? null : new ProposalNextActionDto(
                     value.Request.ReminderOccurrenceId.Value, value.Request.ReminderOccurrenceRevision,
-                    value.Request.NextActionDescription!, value.Request.NextActionAtUtc!.Value)))
+                    value.Request.NextActionDescription!, value.Request.NextActionAtUtc!.Value),
+                ProposalDeadlineOverdueDto.Calculate(value.Request.CustomerDeadline,
+                    value.Request.InternalDeadline, today)))
             .ToListAsync(cancellationToken);
+        var hasMore = includeHasMore && projectedRows.Count > pageSize;
+        IReadOnlyList<ProposalListItemDto> rows = hasMore ? projectedRows.Take(pageSize).ToArray() : projectedRows;
         if (snapshot is not null) await snapshot.CommitAsync(cancellationToken);
-        return new ProposalPageDto(rows, page, pageSize, totalCount);
+        return new SearchPageWindow(new ProposalPageDto(rows, page, pageSize, totalCount), hasMore);
     }
 
     public async Task<ProposalTrackingCommandResult> UpdateTrackingAsync(Guid organizationId, Guid requestId, int version,
@@ -137,44 +176,183 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
         var rows = await query.OrderBy(value => value.NextActionAtUtc).ThenBy(value => value.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(value => new MyActionItemDto(value.Id, value.Number, value.Status, value.CustomerDeadline,
-                value.InternalDeadline, (value.CustomerDeadline != null && value.CustomerDeadline < today)
-                    || (value.InternalDeadline != null && value.InternalDeadline < today),
+                value.InternalDeadline, ProposalDeadlineOverdueDto.Calculate(value.CustomerDeadline,
+                    value.InternalDeadline, today).Either,
                 new ProposalNextActionDto(value.ReminderOccurrenceId!.Value, value.ReminderOccurrenceRevision,
-                    value.NextActionDescription!, value.NextActionAtUtc!.Value)))
+                    value.NextActionDescription!, value.NextActionAtUtc!.Value),
+                ProposalDeadlineOverdueDto.Calculate(value.CustomerDeadline, value.InternalDeadline, today)))
             .ToListAsync(cancellationToken);
         return new MyActionsPageDto(rows, page, pageSize, count);
     }
 
     public async Task<ProposalKanbanDto> KanbanAsync(Guid organizationId, string? searchTerm, Guid? customerId,
         Guid? responsibleUserId, string? origin, string? overdueFor, DateOnly? from, DateOnly? to,
+        DateOnly? customerDeadlineFrom, DateOnly? customerDeadlineTo,
+        DateOnly? internalDeadlineFrom, DateOnly? internalDeadlineTo,
+        DateTimeOffset? nextActionFromUtc, DateTimeOffset? nextActionToUtc,
         string sortBy, bool sortAscending, int pageSizePerColumn, IReadOnlyDictionary<string, string?> cursors, DateOnly today,
         CancellationToken cancellationToken)
     {
         await using var transaction = await dbContext.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead, cancellationToken);
+        var filterFingerprint = CreateFilterFingerprint(organizationId, searchTerm, customerId, responsibleUserId,
+            origin, overdueFor, from, to, customerDeadlineFrom, customerDeadlineTo, internalDeadlineFrom,
+            internalDeadlineTo, nextActionFromUtc, nextActionToUtc, sortBy, sortAscending, today);
         var columns = new List<ProposalKanbanColumnDto>();
         foreach (var status in CommercialRequest.Statuses)
         {
-            var page = DecodeCursor(cursors.GetValueOrDefault(status));
-            var results = await SearchAsync(organizationId, searchTerm, status, customerId, responsibleUserId,
-                origin, overdueFor, from, to, sortBy, sortAscending, page, pageSizePerColumn, today, cancellationToken);
-            var next = page * (long)pageSizePerColumn < results.TotalCount
-                ? Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes((page + 1).ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            var cursor = DecodeCursor(cursors.GetValueOrDefault(status), status, sortBy, sortAscending, filterFingerprint);
+            var results = await SearchCoreAsync(organizationId, searchTerm, status, customerId, responsibleUserId,
+                origin, overdueFor, from, to, customerDeadlineFrom, customerDeadlineTo,
+                internalDeadlineFrom, internalDeadlineTo, nextActionFromUtc, nextActionToUtc,
+                sortBy, sortAscending, 1, pageSizePerColumn, today, cursor, true, cancellationToken);
+            var next = results.HasMore && results.Page.Items.Count > 0
+                ? EncodeCursor(CreateCursor(status, sortBy, sortAscending, filterFingerprint, results.Page.Items[^1]))
                 : null;
-            columns.Add(new ProposalKanbanColumnDto(status, results.Items, results.TotalCount, next));
+            columns.Add(new ProposalKanbanColumnDto(status, results.Page.Items, results.Page.TotalCount, next));
         }
         await transaction.CommitAsync(cancellationToken);
         return new ProposalKanbanDto(pageSizePerColumn, columns.Sum(value => value.TotalCount), columns);
     }
 
-    private static int DecodeCursor(string? cursor)
+    private static KanbanCursor? DecodeCursor(string? token, string status, string sortBy,
+        bool sortAscending, string filterFingerprint)
     {
-        if (string.IsNullOrWhiteSpace(cursor)) return 1;
+        if (string.IsNullOrWhiteSpace(token)) return null;
         try
         {
-            var value = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(cursor));
-            return int.TryParse(value, out var page) && page >= 1 && page <= int.MaxValue / 100 ? page : throw new FormatException();
+            var encoded = token.Replace('-', '+').Replace('_', '/');
+            encoded = encoded.PadRight(encoded.Length + (4 - encoded.Length % 4) % 4, '=');
+            var cursor = JsonSerializer.Deserialize<KanbanCursor>(Convert.FromBase64String(encoded),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (cursor is null || cursor.Version != 1 || cursor.Status != status || cursor.SortBy != sortBy
+                || cursor.SortAscending != sortAscending || cursor.FilterFingerprint != filterFingerprint
+                || cursor.LastId == Guid.Empty || !IsCursorValueValid(cursor))
+                throw new FormatException();
+            return cursor;
         }
-        catch (FormatException) { throw new ArgumentException("Cursor inválido.", nameof(cursor)); }
+        catch (Exception exception) when (exception is FormatException or JsonException or ArgumentException)
+        { throw new ArgumentException("Cursor inválido ou incompatível com lane/filtros/ordenação.", nameof(token)); }
+    }
+
+    private static bool IsCursorValueValid(KanbanCursor cursor) => cursor.SortBy switch
+    {
+        "updatedAtUtc" => DateTimeOffset.TryParse(cursor.LastValue, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind, out _),
+        "customerDeadline" or "internalDeadline" or "nextActionAtUtc" => cursor.LastValue is null
+            || (cursor.SortBy == "nextActionAtUtc"
+                ? DateTimeOffset.TryParse(cursor.LastValue, System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out _)
+                : DateOnly.TryParseExact(cursor.LastValue, "yyyy-MM-dd", out _)),
+        "number" => !string.IsNullOrEmpty(cursor.LastValue),
+        _ => false,
+    };
+
+    private static IQueryable<CommercialRequest> ApplySeekCursor(IQueryable<CommercialRequest> requests,
+        string sortBy, bool ascending, KanbanCursor cursor)
+    {
+        var idAscending = sortBy != "updatedAtUtc" || ascending;
+        var id = cursor.LastId;
+        return sortBy switch
+        {
+            "updatedAtUtc" => SeekUpdatedAt(requests, cursor, ascending, idAscending),
+            "customerDeadline" => SeekNullableDate(requests, nameof(CommercialRequest.CustomerDeadline), cursor, ascending),
+            "internalDeadline" => SeekNullableDate(requests, nameof(CommercialRequest.InternalDeadline), cursor, ascending),
+            "nextActionAtUtc" => SeekNullableInstant(requests, cursor, ascending),
+            "number" => SeekNumber(requests, cursor, ascending),
+            _ => throw new ArgumentException("Unsupported cursor sort."),
+        };
+    }
+
+    private static IQueryable<CommercialRequest> SeekUpdatedAt(IQueryable<CommercialRequest> query,
+        KanbanCursor cursor, bool ascending, bool idAscending)
+    {
+        var value = DateTimeOffset.Parse(cursor.LastValue!, System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.RoundtripKind);
+        if (ascending && idAscending)
+            return query.Where(request => request.UpdatedAtUtc > value || (request.UpdatedAtUtc == value && request.Id.CompareTo(cursor.LastId) > 0));
+        if (ascending)
+            return query.Where(request => request.UpdatedAtUtc > value || (request.UpdatedAtUtc == value && request.Id.CompareTo(cursor.LastId) < 0));
+        if (idAscending)
+            return query.Where(request => request.UpdatedAtUtc < value || (request.UpdatedAtUtc == value && request.Id.CompareTo(cursor.LastId) > 0));
+        return query.Where(request => request.UpdatedAtUtc < value || (request.UpdatedAtUtc == value && request.Id.CompareTo(cursor.LastId) < 0));
+    }
+
+    private static IQueryable<CommercialRequest> SeekNullableDate(IQueryable<CommercialRequest> query,
+        string propertyName,
+        KanbanCursor cursor, bool ascending)
+    {
+        var value = cursor.LastValue is null ? (DateOnly?)null : DateOnly.ParseExact(cursor.LastValue, "yyyy-MM-dd");
+        if (value is null)
+            return query.Where(request => EF.Property<DateOnly?>(request, propertyName) == null
+                && request.Id.CompareTo(cursor.LastId) > 0);
+        var lastValue = value.Value;
+        if (ascending)
+            return query.Where(request => EF.Property<DateOnly?>(request, propertyName) == null
+                || EF.Property<DateOnly?>(request, propertyName) > lastValue
+                || (EF.Property<DateOnly?>(request, propertyName) == lastValue && request.Id.CompareTo(cursor.LastId) > 0));
+        return query.Where(request => EF.Property<DateOnly?>(request, propertyName) == null
+            || EF.Property<DateOnly?>(request, propertyName) < lastValue
+            || (EF.Property<DateOnly?>(request, propertyName) == lastValue && request.Id.CompareTo(cursor.LastId) > 0));
+    }
+
+    private static IQueryable<CommercialRequest> SeekNullableInstant(IQueryable<CommercialRequest> query,
+        KanbanCursor cursor, bool ascending)
+    {
+        var value = cursor.LastValue is null ? (DateTimeOffset?)null : DateTimeOffset.Parse(cursor.LastValue,
+            System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind);
+        if (value is null)
+            return query.Where(request => EF.Property<DateTimeOffset?>(request, nameof(CommercialRequest.NextActionAtUtc)) == null
+                && request.Id.CompareTo(cursor.LastId) > 0);
+        var lastValue = value.Value;
+        if (ascending)
+            return query.Where(request => EF.Property<DateTimeOffset?>(request, nameof(CommercialRequest.NextActionAtUtc)) == null
+                || EF.Property<DateTimeOffset?>(request, nameof(CommercialRequest.NextActionAtUtc)) > lastValue
+                || (EF.Property<DateTimeOffset?>(request, nameof(CommercialRequest.NextActionAtUtc)) == lastValue && request.Id.CompareTo(cursor.LastId) > 0));
+        return query.Where(request => EF.Property<DateTimeOffset?>(request, nameof(CommercialRequest.NextActionAtUtc)) == null
+            || EF.Property<DateTimeOffset?>(request, nameof(CommercialRequest.NextActionAtUtc)) < lastValue
+            || (EF.Property<DateTimeOffset?>(request, nameof(CommercialRequest.NextActionAtUtc)) == lastValue && request.Id.CompareTo(cursor.LastId) > 0));
+    }
+
+    private static IQueryable<CommercialRequest> SeekNumber(IQueryable<CommercialRequest> query,
+        KanbanCursor cursor, bool ascending)
+    {
+        var value = cursor.LastValue!;
+        return query.Where(request => ascending
+            ? request.Number.CompareTo(value) > 0 || (request.Number == value && request.Id.CompareTo(cursor.LastId) > 0)
+            : request.Number.CompareTo(value) < 0 || (request.Number == value && request.Id.CompareTo(cursor.LastId) > 0));
+    }
+
+    private static KanbanCursor CreateCursor(string status, string sortBy, bool sortAscending,
+        string filterFingerprint, ProposalListItemDto item)
+    {
+        var sortValue = sortBy switch
+        {
+            "updatedAtUtc" => item.UpdatedAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            "customerDeadline" => item.CustomerDeadline?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            "internalDeadline" => item.InternalDeadline?.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            "nextActionAtUtc" => item.NextAction?.ScheduledAtUtc.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+            "number" => item.Number,
+            _ => throw new ArgumentException("Unsupported cursor sort.", nameof(sortBy)),
+        };
+        return new KanbanCursor(1, status, sortBy, sortAscending, filterFingerprint, sortValue, item.Id);
+    }
+
+    private static string CreateFilterFingerprint(Guid organizationId, string? searchTerm, Guid? customerId,
+        Guid? responsibleUserId, string? origin, string? overdueFor, DateOnly? from, DateOnly? to,
+        DateOnly? customerDeadlineFrom, DateOnly? customerDeadlineTo, DateOnly? internalDeadlineFrom,
+        DateOnly? internalDeadlineTo, DateTimeOffset? nextActionFromUtc, DateTimeOffset? nextActionToUtc,
+        string sortBy, bool sortAscending, DateOnly today)
+    {
+        var filter = JsonSerializer.Serialize(new { organizationId, searchTerm = searchTerm?.Trim(), customerId,
+            responsibleUserId, origin, overdueFor, from, to, customerDeadlineFrom, customerDeadlineTo,
+            internalDeadlineFrom, internalDeadlineTo, nextActionFromUtc, nextActionToUtc, sortBy, sortAscending, today });
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(filter)));
+    }
+
+    private static string EncodeCursor(KanbanCursor cursor)
+    {
+        var base64 = Convert.ToBase64String(JsonSerializer.SerializeToUtf8Bytes(cursor));
+        return base64.TrimEnd('=').Replace('+', '-').Replace('/', '_');
     }
 
     public async Task<ProposalDetailsDto?> FindAsync(Guid organizationId, Guid requestId, CancellationToken cancellationToken)
@@ -258,7 +436,9 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
             draft?.State, draft?.ConvertedDemandId, request.CustomerDeadline, request.InternalDeadline,
             request.ReminderOccurrenceRevision, request.ReminderOccurrenceId is null ? null : new ProposalNextActionDto(
                 request.ReminderOccurrenceId.Value, request.ReminderOccurrenceRevision,
-                request.NextActionDescription!, request.NextActionAtUtc!.Value));
+                request.NextActionDescription!, request.NextActionAtUtc!.Value),
+            ProposalDeadlineOverdueDto.Calculate(request.CustomerDeadline, request.InternalDeadline,
+                ProposalDateRules.Today(DateTimeOffset.UtcNow)));
     }
 
     public async Task<ProposalCommandResult> CreateAsync(Guid organizationId, Guid actorUserId,
@@ -503,6 +683,10 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
         return references.Where(value => !string.IsNullOrWhiteSpace(value.Type) || !string.IsNullOrWhiteSpace(value.Value))
             .Select(value => (value.Type?.Trim() ?? "", value.Value?.Trim() ?? "")).ToArray();
     }
+
+    private sealed record SearchPageWindow(ProposalPageDto Page, bool HasMore);
+    private sealed record KanbanCursor(int Version, string Status, string SortBy, bool SortAscending,
+        string FilterFingerprint, string? LastValue, Guid LastId);
 
     private static string EscapeLike(string term) => term.Replace("\\", "\\\\", StringComparison.Ordinal)
         .Replace("%", "\\%", StringComparison.Ordinal).Replace("_", "\\_", StringComparison.Ordinal);

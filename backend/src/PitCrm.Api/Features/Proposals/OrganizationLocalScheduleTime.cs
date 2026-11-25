@@ -1,10 +1,11 @@
 using System.Globalization;
+using PitCrm.Application.Proposals;
 
 namespace PitCrm.Api.Features.Proposals;
 
 public static class OrganizationLocalScheduleTime
 {
-    public const string TimeZoneId = "America/Sao_Paulo";
+    public const string TimeZoneId = ProposalDateRules.OrganizationTimeZoneId;
     private static readonly TimeZoneInfo Zone = TimeZoneInfo.FindSystemTimeZoneById(TimeZoneId);
 
     public static bool TryConvert(string? localValue, string? selectedOffset,

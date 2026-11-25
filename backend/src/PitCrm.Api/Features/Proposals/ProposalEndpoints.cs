@@ -28,6 +28,9 @@ public static class ProposalEndpoints
 
     private static async Task<IResult> SearchAsync(string? q, string? status, Guid? customerId,
         Guid? responsibleUserId, string? origin, string? overdueFor, DateOnly? from, DateOnly? to,
+        DateOnly? customerDeadlineFrom, DateOnly? customerDeadlineTo,
+        DateOnly? internalDeadlineFrom, DateOnly? internalDeadlineTo,
+        DateTimeOffset? nextActionFromUtc, DateTimeOffset? nextActionToUtc,
         string? sortBy, string? sortDirection, int? page, int? pageSize,
         ICurrentOrganizationContext context, IProposalStore store, CancellationToken cancellationToken)
     {
@@ -42,6 +45,8 @@ public static class ProposalEndpoints
         if (from is { } start && to is { } end && start > end)
             errors[nameof(from)] = ["A data inicial deve ser anterior à data final."];
         if (to == DateOnly.MaxValue) errors[nameof(to)] = ["A data final está fora do intervalo permitido."];
+        ValidateTrackingRanges(customerDeadlineFrom, customerDeadlineTo, internalDeadlineFrom,
+            internalDeadlineTo, nextActionFromUtc, nextActionToUtc, errors);
         ValidateSearchFilters(origin, overdueFor, errors);
         ValidateSort(sortBy, sortDirection, errors);
         if (errors.Count > 0) return Results.ValidationProblem(errors);
@@ -49,6 +54,8 @@ public static class ProposalEndpoints
             string.Equals(value, status.Trim(), StringComparison.OrdinalIgnoreCase));
         var result = await store.SearchAsync(context.OrganizationId, q, normalizedStatus, customerId,
             responsibleUserId, NormalizeOrigin(origin), overdueFor?.ToLowerInvariant(), from, to,
+            customerDeadlineFrom, customerDeadlineTo, internalDeadlineFrom, internalDeadlineTo,
+            nextActionFromUtc, nextActionToUtc,
             NormalizeSort(sortBy), !string.Equals(sortDirection, "asc", StringComparison.OrdinalIgnoreCase),
             currentPage, currentPageSize, LocalToday(), cancellationToken);
         return Results.Ok(result);
@@ -56,6 +63,9 @@ public static class ProposalEndpoints
 
     private static async Task<IResult> KanbanAsync(string? q, Guid? customerId, Guid? responsibleUserId,
         string? origin, string? overdueFor, DateOnly? from, DateOnly? to, string? sortBy,
+        DateOnly? customerDeadlineFrom, DateOnly? customerDeadlineTo,
+        DateOnly? internalDeadlineFrom, DateOnly? internalDeadlineTo,
+        DateTimeOffset? nextActionFromUtc, DateTimeOffset? nextActionToUtc,
         string? sortDirection, int? pageSizePerColumn,
         string? cursors, ICurrentOrganizationContext context, IProposalStore store, CancellationToken cancellationToken)
     {
@@ -64,6 +74,8 @@ public static class ProposalEndpoints
         if (size is < 1 or > 100) errors[nameof(pageSizePerColumn)] = ["O tamanho por etapa deve estar entre 1 e 100."];
         if (from is { } start && to is { } end && start > end) errors[nameof(from)] = ["A data inicial deve ser anterior à data final."];
         if (to == DateOnly.MaxValue) errors[nameof(to)] = ["A data final está fora do intervalo permitido."];
+        ValidateTrackingRanges(customerDeadlineFrom, customerDeadlineTo, internalDeadlineFrom,
+            internalDeadlineTo, nextActionFromUtc, nextActionToUtc, errors);
         ValidateSearchFilters(origin, overdueFor, errors);
         ValidateSort(sortBy, sortDirection, errors);
         IReadOnlyDictionary<string, string?> cursorMap = new Dictionary<string, string?>();
@@ -75,14 +87,21 @@ public static class ProposalEndpoints
         }
         if (cursorMap.Keys.Any(key => !CommercialRequest.Statuses.Contains(key, StringComparer.Ordinal)))
             errors[nameof(cursors)] = ["O cursor contém uma etapa desconhecida."];
-        if (cursorMap.Values.Any(value => !IsValidCursor(value)))
-            errors[nameof(cursors)] = ["O cursor contém uma posição inválida."];
         if (errors.Count > 0) return Results.ValidationProblem(errors);
-        var result = await store.KanbanAsync(context.OrganizationId, q, customerId, responsibleUserId,
-            NormalizeOrigin(origin), overdueFor?.ToLowerInvariant(), from, to, NormalizeSort(sortBy),
-            !string.Equals(sortDirection, "asc", StringComparison.OrdinalIgnoreCase), size, cursorMap,
-            LocalToday(), cancellationToken);
-        return Results.Ok(result);
+        try
+        {
+            var result = await store.KanbanAsync(context.OrganizationId, q, customerId, responsibleUserId,
+                NormalizeOrigin(origin), overdueFor?.ToLowerInvariant(), from, to,
+                customerDeadlineFrom, customerDeadlineTo, internalDeadlineFrom, internalDeadlineTo,
+                nextActionFromUtc, nextActionToUtc,
+                NormalizeSort(sortBy), !string.Equals(sortDirection, "asc", StringComparison.OrdinalIgnoreCase), size, cursorMap,
+                LocalToday(), cancellationToken);
+            return Results.Ok(result);
+        }
+        catch (ArgumentException)
+        {
+            return Results.ValidationProblem(new Dictionary<string, string[]> { [nameof(cursors)] = ["Um cursor expirou ou não corresponde à lane, filtros ou ordenação atuais."] });
+        }
     }
 
     private static async Task<IResult> MyActionsAsync(int? page, int? pageSize,
@@ -155,7 +174,7 @@ public static class ProposalEndpoints
 
     private static void ValidateSort(string? sortBy, string? sortDirection, Dictionary<string, string[]> errors)
     {
-        var allowed = new[] { "updatedAtUtc", "customerDeadline", "internalDeadline", "nextActionAtUtc", "number" };
+        var allowed = new[] { "updatedAtUtc", "updatedAt", "customerDeadline", "internalDeadline", "nextActionAtUtc", "number" };
         if (sortBy is not null && !allowed.Contains(sortBy, StringComparer.OrdinalIgnoreCase))
             errors[nameof(sortBy)] = ["A ordenação informada não é válida."];
         if (sortDirection is not null && sortDirection is not ("asc" or "desc")
@@ -166,6 +185,7 @@ public static class ProposalEndpoints
 
     private static string NormalizeSort(string? sortBy) => sortBy?.ToLowerInvariant() switch
     {
+        "updatedat" or "updatedatutc" => "updatedAtUtc",
         "customerdeadline" => "customerDeadline",
         "internaldeadline" => "internalDeadline",
         "nextactionatutc" => "nextActionAtUtc",
@@ -173,15 +193,20 @@ public static class ProposalEndpoints
         _ => "updatedAtUtc",
     };
 
-    private static bool IsValidCursor(string? value)
+    private static void ValidateTrackingRanges(DateOnly? customerFrom, DateOnly? customerTo,
+        DateOnly? internalFrom, DateOnly? internalTo, DateTimeOffset? actionFrom, DateTimeOffset? actionTo,
+        Dictionary<string, string[]> errors)
     {
-        if (string.IsNullOrWhiteSpace(value)) return true;
-        try
-        {
-            var decoded = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(value));
-            return int.TryParse(decoded, out var page) && page >= 1 && page <= int.MaxValue / 100;
-        }
-        catch (FormatException) { return false; }
+        if (customerFrom is { } cf && customerTo is { } ct && cf > ct)
+            errors["customerDeadlineFrom"] = ["A data inicial do prazo do cliente deve ser anterior ou igual à final."];
+        if (internalFrom is { } inf && internalTo is { } intv && inf > intv)
+            errors["internalDeadlineFrom"] = ["A data inicial do prazo interno deve ser anterior ou igual à final."];
+        if (actionFrom is { } af && af.Offset != TimeSpan.Zero)
+            errors["nextActionFromUtc"] = ["Use um instante UTC com offset Z."];
+        if (actionTo is { } at && at.Offset != TimeSpan.Zero)
+            errors["nextActionToUtc"] = ["Use um instante UTC com offset Z."];
+        if (actionFrom is { } from && actionTo is { } to && from >= to)
+            errors["nextActionFromUtc"] = ["O intervalo UTC usa início inclusivo e fim exclusivo; o início deve preceder o fim."];
     }
 
     private static async Task<IResult> FindAsync(Guid id, ICurrentOrganizationContext context,

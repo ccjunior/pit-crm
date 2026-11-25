@@ -20,6 +20,10 @@ O caminho de conversão já exige que cliente, local, descrição e origem estej
 
 Prazos e próxima ação fazem parte da AC-T03. Decisões confirmadas por Carlos: prazo do cliente e prazo interno são `DateOnly`; o fuso v1 é fixo em `America/Sao_Paulo`; cada prazo fica vencido a partir do dia seguinte à data civil; `overdueFor=either` seleciona propostas com qualquer um dos prazos vencido. A próxima ação guarda instante UTC; horário local inexistente é rejeitado e horário ambíguo exige offset explícito. Uma ação no passado gera lembrete único imediato quando houver responsável elegível; sem responsável no horário, permanece elegível para envio único quando houver responsável enquanto a ocorrência continuar válida. Remover a ação cancela a ocorrência; reatribuir troca o destinatário sem incrementar a revisão da ocorrência. Entrega e scheduler ficam em AC-T07/08.
 
+A projeção de lista/detalhe e `/my-actions` retorna `overdue: { customer, internal, either, asOfLocalDate }`, calculado no servidor com a data local de corte. Em `/my-actions`, `isOverdue` permanece como alias de `overdue.either`. Filtros de período `from/to` permanecem em `UpdatedAtUtc` (início UTC inclusivo e data final inclusiva via limite exclusivo no dia seguinte). Filtros específicos de prazos aceitam intervalos civis inclusivos; próxima ação aceita intervalo UTC semiaberto `[from,to)`. Kanban usa cursor keyset opaco vinculado a organização, lane, filtros e ordenação; cursores incompatíveis são rejeitados. Ordenações nullable colocam valores nulos por último.
+
+PUT de tracking sem mudanças retorna o estado atual sem incrementar `Version`, `UpdatedAtUtc` ou a revisão da ocorrência.
+
 **Limite desta implementação AC-T03:** `ValidUntil` permanece armazenado sem transição automática. Expiração durante negociação fica suspensa e reavaliar validade ao sair de `Negotiating` exige ator `System` tipado e persistência/auditoria atômica definidos pela AC-T04/AC-14; scheduler pertence à AC-T07/08. A transição automática de expiração não é critério concluído nesta branch.
 
 ## Compatibilidade e limites
