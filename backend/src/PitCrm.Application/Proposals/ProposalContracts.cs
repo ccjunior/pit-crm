@@ -59,6 +59,7 @@ public enum ProposalFailure
     CustomerNotFound,
     InvalidData,
     DemandAlreadyConverted,
+    ResponsibleRequired,
 }
 
 public sealed record ProposalCommandResult(ProposalDetailsDto? Proposal, ProposalFailure Failure,

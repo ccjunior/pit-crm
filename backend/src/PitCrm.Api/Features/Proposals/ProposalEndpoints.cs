@@ -193,6 +193,10 @@ public static class ProposalEndpoints
         ProposalFailure.VersionConflict => Results.Conflict(new { error = "A solicitação foi alterada. Atualize os dados antes de tentar novamente." }),
         ProposalFailure.InvalidState => Results.Conflict(new { error = "A ação não é permitida na etapa atual." }),
         ProposalFailure.DemandAlreadyConverted => Results.Conflict(new { error = "A demanda já foi confirmada; use o fluxo de aditivo para alterar escopo/valor." }),
+        ProposalFailure.ResponsibleRequired => Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["responsibleUserId"] = ["Atribua um responsável comercial antes de iniciar a avaliação."]
+        }),
         ProposalFailure.CustomerNotFound => CustomerNotFound(),
         ProposalFailure.InvalidData => Results.ValidationProblem(GeneralError("Revise os dados informados.")),
         _ => Results.Ok(result.Proposal),

@@ -251,6 +251,10 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
         {
             return new ProposalCommandResult(null, ProposalFailure.InvalidData);
         }
+        catch (CommercialResponsibleRequiredException)
+        {
+            return new ProposalCommandResult(null, ProposalFailure.ResponsibleRequired);
+        }
         catch (InvalidOperationException)
         {
             return new ProposalCommandResult(null, ProposalFailure.InvalidState);

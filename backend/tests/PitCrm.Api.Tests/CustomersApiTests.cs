@@ -655,7 +655,18 @@ public sealed class CustomersApiTests
     {
         var managerSession = await manager.GetFromJsonAsync<JsonElement>("/api/auth/me");
         var responsibleUserId = managerSession.GetProperty("id").GetGuid();
-        var request = new { customerId, responsibleUserId, origin = "E-mail", description = "Reforma de teste" };
+        var request = new
+        {
+            customerId,
+            responsibleUserId,
+            origin = "E-mail",
+            description = "Reforma de teste",
+            references = new[]
+            {
+                new { type = "RFQ/cotação", value = "RFQ-AC-T02" },
+                new { type = "Pedido de compra", value = "OC-AC-T02" }
+            }
+        };
         using var denied = await PostJsonAsync(operatorClient, "/api/proposals", request);
         Assert.Equal(HttpStatusCode.Forbidden, denied.StatusCode);
         using var crossTenant = await PostJsonAsync(otherOrganization, "/api/proposals", request);
@@ -664,6 +675,21 @@ public sealed class CustomersApiTests
         using var created = await PostJsonAsync(manager, "/api/proposals", request);
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);
         var proposal = (await created.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        Assert.Matches("^SOL-[0-9]{4}-0001$", proposal.Number);
+        var yearPrefix = proposal.Number[..9];
+        Assert.Equal($"{yearPrefix}0001", proposal.Number);
+        Assert.Equal("E-mail", proposal.Origin);
+        Assert.Collection(proposal.References.OrderBy(value => value.Type),
+            reference =>
+            {
+                Assert.Equal("Pedido de compra", reference.Type);
+                Assert.Equal("OC-AC-T02", reference.Value);
+            },
+            reference =>
+            {
+                Assert.Equal("RFQ/cotação", reference.Type);
+                Assert.Equal("RFQ-AC-T02", reference.Value);
+            });
         var proposalPath = $"/api/proposals/{proposal.Id}";
         using var foreignRead = await otherOrganization.GetAsync(proposalPath);
         Assert.Equal(HttpStatusCode.NotFound, foreignRead.StatusCode);
@@ -673,6 +699,84 @@ public sealed class CustomersApiTests
         Assert.Equal(HttpStatusCode.Forbidden, operatorList.StatusCode);
         var foreignList = await otherOrganization.GetFromJsonAsync<ProposalPageDto>("/api/proposals");
         Assert.DoesNotContain(foreignList!.Items, item => item.Id == proposal.Id);
+
+        using var invalidReference = await PostJsonAsync(manager, "/api/proposals", new
+        {
+            customerId,
+            responsibleUserId,
+            origin = "E-mail",
+            description = "Referência com tipo desconhecido",
+            references = new[] { new { type = "Tipo livre", value = "REF-INVALIDA" } }
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, invalidReference.StatusCode);
+
+        using var unassigned = await PostJsonAsync(manager, "/api/proposals", new
+        {
+            prospectName = "Prospect sem responsável",
+            responsibleUserId = (Guid?)null,
+            origin = "Telefone",
+            description = "Atribuição deve anteceder avaliação"
+        });
+        unassigned.EnsureSuccessStatusCode();
+        var unassignedProposal = (await unassigned.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        Assert.Equal($"{yearPrefix}0002", unassignedProposal.Number);
+        using var evaluationWithoutAssignment = await PostJsonAsync(manager,
+            $"/api/proposals/{unassignedProposal.Id}/status",
+            new { unassignedProposal.Version, status = CommercialRequest.Evaluating });
+        Assert.Equal(HttpStatusCode.BadRequest, evaluationWithoutAssignment.StatusCode);
+        using var assigned = await PutJsonAsync(manager, $"/api/proposals/{unassignedProposal.Id}", new
+        {
+            unassignedProposal.Version,
+            prospectName = "Prospect sem responsável",
+            responsibleUserId,
+            origin = "Telefone",
+            description = "Atribuição deve anteceder avaliação",
+            references = Array.Empty<object>()
+        });
+        assigned.EnsureSuccessStatusCode();
+        unassignedProposal = (await assigned.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        Assert.Equal(responsibleUserId, unassignedProposal.ResponsibleUserId);
+        using var evaluationAfterAssignment = await PostJsonAsync(manager,
+            $"/api/proposals/{unassignedProposal.Id}/status",
+            new { unassignedProposal.Version, status = CommercialRequest.Evaluating });
+        evaluationAfterAssignment.EnsureSuccessStatusCode();
+
+        using var otherOrganizationProposal = await PostJsonAsync(otherOrganization, "/api/proposals", new
+        {
+            prospectName = "Solicitação da Empresa B",
+            origin = "WhatsApp",
+            description = "Numeração isolada por organização"
+        });
+        otherOrganizationProposal.EnsureSuccessStatusCode();
+        var foreignProposal = (await otherOrganizationProposal.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        Assert.Equal($"{yearPrefix}0001", foreignProposal.Number);
+
+        var concurrentResponses = await Task.WhenAll(Enumerable.Range(0, 8).Select(index =>
+            PostJsonAsync(manager, "/api/proposals", new
+            {
+                prospectName = $"Concorrente {index}",
+                responsibleUserId,
+                origin = "Indicação",
+                description = "Geração concorrente de número comercial"
+            })));
+        try
+        {
+            var concurrentProposals = new List<ProposalDetailsDto>();
+            foreach (var response in concurrentResponses)
+            {
+                Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+                concurrentProposals.Add((await response.Content.ReadFromJsonAsync<ProposalDetailsDto>())!);
+            }
+
+            var numbers = concurrentProposals.Select(value => value.Number).ToArray();
+            Assert.Equal(numbers.Length, numbers.Distinct(StringComparer.Ordinal).Count());
+            Assert.Equal(Enumerable.Range(3, 8).Select(value => $"{yearPrefix}{value:D4}").OrderBy(value => value),
+                numbers.OrderBy(value => value));
+        }
+        finally
+        {
+            foreach (var response in concurrentResponses) response.Dispose();
+        }
         using var foreignUpdate = await PutJsonAsync(otherOrganization, proposalPath,
             new { proposal.Version, customerId, origin = "E-mail", description = "Tentativa cruzada" });
         Assert.Equal(HttpStatusCode.NotFound, foreignUpdate.StatusCode);
@@ -706,6 +810,8 @@ public sealed class CustomersApiTests
             new { proposal.Version, revisionId = revision.Id, channel = "Email", sentAtUtc });
         sent.EnsureSuccessStatusCode();
         proposal = (await sent.Content.ReadFromJsonAsync<ProposalDetailsDto>())!;
+        Assert.Equal("E-mail", proposal.Origin);
+        Assert.Equal("Email", Assert.Single(proposal.Revisions).SendChannel);
 
         var approval = new { proposal.Version, revisionId = revision.Id, approverName = "Cliente Teste",
             channel = "Email", approvedAtUtc = sentAtUtc.AddMinutes(1) };

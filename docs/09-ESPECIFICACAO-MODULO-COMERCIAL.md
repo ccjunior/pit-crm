@@ -83,7 +83,7 @@ Encerramentos: `NaoCotada`, `Recusada`, `Expirada`, `Cancelada`.
 - Transições para `Enviada`, `Aprovada` e encerramentos são **registradas manualmente** por usuário autorizado (na v1 o envio é externo).
 - `Expirada` pode ser aplicada por job agendado quando a validade da última revisão enviada vencer (seção 5.3).
 - Reabertura de solicitação encerrada: decidir (ver "Decisões em aberto"); se permitida, exige permissão específica e registro.
-- Transição inválida deve retornar erro de domínio claro (HTTP 409 ou 422, seguir padrão da API) e nunca alterar dados.
+- Conflito de versão ou transição incompatível com a etapa atual retorna HTTP 409 e não altera dados. Quando uma transição válida exigir um campo ausente (por exemplo, responsável antes de `EmAvaliacao`), a API retorna HTTP 400 com erro de validação apontando o campo; também não altera dados.
 
 ### 4.3 Concorrência
 - Usar controle otimista (token de versão/`xmin`/rowversion), já adotado nas demandas.
