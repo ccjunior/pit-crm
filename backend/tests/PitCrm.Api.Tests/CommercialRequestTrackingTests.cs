@@ -3,6 +3,7 @@ using PitCrm.Api.Features.Proposals;
 using PitCrm.Application.Proposals;
 using Microsoft.EntityFrameworkCore;
 using PitCrm.Infrastructure.Persistence;
+using System.Text.Json;
 
 namespace PitCrm.Api.Tests;
 
@@ -80,9 +81,29 @@ public sealed class CommercialRequestTrackingTests
         var overdue = ProposalDeadlineOverdueDto.Calculate(new DateOnly(2026, 11, 24), today, today);
         Assert.True(overdue.Customer);
         Assert.False(overdue.Internal);
-        Assert.True(overdue.Either);
         Assert.Equal(today, overdue.AsOfLocalDate);
-        Assert.False(ProposalDeadlineOverdueDto.Calculate(null, null, today).Either);
+        var clear = ProposalDeadlineOverdueDto.Calculate(null, null, today);
+        Assert.False(clear.Customer);
+        Assert.False(clear.Internal);
+    }
+
+    [Fact]
+    public void My_actions_contract_exposes_per_deadline_flags_without_ambiguous_overdue_alias()
+    {
+        var overdue = new ProposalDeadlineOverdueDto(true, false, new DateOnly(2026, 11, 25));
+        var item = new MyActionItemDto(Guid.NewGuid(), "SOL-2026-0001", "Negotiating", null, null,
+            new ProposalNextActionDto(Guid.NewGuid(), 1, "Ligar", DateTimeOffset.Parse("2026-11-25T12:00:00Z")),
+            overdue);
+
+        var json = JsonSerializer.Serialize(item, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        using var document = JsonDocument.Parse(json);
+        var itemJson = document.RootElement;
+        var overdueJson = itemJson.GetProperty("overdue");
+        Assert.True(overdueJson.GetProperty("customer").GetBoolean());
+        Assert.False(overdueJson.GetProperty("internal").GetBoolean());
+        Assert.Equal("2026-11-25", overdueJson.GetProperty("asOfLocalDate").GetString());
+        Assert.False(itemJson.TryGetProperty("isOverdue", out _));
+        Assert.False(overdueJson.TryGetProperty("either", out _));
     }
 
     [Fact]

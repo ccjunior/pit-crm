@@ -31,15 +31,14 @@ public sealed record ProposalTrackingInput(int Version, DateOnly? CustomerDeadli
 public sealed record ProposalNextActionInput(string? Description, string? ScheduledAtLocal, string? SelectedOffset);
 public sealed record ProposalNextActionDto(Guid ReminderOccurrenceId, int Revision, string Description,
     DateTimeOffset ScheduledAtUtc);
-public sealed record ProposalDeadlineOverdueDto(bool Customer, bool Internal, bool Either, DateOnly AsOfLocalDate)
+public sealed record ProposalDeadlineOverdueDto(bool Customer, bool Internal, DateOnly AsOfLocalDate)
 {
     public static ProposalDeadlineOverdueDto Calculate(DateOnly? customerDeadline, DateOnly? internalDeadline,
         DateOnly asOfLocalDate)
     {
         var customer = customerDeadline is { } customerDate && customerDate < asOfLocalDate;
         var internalDeadlineOverdue = internalDeadline is { } internalDate && internalDate < asOfLocalDate;
-        return new ProposalDeadlineOverdueDto(customer, internalDeadlineOverdue,
-            customer || internalDeadlineOverdue, asOfLocalDate);
+        return new ProposalDeadlineOverdueDto(customer, internalDeadlineOverdue, asOfLocalDate);
     }
 }
 public static class ProposalDateRules
@@ -56,8 +55,7 @@ public sealed record ProposalKanbanColumnDto(string Status, IReadOnlyList<Propos
 public sealed record ProposalKanbanDto(int PageSizePerColumn, int TotalCount,
     IReadOnlyList<ProposalKanbanColumnDto> Columns);
 public sealed record MyActionItemDto(Guid ProposalId, string Number, string Status, DateOnly? CustomerDeadline,
-    DateOnly? InternalDeadline, bool IsOverdue, ProposalNextActionDto NextAction,
-    ProposalDeadlineOverdueDto Overdue);
+    DateOnly? InternalDeadline, ProposalNextActionDto NextAction, ProposalDeadlineOverdueDto Overdue);
 public sealed record MyActionsPageDto(IReadOnlyList<MyActionItemDto> Items, int Page, int PageSize, int TotalCount);
 
 public sealed record ProposalListItemDto(Guid Id, Guid? CustomerId, string? CustomerName, string? ProspectName,

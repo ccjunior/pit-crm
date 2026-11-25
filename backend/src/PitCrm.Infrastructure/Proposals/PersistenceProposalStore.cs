@@ -176,9 +176,7 @@ public sealed class PersistenceProposalStore(PitCrmDbContext dbContext, IDemandD
         var rows = await query.OrderBy(value => value.NextActionAtUtc).ThenBy(value => value.Id)
             .Skip((page - 1) * pageSize).Take(pageSize)
             .Select(value => new MyActionItemDto(value.Id, value.Number, value.Status, value.CustomerDeadline,
-                value.InternalDeadline, ProposalDeadlineOverdueDto.Calculate(value.CustomerDeadline,
-                    value.InternalDeadline, today).Either,
-                new ProposalNextActionDto(value.ReminderOccurrenceId!.Value, value.ReminderOccurrenceRevision,
+                value.InternalDeadline, new ProposalNextActionDto(value.ReminderOccurrenceId!.Value, value.ReminderOccurrenceRevision,
                     value.NextActionDescription!, value.NextActionAtUtc!.Value),
                 ProposalDeadlineOverdueDto.Calculate(value.CustomerDeadline, value.InternalDeadline, today)))
             .ToListAsync(cancellationToken);
