@@ -12,28 +12,6 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "ProposalAuditAggregates",
-                columns: table => new
-                {
-                    OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
-                    Year = table.Column<int>(type: "integer", nullable: false),
-                    Month = table.Column<int>(type: "integer", nullable: false),
-                    Category = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
-                    Count = table.Column<long>(type: "bigint", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_ProposalAuditAggregates", x => new { x.OrganizationId, x.Year, x.Month, x.Category });
-                    table.CheckConstraint("CK_ProposalAuditAggregates_MinCount", "\"Count\" >= 10");
-                    table.ForeignKey(
-                        name: "FK_ProposalAuditAggregates_Organizations_OrganizationId",
-                        column: x => x.OrganizationId,
-                        principalTable: "Organizations",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Restrict);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "ProposalAuditEvents",
                 columns: table => new
                 {
@@ -125,6 +103,7 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     Operation = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: false),
                     Fingerprint = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
                     ResultId = table.Column<Guid>(type: "uuid", nullable: false),
+                    ResultPayloadJson = table.Column<string>(type: "jsonb", nullable: true),
                     KeyTimestampUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     StoredAtUtc = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
@@ -133,6 +112,31 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     table.PrimaryKey("PK_ProposalIdempotencyRecords", x => new { x.OrganizationId, x.Key });
                     table.ForeignKey(
                         name: "FK_ProposalIdempotencyRecords_Organizations_OrganizationId",
+                        column: x => x.OrganizationId,
+                        principalTable: "Organizations",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "OrganizationPermissionGrants",
+                columns: table => new
+                {
+                    OrganizationId = table.Column<Guid>(type: "uuid", nullable: false),
+                    UserId = table.Column<Guid>(type: "uuid", nullable: false),
+                    Permission = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_OrganizationPermissionGrants", x => new { x.OrganizationId, x.UserId, x.Permission });
+                    table.ForeignKey(
+                        name: "FK_OrganizationPermissionGrants_AspNetUsers_OrganizationId_UserId",
+                        columns: x => new { x.OrganizationId, x.UserId },
+                        principalTable: "AspNetUsers",
+                        principalColumns: new[] { "OrganizationId", "Id" },
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_OrganizationPermissionGrants_Organizations_OrganizationId",
                         column: x => x.OrganizationId,
                         principalTable: "Organizations",
                         principalColumn: "Id",
@@ -514,7 +518,7 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropTable(
-                name: "ProposalAuditAggregates");
+                name: "OrganizationPermissionGrants");
 
             migrationBuilder.DropTable(
                 name: "ProposalAuditEvents");

@@ -9,7 +9,6 @@ namespace PitCrm.Infrastructure.Proposals;
 public sealed class ProposalRetentionProcessor(PitCrmDbContext dbContext) : IProposalRetentionProcessor
 {
     private const string SystemCode = "ProposalRetention";
-    private static readonly TimeZoneInfo OrganizationTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");
 
     public async Task ProcessDueAsync(CancellationToken cancellationToken)
     {
@@ -43,6 +42,14 @@ public sealed class ProposalRetentionProcessor(PitCrmDbContext dbContext) : IPro
             value.OrganizationId == organizationId && value.CommercialRequestId == requestId
             && value.Generation == generation && value.State == "Active" && value.ArchiveAtUtc <= now, cancellationToken);
         if (cycle is null) return;
+        var request = await dbContext.CommercialRequests.SingleOrDefaultAsync(value =>
+            value.OrganizationId == organizationId && value.Id == requestId, cancellationToken);
+        if (request is null) return;
+        var latestGeneration = await dbContext.ProposalRetentionCycles.Where(value =>
+                value.OrganizationId == organizationId && value.CommercialRequestId == requestId)
+            .MaxAsync(value => value.Generation, cancellationToken);
+        if (!ProposalHistoryRetentionRules.CanArchive(generation, latestGeneration,
+                IsClosedStatus(request.Status))) return;
         var events = await dbContext.ProposalTimelineEvents.Where(value =>
                 value.OrganizationId == organizationId && value.CommercialRequestId == requestId)
             .OrderBy(value => value.Sequence).ToListAsync(cancellationToken);
@@ -96,44 +103,21 @@ public sealed class ProposalRetentionProcessor(PitCrmDbContext dbContext) : IPro
     {
         var candidates = await dbContext.ProposalAuditEvents.AsNoTracking()
             .Where(value => value.DetailsJson != null).OrderBy(value => value.OccurredAtUtc)
-            .Select(value => new { value.Id, value.OrganizationId, value.CommercialRequestId,
-                value.Category, value.OccurredAtUtc }).ToListAsync(cancellationToken);
-        if (candidates.Count == 0) return;
+            .Select(value => new { value.Id, value.OrganizationId, value.OccurredAtUtc })
+            .Take(500).ToListAsync(cancellationToken);
+        var expired = candidates.Where(value =>
+            ProposalHistoryRetentionRules.IsExpired(value.OccurredAtUtc, dbNow, 12)).ToArray();
+        if (expired.Length == 0) return;
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        var grouped = candidates.Where(value => value.CommercialRequestId is not null)
-            .GroupBy(value =>
-            {
-                var local = TimeZoneInfo.ConvertTime(value.OccurredAtUtc, OrganizationTimeZone);
-                return (value.OrganizationId, Year: local.Year, Month: local.Month, value.Category);
-            });
-        foreach (var group in grouped)
-        {
-            var lockKey = $"proposal-audit:{group.Key.OrganizationId:N}:{group.Key.Year}:{group.Key.Month}:{group.Key.Category}";
-            if (!await TryAcquireAuditLockAsync(lockKey, cancellationToken)) continue;
-            var records = await dbContext.ProposalAuditEvents.Where(value => value.OrganizationId == group.Key.OrganizationId
-                && value.Category == group.Key.Category && value.CommercialRequestId != null
-                && value.DetailsJson != null && value.OccurredAtUtc >= LocalMonthStartUtc(group.Key.Year, group.Key.Month)
-                && value.OccurredAtUtc < LocalMonthStartUtc(group.Key.Year, group.Key.Month).AddMonths(1))
-                .ToListAsync(cancellationToken);
-            if (records.Count == 0 || dbNow < ProposalHistoryRetentionRules.AddCivilMonthsUtc(
-                    records.Max(value => value.OccurredAtUtc), 12)) continue;
-            var distinctRequests = records.Select(value => value.CommercialRequestId!.Value).Distinct().LongCount();
-            var aggregate = await dbContext.ProposalAuditAggregates.SingleOrDefaultAsync(value =>
-                value.OrganizationId == group.Key.OrganizationId && value.Year == group.Key.Year
-                && value.Month == group.Key.Month && value.Category == group.Key.Category, cancellationToken);
-            if (aggregate is null && distinctRequests >= 10)
-                dbContext.ProposalAuditAggregates.Add(new ProposalAuditAggregate(group.Key.OrganizationId,
-                    group.Key.Year, group.Key.Month, group.Key.Category, distinctRequests));
-            foreach (var audit in records) audit.Redact(dbNow);
-        }
-        foreach (var candidate in candidates.Where(value => value.CommercialRequestId is null
-                     && dbNow >= ProposalHistoryRetentionRules.AddCivilMonthsUtc(value.OccurredAtUtc, 12)))
+        foreach (var candidate in expired)
         {
             if (!await TryAcquireAuditLockAsync($"proposal-audit-row:{candidate.Id:N}", cancellationToken)) continue;
             var audit = await dbContext.ProposalAuditEvents.SingleOrDefaultAsync(value =>
                 value.OrganizationId == candidate.OrganizationId && value.Id == candidate.Id
                 && value.DetailsJson != null, cancellationToken);
-            audit?.Redact(dbNow);
+            if (audit is null || !ProposalHistoryRetentionRules.IsExpired(audit.OccurredAtUtc, dbNow, 12))
+                continue;
+            audit.Redact(dbNow);
         }
         var redactedOrganizations = dbContext.ChangeTracker.Entries<ProposalAuditEvent>()
             .Where(value => value.State == EntityState.Modified && value.Entity.RedactedAtUtc == dbNow)
@@ -148,12 +132,6 @@ public sealed class ProposalRetentionProcessor(PitCrmDbContext dbContext) : IPro
     private async Task<bool> TryAcquireAuditLockAsync(string key, CancellationToken cancellationToken) =>
         await dbContext.Database.SqlQuery<bool>($"SELECT pg_try_advisory_xact_lock(hashtextextended({key}, 0)) AS \"Value\"")
             .SingleAsync(cancellationToken);
-
-    private static DateTimeOffset LocalMonthStartUtc(int year, int month)
-    {
-        var local = new DateTime(year, month, 1, 0, 0, 0, DateTimeKind.Unspecified);
-        return TimeZoneInfo.ConvertTimeToUtc(local, OrganizationTimeZone);
-    }
 
     private async Task<bool> LockRequestAsync(Guid organizationId, Guid requestId,
         CancellationToken cancellationToken)
@@ -173,6 +151,9 @@ public sealed class ProposalRetentionProcessor(PitCrmDbContext dbContext) : IPro
         string type, DateTimeOffset now, string? details) => new(Guid.NewGuid(), organizationId,
         type, "Retenção", ProposalHistoryActorTypes.System, null, SystemCode, now, requestId,
         null, details);
+
+    private static bool IsClosedStatus(string status) => status == CommercialRequest.Approved
+        || CommercialRequest.ResultStatuses.Contains(status, StringComparer.Ordinal);
 
     private sealed record ArchivedTimelineEvent(Guid Id, long Sequence, string Type, string ActorType,
         Guid? ActorUserId, string? SystemCode, DateTimeOffset OccurredAtUtc, bool OccurredAtKnown,

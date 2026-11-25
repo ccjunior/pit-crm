@@ -25,6 +25,7 @@ using PitCrm.Infrastructure.Customers;
 using PitCrm.Infrastructure.Locations;
 using PitCrm.Infrastructure.Demands;
 using PitCrm.Infrastructure.Proposals;
+using PitCrm.Infrastructure.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -138,10 +139,12 @@ builder.Services.AddAuthorization(options =>
             .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
     options.AddPolicy(AuthorizationPolicies.ViewProposalAudit, policy =>
         policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
-            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false")
+            .AddRequirements(new OrganizationPermissionGrantRequirement(AuthorizationPolicies.ViewProposalAuditGrant)));
     options.AddPolicy(AuthorizationPolicies.RestoreProposalTimeline, policy =>
         policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
-            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false")
+            .AddRequirements(new OrganizationPermissionGrantRequirement(AuthorizationPolicies.RestoreProposalTimelineGrant)));
     options.AddPolicy(AuthorizationPolicies.ChangeOwnPassword, policy =>
         policy.RequireRole(RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator));
 });
@@ -156,6 +159,8 @@ builder.Services.AddScoped<IDemandDraftStore, PersistenceDemandDraftStore>();
 builder.Services.AddScoped<IProposalStore, PersistenceProposalStore>();
 builder.Services.AddScoped<IProposalHistoryStore, PersistenceProposalHistoryStore>();
 builder.Services.AddScoped<IProposalRetentionProcessor, ProposalRetentionProcessor>();
+builder.Services.AddScoped<IOrganizationPermissionGrantLookup, PersistenceOrganizationPermissionGrantLookup>();
+builder.Services.AddScoped<IAuthorizationHandler, OrganizationPermissionGrantHandler>();
 builder.Services.AddHostedService<ProposalRetentionBackgroundService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentOrganizationContext, HttpCurrentOrganizationContext>();

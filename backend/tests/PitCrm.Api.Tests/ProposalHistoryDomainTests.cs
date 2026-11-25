@@ -2,13 +2,17 @@ using PitCrm.Domain.Proposals;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using PitCrm.Infrastructure.Persistence;
+using PitCrm.Infrastructure.Identity;
+using System.Text.Json;
 using PitCrm.Api.Features.Proposals;
 using PitCrm.Api.Authorization;
 using PitCrm.Application.Authorization;
 using PitCrm.Application.Proposals;
+using PitCrm.Domain.Organizations;
 using PitCrm.Infrastructure.Proposals;
 
 namespace PitCrm.Api.Tests;
@@ -51,6 +55,24 @@ public sealed class ProposalHistoryDomainTests
     }
 
     [Fact]
+    public void Audit_retention_is_applied_at_each_event_cutoff()
+    {
+        var occurredAt = DateTimeOffset.Parse("2025-11-25T15:00:00Z");
+        var cutoff = ProposalHistoryRetentionRules.AddCivilMonthsUtc(occurredAt, 12);
+
+        Assert.False(ProposalHistoryRetentionRules.IsExpired(occurredAt, cutoff.AddTicks(-1), 12));
+        Assert.True(ProposalHistoryRetentionRules.IsExpired(occurredAt, cutoff, 12));
+    }
+
+    [Fact]
+    public void Retention_cycle_archiving_requires_latest_generation_and_terminal_proposal()
+    {
+        Assert.True(ProposalHistoryRetentionRules.CanArchive(3, 3, isTerminal: true));
+        Assert.False(ProposalHistoryRetentionRules.CanArchive(2, 3, isTerminal: true));
+        Assert.False(ProposalHistoryRetentionRules.CanArchive(3, 3, isTerminal: false));
+    }
+
+    [Fact]
     public void Timeline_event_requires_exactly_one_valid_actor_and_stage_pair()
     {
         var now = DateTimeOffset.Parse("2026-11-25T12:00:00Z");
@@ -78,11 +100,20 @@ public sealed class ProposalHistoryDomainTests
         var proposalLink = Assert.Single(timeline.GetForeignKeys(), foreignKey =>
             foreignKey.PrincipalEntityType.ClrType == typeof(CommercialRequest));
         var idempotency = dbContext.Model.FindEntityType(typeof(ProposalIdempotencyRecord))!;
+        var grant = dbContext.Model.FindEntityType(typeof(OrganizationPermissionGrant))!;
 
         Assert.Equal(DeleteBehavior.Restrict, proposalLink.DeleteBehavior);
         Assert.Contains(proposalLink.Properties, property => property.Name == "OrganizationId");
         Assert.Equal(new[] { "OrganizationId", "Key" },
             idempotency.FindPrimaryKey()!.Properties.Select(property => property.Name));
+        Assert.Equal("jsonb", idempotency.FindProperty(nameof(ProposalIdempotencyRecord.ResultPayloadJson))!
+            .GetColumnType());
+        Assert.Equal(new[] { "OrganizationId", "UserId", "Permission" },
+            grant.FindPrimaryKey()!.Properties.Select(property => property.Name));
+        Assert.Contains(grant.GetForeignKeys(), foreignKey =>
+            foreignKey.PrincipalEntityType.ClrType == typeof(ApplicationUser)
+            && foreignKey.Properties.Select(property => property.Name)
+                .SequenceEqual(new[] { "OrganizationId", "UserId" }));
     }
 
     [Fact]
@@ -121,15 +152,6 @@ public sealed class ProposalHistoryDomainTests
     }
 
     [Fact]
-    public void Audit_aggregate_cannot_be_created_below_threshold()
-    {
-        Assert.Throws<ArgumentException>(() => new ProposalAuditAggregate(Guid.NewGuid(),
-            2026, 11, "Transições", 9));
-        var aggregate = new ProposalAuditAggregate(Guid.NewGuid(), 2026, 11, "Transições", 10);
-        Assert.Equal(10, aggregate.Count);
-    }
-
-    [Fact]
     public async Task History_routes_are_mapped_with_explicit_policy_metadata()
     {
         var builder = WebApplication.CreateBuilder();
@@ -152,5 +174,73 @@ public sealed class ProposalHistoryDomainTests
             metadata => metadata.Policy == AuthorizationPolicies.OperateDemands);
         Assert.Contains(audit.Metadata.GetOrderedMetadata<IAuthorizeData>(),
             metadata => metadata.Policy == AuthorizationPolicies.ViewProposalAudit);
+    }
+
+    [Fact]
+    public async Task Audit_grant_authorization_defaults_to_denied_and_uses_context_scope()
+    {
+        var orgId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var lookup = new StubGrantLookup(false);
+        var handler = new OrganizationPermissionGrantHandler(new StubOrganizationContext(orgId, userId), lookup,
+            new HttpContextAccessor());
+        var requirement = new OrganizationPermissionGrantRequirement(AuthorizationPolicies.ViewProposalAuditGrant);
+        var principal = new System.Security.Claims.ClaimsPrincipal(new System.Security.Claims.ClaimsIdentity(
+            [new System.Security.Claims.Claim(System.Security.Claims.ClaimTypes.NameIdentifier, userId.ToString())], "test"));
+        var denied = new AuthorizationHandlerContext([requirement], principal, null);
+
+        await handler.HandleAsync(denied);
+
+        Assert.False(denied.HasSucceeded);
+        Assert.Equal((orgId, userId, AuthorizationPolicies.ViewProposalAuditGrant),
+            (lookup.OrganizationId, lookup.UserId, lookup.Permission));
+
+        var allowedLookup = new StubGrantLookup(true);
+        var allowedHandler = new OrganizationPermissionGrantHandler(
+            new StubOrganizationContext(orgId, userId), allowedLookup, new HttpContextAccessor());
+        var allowed = new AuthorizationHandlerContext([requirement], principal, null);
+        await allowedHandler.HandleAsync(allowed);
+        Assert.True(allowed.HasSucceeded);
+    }
+
+    [Fact]
+    public void Idempotency_record_preserves_the_original_response_snapshot()
+    {
+        var result = new ProposalHistoryEventDto(Guid.NewGuid(), 4, ProposalHistoryEventTypes.ActivityRecorded,
+            DateTimeOffset.Parse("2026-11-25T12:00:00Z"), true, "Owner", null, null, null, "Call",
+            "Follow-up", []);
+        var record = new ProposalIdempotencyRecord(Guid.NewGuid(), "Proposal", Guid.NewGuid(), Key,
+            "ActivityRecorded", new string('A', 64), result.Id, ProposalIdempotencyKey.GetTimestampUtc(Key),
+            DateTimeOffset.UtcNow);
+
+        record.StoreResultPayload(JsonSerializer.Serialize(result));
+
+        var restored = JsonSerializer.Deserialize<ProposalHistoryEventDto>(record.ResultPayloadJson!);
+        Assert.NotNull(restored);
+        Assert.Equal(result.Id, restored.Id);
+        Assert.Equal(result.Text, restored.Text);
+        Assert.Equal(result.ActorName, restored.ActorName);
+    }
+
+    private sealed class StubOrganizationContext(Guid organizationId, Guid userId) : ICurrentOrganizationContext
+    {
+        public Guid OrganizationId { get; } = organizationId;
+        public Guid UserId { get; } = userId;
+    }
+
+    private sealed class StubGrantLookup(bool hasGrant) : IOrganizationPermissionGrantLookup
+    {
+        public Guid OrganizationId { get; private set; }
+        public Guid UserId { get; private set; }
+        public string Permission { get; private set; } = string.Empty;
+
+        public Task<bool> HasGrantAsync(Guid organizationId, Guid userId, string permission,
+            CancellationToken cancellationToken)
+        {
+            OrganizationId = organizationId;
+            UserId = userId;
+            Permission = permission;
+            return Task.FromResult(hasGrant);
+        }
     }
 }

@@ -15,6 +15,12 @@ public static class ProposalHistoryRetentionRules
             : OrganizationTimeZone.GetUtcOffset(local);
         return new DateTimeOffset(local, offset).ToUniversalTime();
     }
+
+    public static bool IsExpired(DateTimeOffset occurredAtUtc, DateTimeOffset nowUtc, int retentionMonths) =>
+        nowUtc.ToUniversalTime() >= AddCivilMonthsUtc(occurredAtUtc, retentionMonths);
+
+    public static bool CanArchive(int generation, int latestGeneration, bool isTerminal) =>
+        isTerminal && generation == latestGeneration;
 }
 
 public static class ProposalIdempotencyKey
@@ -234,8 +240,16 @@ public sealed class ProposalIdempotencyRecord
     public string Operation { get; private set; } = string.Empty;
     public string Fingerprint { get; private set; } = string.Empty;
     public Guid ResultId { get; private set; }
+    public string? ResultPayloadJson { get; private set; }
     public DateTimeOffset KeyTimestampUtc { get; private set; }
     public DateTimeOffset StoredAtUtc { get; private set; }
+
+    public void StoreResultPayload(string resultPayloadJson)
+    {
+        if (string.IsNullOrWhiteSpace(resultPayloadJson))
+            throw new ArgumentException("An idempotency response snapshot is required.", nameof(resultPayloadJson));
+        ResultPayloadJson = resultPayloadJson;
+    }
 
     private static string Required(string value, int maxLength, string parameterName)
     {
@@ -397,24 +411,4 @@ public sealed class ProposalHistoryMigrationReconciliation
     public int MigratedCount { get; private set; }
     public int QuarantinedCount { get; private set; }
     public DateTimeOffset ReconciledAtUtc { get; private set; }
-}
-
-public sealed class ProposalAuditAggregate
-{
-    private ProposalAuditAggregate() { }
-    public ProposalAuditAggregate(Guid organizationId, int year, int month, string category, long count)
-    {
-        if (organizationId == Guid.Empty || year < 1 || month is < 1 or > 12 || count < 10)
-            throw new ArgumentException("Audit aggregate is below the publication threshold or invalid.");
-        OrganizationId = organizationId;
-        Year = year;
-        Month = month;
-        Category = category;
-        Count = count;
-    }
-    public Guid OrganizationId { get; private set; }
-    public int Year { get; private set; }
-    public int Month { get; private set; }
-    public string Category { get; private set; } = string.Empty;
-    public long Count { get; private set; }
 }

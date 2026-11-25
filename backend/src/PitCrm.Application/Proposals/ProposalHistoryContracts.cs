@@ -16,7 +16,8 @@ public sealed record ProposalReasonDto(Guid Id, string ResultStatus, string Labe
 public sealed record ProposalAuditEventDto(Guid Id, string Type, string Category, DateTimeOffset OccurredAtUtc,
     string? ActorName, string? DetailsJson);
 public sealed record ProposalAuditPageDto(IReadOnlyList<ProposalAuditEventDto> Items, int Page, int PageSize, int TotalCount);
-public sealed record ProposalHistoryWriteResult(ProposalHistoryEventDto? Event, ProposalFailure Failure, bool IsReplay = false);
+public sealed record ProposalHistoryWriteResult(ProposalHistoryEventDto? Event, ProposalFailure Failure,
+    bool IsReplay = false, ProposalDetailsDto? Proposal = null);
 public sealed record ProposalReasonWriteResult(ProposalReasonDto? Reason, ProposalFailure Failure, bool IsReplay = false);
 
 public interface IProposalHistoryStore

@@ -15,6 +15,7 @@ public sealed class PitCrmDbContext(
     : IdentityDbContext<ApplicationUser, IdentityRole<Guid>, Guid>(options)
 {
     public DbSet<Organization> Organizations => Set<Organization>();
+    public DbSet<OrganizationPermissionGrant> OrganizationPermissionGrants => Set<OrganizationPermissionGrant>();
 
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerLocation> CustomerLocations => Set<CustomerLocation>();
@@ -40,7 +41,6 @@ public sealed class PitCrmDbContext(
     public DbSet<ProposalTimelineArchive> ProposalTimelineArchives => Set<ProposalTimelineArchive>();
     public DbSet<ProposalLegacyQuarantine> ProposalLegacyQuarantine => Set<ProposalLegacyQuarantine>();
     public DbSet<ProposalHistoryMigrationReconciliation> ProposalHistoryMigrationReconciliations => Set<ProposalHistoryMigrationReconciliation>();
-    public DbSet<ProposalAuditAggregate> ProposalAuditAggregates => Set<ProposalAuditAggregate>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -56,6 +56,19 @@ public sealed class PitCrmDbContext(
             organization.Property(value => value.IsActive)
                 .HasDefaultValue(true)
                 .IsRequired();
+        });
+
+        builder.Entity<OrganizationPermissionGrant>(grant =>
+        {
+            grant.ToTable("OrganizationPermissionGrants");
+            grant.HasKey(value => new { value.OrganizationId, value.UserId, value.Permission });
+            grant.Property(value => value.Permission).HasMaxLength(100).IsRequired();
+            grant.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
+                .IsRequired().OnDelete(DeleteBehavior.Restrict);
+            grant.HasOne<ApplicationUser>().WithMany()
+                .HasForeignKey(value => new { value.OrganizationId, value.UserId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id })
+                .IsRequired().OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<Customer>(customer =>
@@ -425,6 +438,7 @@ public sealed class PitCrmDbContext(
             record.Property(value => value.TargetType).HasMaxLength(30).IsRequired();
             record.Property(value => value.Operation).HasMaxLength(60).IsRequired();
             record.Property(value => value.Fingerprint).HasMaxLength(64).IsRequired();
+            record.Property(value => value.ResultPayloadJson).HasColumnType("jsonb");
             record.Property(value => value.KeyTimestampUtc).IsRequired();
             record.Property(value => value.StoredAtUtc).IsRequired();
             record.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
@@ -500,17 +514,6 @@ public sealed class PitCrmDbContext(
             reconciliation.Property(value => value.QuarantinedCount).IsRequired();
             reconciliation.Property(value => value.ReconciledAtUtc).IsRequired();
             reconciliation.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
-                .IsRequired().OnDelete(DeleteBehavior.Restrict);
-        });
-
-        builder.Entity<ProposalAuditAggregate>(aggregate =>
-        {
-            aggregate.ToTable("ProposalAuditAggregates", table => table.HasCheckConstraint("CK_ProposalAuditAggregates_MinCount", "\"Count\" >= 10"));
-            aggregate.HasKey(value => new { value.OrganizationId, value.Year, value.Month, value.Category });
-            aggregate.Property(value => value.Month).IsRequired();
-            aggregate.Property(value => value.Category).HasMaxLength(40).IsRequired();
-            aggregate.Property(value => value.Count).IsRequired();
-            aggregate.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
                 .IsRequired().OnDelete(DeleteBehavior.Restrict);
         });
 

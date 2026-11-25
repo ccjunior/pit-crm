@@ -679,6 +679,24 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.ToTable("Organizations", (string)null);
                 });
 
+            modelBuilder.Entity("PitCrm.Domain.Organizations.OrganizationPermissionGrant", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Permission")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("OrganizationId", "UserId", "Permission");
+
+                    b.ToTable("OrganizationPermissionGrants", (string)null);
+                });
+
             modelBuilder.Entity("PitCrm.Domain.Proposals.CommercialActivity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -840,31 +858,6 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.ToTable("CommercialRequests", (string)null);
                 });
 
-            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditAggregate", b =>
-                {
-                    b.Property<Guid>("OrganizationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<int>("Year")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("Month")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("Category")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)");
-
-                    b.Property<long>("Count")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("OrganizationId", "Year", "Month", "Category");
-
-                    b.ToTable("ProposalAuditAggregates", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_ProposalAuditAggregates_MinCount", "\"Count\" >= 10");
-                        });
-                });
 
             modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditEvent", b =>
                 {
@@ -989,6 +982,9 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid>("ResultId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("ResultPayloadJson")
+                        .HasColumnType("jsonb");
 
                     b.Property<DateTimeOffset>("StoredAtUtc")
                         .HasColumnType("timestamp with time zone");
@@ -1802,14 +1798,6 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
-            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditAggregate", b =>
-                {
-                    b.HasOne("PitCrm.Domain.Organizations.Organization", null)
-                        .WithMany()
-                        .HasForeignKey("OrganizationId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
 
             modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditEvent", b =>
                 {
@@ -1856,6 +1844,22 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.HasOne("PitCrm.Domain.Organizations.Organization", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Organizations.OrganizationPermissionGrant", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "UserId")
+                        .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

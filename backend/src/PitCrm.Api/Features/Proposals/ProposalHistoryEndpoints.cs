@@ -51,7 +51,7 @@ public static class ProposalHistoryEndpoints
     private static async Task<IResult> ChangeStatusAsync(Guid id, ProposalOutcomeInput request,
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         ICurrentOrganizationContext context, IProposalHistoryStore historyStore,
-        IProposalStore proposalStore, CancellationToken cancellationToken)
+        CancellationToken cancellationToken)
     {
         var errors = new Dictionary<string, string[]>();
         if (request.Version < 1) errors[nameof(request.Version)] = ["A versão deve ser positiva."];
@@ -66,8 +66,7 @@ public static class ProposalHistoryEndpoints
         var result = await historyStore.ChangeStatusAsync(context.OrganizationId, id, context.UserId,
             key, request, DateTimeOffset.UtcNow, cancellationToken);
         if (result.Failure != ProposalFailure.None) return MapHistoryFailure(result.Failure, "reasonId");
-        var proposal = await proposalStore.FindAsync(context.OrganizationId, id, cancellationToken);
-        return proposal is null ? Results.NotFound() : Results.Ok(proposal);
+        return result.Proposal is null ? Results.NotFound() : Results.Ok(result.Proposal);
     }
 
     private static Task<IResult> RecordActivityAsync(Guid id, ProposalActivityInput request,

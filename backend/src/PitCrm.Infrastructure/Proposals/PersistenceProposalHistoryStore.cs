@@ -11,7 +11,7 @@ using PitCrm.Infrastructure.Persistence;
 
 namespace PitCrm.Infrastructure.Proposals;
 
-public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) : IProposalHistoryStore
+public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext, IProposalStore proposalStore) : IProposalHistoryStore
 {
     public async Task<ProposalHistoryPageDto?> GetTimelineAsync(Guid organizationId, Guid requestId,
         int page, int pageSize, CancellationToken cancellationToken)
@@ -96,13 +96,14 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) :
             return new ProposalHistoryWriteResult(null, ProposalFailure.InvalidData);
         var fingerprint = Fingerprint(new { Operation = "StageChanged", organizationId, requestId,
             actorUserId, input.Version, input.Status, input.ReasonId });
-        var replay = await FindReplayAsync(organizationId, "Proposal", requestId, idempotencyKey, fingerprint, cancellationToken);
+        var (replay, replayConflict) = await FindReplayAsync(organizationId, "Proposal", requestId, idempotencyKey, fingerprint, cancellationToken);
+        if (replayConflict) return new ProposalHistoryWriteResult(null, ProposalFailure.VersionConflict);
         if (replay is not null)
         {
-            if (replay == Guid.Empty) return new ProposalHistoryWriteResult(null, ProposalFailure.VersionConflict);
+            var payload = DeserializeReplay<StatusReplayPayload>(replay.ResultPayloadJson);
+            if (payload is null) return new ProposalHistoryWriteResult(null, ProposalFailure.InvalidState);
             await transaction.CommitAsync(cancellationToken);
-            var replayEvent = await LoadEventDtoAsync(organizationId, replay.Value, cancellationToken);
-            return new ProposalHistoryWriteResult(replayEvent, replayEvent is null ? ProposalFailure.InvalidState : ProposalFailure.None, true);
+            return new ProposalHistoryWriteResult(payload.Event, ProposalFailure.None, true, payload.Proposal);
         }
         if (request.Version != input.Version)
             return new ProposalHistoryWriteResult(null, ProposalFailure.VersionConflict);
@@ -114,6 +115,8 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) :
         ProposalReason? reason = null;
         if (input.ReasonId is { } reasonId)
         {
+            if (!await LockReasonAsync(organizationId, reasonId, cancellationToken))
+                return new ProposalHistoryWriteResult(null, ProposalFailure.InvalidData);
             reason = await dbContext.ProposalReasons.SingleOrDefaultAsync(value =>
                 value.OrganizationId == organizationId && value.Id == reasonId
                 && value.ResultStatus == input.Status && value.IsActive, cancellationToken);
@@ -123,6 +126,8 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) :
             return new ProposalHistoryWriteResult(null, ProposalFailure.InvalidData);
 
         var previousStatus = request.Status;
+        if (IsClosedStatus(previousStatus) && IsClosedStatus(input.Status!))
+            await RestoreIfEligibleAsync(organizationId, requestId, dbNow, actorUserId, cancellationToken);
         var converted = await dbContext.DemandDrafts.AnyAsync(value => value.OrganizationId == organizationId
             && value.ProposalRequestId == requestId && value.State == DemandDraft.Converted, cancellationToken);
         try
@@ -155,8 +160,16 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) :
             dbContext.ProposalIdempotencyRecords.Add(new ProposalIdempotencyRecord(organizationId, "Proposal",
                 requestId, idempotencyKey, "StageChanged", fingerprint, timelineEvent.Id, keyTime, dbNow));
             await dbContext.SaveChangesAsync(cancellationToken);
+            var eventDto = await LoadEventDtoAsync(organizationId, timelineEvent.Id, cancellationToken);
+            var proposalDto = await proposalStore.FindAsync(organizationId, requestId, cancellationToken);
+            if (eventDto is null || proposalDto is null)
+                return new ProposalHistoryWriteResult(null, ProposalFailure.InvalidState);
+            var idempotencyRecord = await dbContext.ProposalIdempotencyRecords.SingleAsync(value =>
+                value.OrganizationId == organizationId && value.Key == idempotencyKey, cancellationToken);
+            idempotencyRecord.StoreResultPayload(JsonSerializer.Serialize(new StatusReplayPayload(proposalDto, eventDto)));
+            await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return new ProposalHistoryWriteResult(await LoadEventDtoAsync(organizationId, timelineEvent.Id, cancellationToken), ProposalFailure.None);
+            return new ProposalHistoryWriteResult(eventDto, ProposalFailure.None, Proposal: proposalDto);
         }
         catch (DbUpdateConcurrencyException)
         {
@@ -194,17 +207,14 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) :
             return new ProposalReasonWriteResult(null, ProposalFailure.InvalidData);
         var fingerprint = Fingerprint(new { Operation = "ReasonCreated", organizationId,
             actorUserId, input.ResultStatus, label = input.Label.Trim() });
-        var replay = await FindReplayAsync(organizationId, "ReasonCatalog", targetId, idempotencyKey, fingerprint, cancellationToken);
+        var (replay, replayConflict) = await FindReplayAsync(organizationId, "ReasonCatalog", targetId, idempotencyKey, fingerprint, cancellationToken);
+        if (replayConflict) return new ProposalReasonWriteResult(null, ProposalFailure.VersionConflict);
         if (replay is not null)
         {
-            if (replay == Guid.Empty)
-                return new ProposalReasonWriteResult(null, ProposalFailure.VersionConflict);
+            var prior = DeserializeReplay<ProposalReasonDto>(replay.ResultPayloadJson);
+            if (prior is null) return new ProposalReasonWriteResult(null, ProposalFailure.InvalidData);
             await transaction.CommitAsync(cancellationToken);
-            var prior = await dbContext.ProposalReasons.AsNoTracking().Where(value =>
-                value.OrganizationId == organizationId && value.Id == replay)
-                .Select(value => new ProposalReasonDto(value.Id, value.ResultStatus, value.Label, value.IsActive))
-                .SingleOrDefaultAsync(cancellationToken);
-            return new ProposalReasonWriteResult(prior, prior is null ? ProposalFailure.NotFound : ProposalFailure.None, true);
+            return new ProposalReasonWriteResult(prior, ProposalFailure.None, true);
         }
         try
         {
@@ -214,12 +224,15 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) :
             dbContext.ProposalAuditEvents.Add(CreateAudit(organizationId, null, null,
                 "ReasonCreated", "Catálogo", actorUserId, dbNow,
                 JsonSerializer.Serialize(new { reason.Id, reason.ResultStatus, reason.Label })));
-            dbContext.ProposalIdempotencyRecords.Add(new ProposalIdempotencyRecord(organizationId,
-                "ReasonCatalog", targetId, idempotencyKey, "ReasonCreated", fingerprint, reason.Id, keyTime, dbNow));
+            var idempotencyRecord = new ProposalIdempotencyRecord(organizationId,
+                "ReasonCatalog", targetId, idempotencyKey, "ReasonCreated", fingerprint, reason.Id, keyTime, dbNow);
+            dbContext.ProposalIdempotencyRecords.Add(idempotencyRecord);
+            var dto = new ProposalReasonDto(reason.Id, reason.ResultStatus, reason.Label, reason.IsActive);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            idempotencyRecord.StoreResultPayload(JsonSerializer.Serialize(dto));
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return new ProposalReasonWriteResult(
-                new ProposalReasonDto(reason.Id, reason.ResultStatus, reason.Label, reason.IsActive), ProposalFailure.None);
+            return new ProposalReasonWriteResult(dto, ProposalFailure.None);
         }
         catch (DbUpdateException)
         {
@@ -243,17 +256,14 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) :
         if (!TryValidateKey(idempotencyKey, dbNow, out var keyTime))
             return new ProposalReasonWriteResult(null, ProposalFailure.InvalidData);
         var fingerprint = Fingerprint(new { Operation = "ReasonDeactivated", organizationId, reasonId, actorUserId });
-        var replay = await FindReplayAsync(organizationId, "ProposalReason", reasonId, idempotencyKey, fingerprint, cancellationToken);
+        var (replay, replayConflict) = await FindReplayAsync(organizationId, "ProposalReason", reasonId, idempotencyKey, fingerprint, cancellationToken);
+        if (replayConflict) return new ProposalReasonWriteResult(null, ProposalFailure.VersionConflict);
         if (replay is not null)
         {
-            if (replay == Guid.Empty)
-                return new ProposalReasonWriteResult(null, ProposalFailure.VersionConflict);
+            var prior = DeserializeReplay<ProposalReasonDto>(replay.ResultPayloadJson);
+            if (prior is null) return new ProposalReasonWriteResult(null, ProposalFailure.InvalidData);
             await transaction.CommitAsync(cancellationToken);
-            var prior = await dbContext.ProposalReasons.AsNoTracking().Where(value =>
-                value.OrganizationId == organizationId && value.Id == reasonId)
-                .Select(value => new ProposalReasonDto(value.Id, value.ResultStatus, value.Label, value.IsActive))
-                .SingleOrDefaultAsync(cancellationToken);
-            return new ProposalReasonWriteResult(prior, prior is null ? ProposalFailure.NotFound : ProposalFailure.None, true);
+            return new ProposalReasonWriteResult(prior, ProposalFailure.None, true);
         }
         var reason = await dbContext.ProposalReasons.SingleOrDefaultAsync(value =>
             value.OrganizationId == organizationId && value.Id == reasonId, cancellationToken);
@@ -262,14 +272,17 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) :
         dbContext.ProposalAuditEvents.Add(CreateAudit(organizationId, null, null,
             "ReasonDeactivated", "Catálogo", actorUserId, dbNow,
             JsonSerializer.Serialize(new { reason.Id, reason.ResultStatus, reason.Label })));
-        dbContext.ProposalIdempotencyRecords.Add(new ProposalIdempotencyRecord(organizationId,
-            "ProposalReason", reasonId, idempotencyKey, "ReasonDeactivated", fingerprint, reason.Id, keyTime, dbNow));
+        var idempotencyRecord = new ProposalIdempotencyRecord(organizationId,
+            "ProposalReason", reasonId, idempotencyKey, "ReasonDeactivated", fingerprint, reason.Id, keyTime, dbNow);
+        dbContext.ProposalIdempotencyRecords.Add(idempotencyRecord);
         try
         {
+            var dto = new ProposalReasonDto(reason.Id, reason.ResultStatus, reason.Label, reason.IsActive);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            idempotencyRecord.StoreResultPayload(JsonSerializer.Serialize(dto));
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return new ProposalReasonWriteResult(
-                new ProposalReasonDto(reason.Id, reason.ResultStatus, reason.Label, reason.IsActive), ProposalFailure.None);
+            return new ProposalReasonWriteResult(dto, ProposalFailure.None);
         }
         catch (DbUpdateException)
         {
@@ -341,13 +354,14 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) :
         var normalizedMentions = (input.MentionedUserIds ?? []).Distinct().Order().ToArray();
         var fingerprint = Fingerprint(new { Operation = eventType, organizationId, requestId, actorUserId,
             type = input.Type?.Trim(), text = input.Text?.Trim(), mentions = normalizedMentions });
-        var replay = await FindReplayAsync(organizationId, "Proposal", requestId, idempotencyKey, fingerprint, cancellationToken);
+        var (replay, replayConflict) = await FindReplayAsync(organizationId, "Proposal", requestId, idempotencyKey, fingerprint, cancellationToken);
+        if (replayConflict) return new ProposalHistoryWriteResult(null, ProposalFailure.VersionConflict);
         if (replay is not null)
         {
-            if (replay == Guid.Empty) return new ProposalHistoryWriteResult(null, ProposalFailure.VersionConflict);
+            var replayEvent = DeserializeReplay<ProposalHistoryEventDto>(replay.ResultPayloadJson);
+            if (replayEvent is null) return new ProposalHistoryWriteResult(null, ProposalFailure.InvalidState);
             await transaction.CommitAsync(cancellationToken);
-            var replayEvent = await LoadEventDtoAsync(organizationId, replay.Value, cancellationToken);
-            return new ProposalHistoryWriteResult(replayEvent, replayEvent is null ? ProposalFailure.NotFound : ProposalFailure.None, true);
+            return new ProposalHistoryWriteResult(replayEvent, ProposalFailure.None, true);
         }
         if (normalizedMentions.Length > 20 || normalizedMentions.Any(value => value == Guid.Empty))
             return new ProposalHistoryWriteResult(null, ProposalFailure.InvalidData);
@@ -375,11 +389,16 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) :
             dbContext.ProposalAuditEvents.Add(CreateAudit(organizationId, requestId, timelineEvent.Id,
                 eventType, category, actorUserId, dbNow,
                 JsonSerializer.Serialize(new { eventType, activityType, hasMentions = normalizedMentions.Length > 0 })));
-            dbContext.ProposalIdempotencyRecords.Add(new ProposalIdempotencyRecord(organizationId, "Proposal",
-                requestId, idempotencyKey, eventType, fingerprint, timelineEvent.Id, keyTime, dbNow));
+            var idempotencyRecord = new ProposalIdempotencyRecord(organizationId, "Proposal",
+                requestId, idempotencyKey, eventType, fingerprint, timelineEvent.Id, keyTime, dbNow);
+            dbContext.ProposalIdempotencyRecords.Add(idempotencyRecord);
+            await dbContext.SaveChangesAsync(cancellationToken);
+            var result = await LoadEventDtoAsync(organizationId, timelineEvent.Id, cancellationToken);
+            if (result is null) return new ProposalHistoryWriteResult(null, ProposalFailure.InvalidState);
+            idempotencyRecord.StoreResultPayload(JsonSerializer.Serialize(result));
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return new ProposalHistoryWriteResult(await LoadEventDtoAsync(organizationId, timelineEvent.Id, cancellationToken), ProposalFailure.None);
+            return new ProposalHistoryWriteResult(result, ProposalFailure.None);
         }
         catch (DbUpdateException)
         {
@@ -432,16 +451,20 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) :
             value.FromStatus, value.ToStatus, value.ReasonLabelSnapshot, value.ActivityType, value.Text, mentionIds);
     }
 
-    private async Task<Guid?> FindReplayAsync(Guid organizationId, string targetType, Guid targetId, Guid key, string fingerprint,
+    private async Task<(ProposalIdempotencyRecord? Record, bool Conflict)> FindReplayAsync(Guid organizationId,
+        string targetType, Guid targetId, Guid key, string fingerprint,
         CancellationToken cancellationToken)
     {
         var record = await dbContext.ProposalIdempotencyRecords.AsNoTracking().SingleOrDefaultAsync(value =>
             value.OrganizationId == organizationId && value.Key == key, cancellationToken);
-        if (record is null) return null;
-        if (record.TargetType != targetType || record.TargetId != targetId) return Guid.Empty;
+        if (record is null) return (null, false);
+        if (record.TargetType != targetType || record.TargetId != targetId) return (record, true);
         return CryptographicOperations.FixedTimeEquals(Convert.FromHexString(record.Fingerprint),
-            Convert.FromHexString(fingerprint)) ? record.ResultId : Guid.Empty;
+            Convert.FromHexString(fingerprint)) ? (record, false) : (record, true);
     }
+
+    private static T? DeserializeReplay<T>(string? payloadJson) where T : class =>
+        payloadJson is null ? null : JsonSerializer.Deserialize<T>(payloadJson);
 
     private async Task<long> ReserveSequenceAsync(Guid organizationId, Guid requestId,
         CancellationToken cancellationToken)
@@ -502,6 +525,8 @@ public sealed class PersistenceProposalHistoryStore(PitCrmDbContext dbContext) :
         string eventType, string category, Guid actorUserId, DateTimeOffset now, string? details) =>
         new(Guid.NewGuid(), organizationId, eventType, category, ProposalHistoryActorTypes.Human,
             actorUserId, null, now, requestId, eventId, details);
+
+    private sealed record StatusReplayPayload(ProposalDetailsDto Proposal, ProposalHistoryEventDto Event);
 
     private static bool IsClosedStatus(string status) => status == CommercialRequest.Approved
         || CommercialRequest.ResultStatuses.Contains(status, StringComparer.Ordinal);
