@@ -10,6 +10,7 @@ using PitCrm.Api.Features.Locations;
 using PitCrm.Api.Features.Demands;
 using PitCrm.Api.Features.Proposals;
 using PitCrm.Api.Features.Users;
+using PitCrm.Api.Features.Organizations;
 using PitCrm.Application.Authorization;
 using PitCrm.Application.Organizations.Provisioning;
 using PitCrm.Application.Users.EligibleAssignees;
@@ -132,6 +133,9 @@ builder.Services.AddAuthorization(options =>
         policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
             .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
     options.AddPolicy(AuthorizationPolicies.ManageProposalReasons, policy =>
+        policy.RequireRole(RoleNames.Administrator)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
+    options.AddPolicy(AuthorizationPolicies.ManageOrganizationPermissionGrants, policy =>
         policy.RequireRole(RoleNames.Administrator)
             .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
     options.AddPolicy(AuthorizationPolicies.MentionProposalUsers, policy =>
@@ -334,6 +338,7 @@ CustomerContactEndpoints.Map(app);
 DemandEndpoints.Map(app);
 ProposalEndpoints.Map(app);
 ProposalHistoryEndpoints.Map(app);
+PermissionGrantEndpoints.Map(app);
 DemandDraftEndpoints.Map(app);
 TeamEndpoints.Map(app);
 

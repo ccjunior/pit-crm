@@ -9,6 +9,7 @@ using PitCrm.Infrastructure.Persistence;
 using PitCrm.Infrastructure.Identity;
 using System.Text.Json;
 using PitCrm.Api.Features.Proposals;
+using PitCrm.Api.Features.Organizations;
 using PitCrm.Api.Authorization;
 using PitCrm.Application.Authorization;
 using PitCrm.Application.Proposals;
@@ -128,6 +129,49 @@ public sealed class ProposalHistoryDomainTests
     }
 
     [Fact]
+    public void Permission_grant_audit_requires_separate_supported_action_and_justification()
+    {
+        var organizationId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        var recipientId = Guid.NewGuid();
+        var now = DateTimeOffset.Parse("2026-11-26T12:00:00-03:00");
+
+        var audit = new OrganizationPermissionGrantAudit(organizationId, actorId, recipientId,
+            AuthorizationPolicies.ViewProposalAuditGrant, "Granted", now, "Cobertura de auditoria");
+
+        Assert.Equal(now.ToUniversalTime(), audit.OccurredAtUtc);
+        Assert.Equal("Cobertura de auditoria", audit.Justification);
+        Assert.Throws<ArgumentException>(() => new OrganizationPermissionGrantAudit(organizationId,
+            actorId, actorId, AuthorizationPolicies.ViewProposalAuditGrant, "Granted", now, "Justificativa"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new OrganizationPermissionGrantAudit(organizationId,
+            actorId, recipientId, "ManageProposals", "Granted", now, "Justificativa"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new OrganizationPermissionGrantAudit(organizationId,
+            actorId, recipientId, AuthorizationPolicies.ViewProposalAuditGrant, "Updated", now, "Justificativa"));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new OrganizationPermissionGrantAudit(organizationId,
+            actorId, recipientId, AuthorizationPolicies.ViewProposalAuditGrant, "Granted", now, " "));
+    }
+
+    [Fact]
+    public void Permission_grant_audit_model_has_tenant_scoped_actor_and_recipient_foreign_keys()
+    {
+        var options = new DbContextOptionsBuilder<PitCrmDbContext>()
+            .UseNpgsql("Host=127.0.0.1;Database=not_used;Username=not_used")
+            .Options;
+        using var dbContext = new PitCrmDbContext(options);
+        var entity = dbContext.Model.FindEntityType(typeof(OrganizationPermissionGrantAudit))!;
+
+        Assert.Equal("OrganizationPermissionGrantAudits", entity.GetTableName());
+        Assert.Contains(entity.GetForeignKeys(), foreignKey =>
+            foreignKey.PrincipalEntityType.ClrType == typeof(ApplicationUser)
+            && foreignKey.Properties.Select(property => property.Name)
+                .SequenceEqual(new[] { "OrganizationId", "ActorUserId" }));
+        Assert.Contains(entity.GetForeignKeys(), foreignKey =>
+            foreignKey.PrincipalEntityType.ClrType == typeof(ApplicationUser)
+            && foreignKey.Properties.Select(property => property.Name)
+                .SequenceEqual(new[] { "OrganizationId", "TargetUserId" }));
+    }
+
+    [Fact]
     public void Audit_redaction_removes_actor_and_target_identifiers()
     {
         var orgId = Guid.NewGuid();
@@ -168,11 +212,14 @@ public sealed class ProposalHistoryDomainTests
         var builder = WebApplication.CreateBuilder();
         builder.Services.AddAuthorization();
         builder.Services.AddHttpContextAccessor();
+        builder.Services.AddDbContext<PitCrmDbContext>(options =>
+            options.UseNpgsql("Host=127.0.0.1;Database=not_used;Username=not_used"));
         builder.Services.AddScoped<ICurrentOrganizationContext, HttpCurrentOrganizationContext>();
         builder.Services.AddScoped<IProposalHistoryStore, PersistenceProposalHistoryStore>();
         builder.Services.AddScoped<IProposalStore, PersistenceProposalStore>();
         await using var app = builder.Build();
         ProposalHistoryEndpoints.Map(app);
+        PermissionGrantEndpoints.Map(app);
 
         var endpoints = ((IEndpointRouteBuilder)app).DataSources
             .SelectMany(source => source.Endpoints).OfType<RouteEndpoint>().ToArray();
@@ -180,11 +227,19 @@ public sealed class ProposalHistoryDomainTests
             endpoint.RoutePattern.RawText == "/api/demands/{id:guid}/proposal-timeline");
         var audit = Assert.Single(endpoints, endpoint =>
             endpoint.RoutePattern.RawText == "/api/proposals/{id:guid}/audit");
+        var grant = Assert.Single(endpoints, endpoint =>
+            endpoint.RoutePattern.RawText == "/api/organization/permission-grants/{permission}/{userId:guid}");
+        var revoke = Assert.Single(endpoints, endpoint =>
+            endpoint.RoutePattern.RawText == "/api/organization/permission-grants/{permission}/{userId:guid}/revoke");
 
         Assert.Contains(operatorTimeline.Metadata.GetOrderedMetadata<IAuthorizeData>(),
             metadata => metadata.Policy == AuthorizationPolicies.OperateDemands);
         Assert.Contains(audit.Metadata.GetOrderedMetadata<IAuthorizeData>(),
             metadata => metadata.Policy == AuthorizationPolicies.ViewProposalAudit);
+        Assert.Contains(grant.Metadata.GetOrderedMetadata<IAuthorizeData>(),
+            metadata => metadata.Policy == AuthorizationPolicies.ManageOrganizationPermissionGrants);
+        Assert.Contains(revoke.Metadata.GetOrderedMetadata<IAuthorizeData>(),
+            metadata => metadata.Policy == AuthorizationPolicies.ManageOrganizationPermissionGrants);
     }
 
     [Fact]

@@ -8,6 +8,7 @@ public static class AuthorizationPolicies
     public const string OperateDemands = "OperateDemands";
     public const string ManageProposals = "ManageProposals";
     public const string ManageProposalReasons = "ManageProposalReasons";
+    public const string ManageOrganizationPermissionGrants = "ManageOrganizationPermissionGrants";
     public const string MentionProposalUsers = "MentionProposalUsers";
     public const string ViewProposalAudit = "ViewProposalAudit";
     public const string RestoreProposalTimeline = "RestoreProposalTimeline";

@@ -16,6 +16,7 @@ public sealed class PitCrmDbContext(
 {
     public DbSet<Organization> Organizations => Set<Organization>();
     public DbSet<OrganizationPermissionGrant> OrganizationPermissionGrants => Set<OrganizationPermissionGrant>();
+    public DbSet<OrganizationPermissionGrantAudit> OrganizationPermissionGrantAudits => Set<OrganizationPermissionGrantAudit>();
 
     public DbSet<Customer> Customers => Set<Customer>();
     public DbSet<CustomerLocation> CustomerLocations => Set<CustomerLocation>();
@@ -69,6 +70,23 @@ public sealed class PitCrmDbContext(
                 .HasForeignKey(value => new { value.OrganizationId, value.UserId })
                 .HasPrincipalKey(value => new { value.OrganizationId, value.Id })
                 .IsRequired().OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<OrganizationPermissionGrantAudit>(audit =>
+        {
+            audit.ToTable("OrganizationPermissionGrantAudits");
+            audit.HasKey(value => value.Id);
+            audit.Property(value => value.Permission).HasMaxLength(100).IsRequired();
+            audit.Property(value => value.Action).HasMaxLength(20).IsRequired();
+            audit.Property(value => value.Justification).HasMaxLength(500).IsRequired();
+            audit.Property(value => value.OccurredAtUtc).IsRequired();
+            audit.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
+                .IsRequired().OnDelete(DeleteBehavior.Restrict);
+            audit.HasOne<ApplicationUser>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.ActorUserId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            audit.HasOne<ApplicationUser>().WithMany().HasForeignKey(value => new { value.OrganizationId, value.TargetUserId })
+                .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).IsRequired().OnDelete(DeleteBehavior.Restrict);
+            audit.HasIndex(value => new { value.OrganizationId, value.OccurredAtUtc });
         });
 
         builder.Entity<Customer>(customer =>
