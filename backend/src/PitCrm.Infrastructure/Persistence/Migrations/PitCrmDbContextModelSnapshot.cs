@@ -922,6 +922,32 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.ToTable("ProposalAuditAggregateContributions", (string)null);
                 });
 
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditAggregateMonth", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("MonthStart")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("InvalidatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("SealedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.HasKey("OrganizationId", "MonthStart");
+
+                    b.HasIndex("State", "MonthStart");
+
+                    b.ToTable("ProposalAuditAggregateMonths", (string)null);
+                });
+
             modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditAggregateQuarantine", b =>
                 {
                     b.Property<Guid>("OrganizationId")
@@ -1965,6 +1991,15 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.HasOne("PitCrm.Domain.Proposals.ProposalAuditAggregateWindow", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "MonthStart", "Category")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditAggregateMonth", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

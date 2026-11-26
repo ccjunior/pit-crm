@@ -12,6 +12,12 @@ public sealed class PersistenceProposalAuditAggregateStore(PitCrmDbContext dbCon
     public async Task<ProposalAuditAggregateMonthDto> GetPublishedMonthAsync(Guid organizationId,
         DateOnly monthStart, CancellationToken cancellationToken)
     {
+        var isSealed = await dbContext.ProposalAuditAggregateMonths.AsNoTracking().AnyAsync(value =>
+            value.OrganizationId == organizationId && value.MonthStart == monthStart
+            && value.State == ProposalAuditAggregateWindowStates.Sealed, cancellationToken);
+        if (!isSealed)
+            return new ProposalAuditAggregateMonthDto(monthStart.ToString("yyyy-MM", CultureInfo.InvariantCulture), []);
+
         var counts = await dbContext.ProposalAuditAggregateWindows.AsNoTracking()
             .Where(value => value.OrganizationId == organizationId && value.MonthStart == monthStart
                 && value.State == ProposalAuditAggregateWindowStates.Sealed)

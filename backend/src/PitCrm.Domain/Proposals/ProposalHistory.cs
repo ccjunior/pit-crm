@@ -384,6 +384,41 @@ public static class ProposalAuditAggregateWindowStates
     public const string Invalidated = "Invalidated";
 }
 
+public sealed class ProposalAuditAggregateMonth
+{
+    private ProposalAuditAggregateMonth() { }
+
+    public ProposalAuditAggregateMonth(Guid organizationId, DateOnly monthStart)
+    {
+        if (organizationId == Guid.Empty || monthStart.Day != 1)
+            throw new ArgumentException("Audit aggregate month identity is invalid.");
+        OrganizationId = organizationId;
+        MonthStart = monthStart;
+        State = ProposalAuditAggregateWindowStates.Open;
+    }
+
+    public Guid OrganizationId { get; private set; }
+    public DateOnly MonthStart { get; private set; }
+    public string State { get; private set; } = ProposalAuditAggregateWindowStates.Open;
+    public DateTimeOffset? SealedAtUtc { get; private set; }
+    public DateTimeOffset? InvalidatedAtUtc { get; private set; }
+
+    public void Seal(DateTimeOffset nowUtc)
+    {
+        if (State != ProposalAuditAggregateWindowStates.Open)
+            throw new InvalidOperationException("Only an open aggregate month can be sealed.");
+        State = ProposalAuditAggregateWindowStates.Sealed;
+        SealedAtUtc = nowUtc.ToUniversalTime();
+    }
+
+    public void Invalidate(DateTimeOffset nowUtc)
+    {
+        if (State is not (ProposalAuditAggregateWindowStates.Open or ProposalAuditAggregateWindowStates.Sealed)) return;
+        State = ProposalAuditAggregateWindowStates.Invalidated;
+        InvalidatedAtUtc = nowUtc.ToUniversalTime();
+    }
+}
+
 public static class ProposalAuditAggregatePublicationRules
 {
     public const long MinimumDistinctRequests = 10;

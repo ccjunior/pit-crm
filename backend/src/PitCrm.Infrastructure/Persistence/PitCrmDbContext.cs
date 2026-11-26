@@ -39,6 +39,7 @@ public sealed class PitCrmDbContext(
     public DbSet<ProposalIdempotencyRecord> ProposalIdempotencyRecords => Set<ProposalIdempotencyRecord>();
     public DbSet<ProposalAuditEvent> ProposalAuditEvents => Set<ProposalAuditEvent>();
     public DbSet<ProposalAuditAggregateWindow> ProposalAuditAggregateWindows => Set<ProposalAuditAggregateWindow>();
+    public DbSet<ProposalAuditAggregateMonth> ProposalAuditAggregateMonths => Set<ProposalAuditAggregateMonth>();
     public DbSet<ProposalAuditAggregateContribution> ProposalAuditAggregateContributions => Set<ProposalAuditAggregateContribution>();
     public DbSet<ProposalAuditAggregateQuarantine> ProposalAuditAggregateQuarantines => Set<ProposalAuditAggregateQuarantine>();
     public DbSet<ProposalRetentionCycle> ProposalRetentionCycles => Set<ProposalRetentionCycle>();
@@ -501,6 +502,16 @@ public sealed class PitCrmDbContext(
             window.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
                 .IsRequired().OnDelete(DeleteBehavior.Restrict);
             window.HasIndex(value => new { value.State, value.MonthStart });
+        });
+
+        builder.Entity<ProposalAuditAggregateMonth>(month =>
+        {
+            month.ToTable("ProposalAuditAggregateMonths");
+            month.HasKey(value => new { value.OrganizationId, value.MonthStart });
+            month.Property(value => value.State).HasMaxLength(12).IsRequired();
+            month.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
+                .IsRequired().OnDelete(DeleteBehavior.Restrict);
+            month.HasIndex(value => new { value.State, value.MonthStart });
         });
 
         builder.Entity<ProposalAuditAggregateContribution>(contribution =>

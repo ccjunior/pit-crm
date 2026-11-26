@@ -23,6 +23,25 @@ public sealed class PersistenceProposalAuditAggregateProcessor(
         var monthStart = ProposalHistoryRetentionRules.LocalMonthStart(auditEvent.OccurredAtUtc);
         await AcquireMonthLockAsync(auditEvent.OrganizationId, monthStart, cancellationToken);
         await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO "ProposalAuditAggregateMonths"
+                ("OrganizationId", "MonthStart", "State")
+            VALUES ({auditEvent.OrganizationId}, {monthStart}, {ProposalAuditAggregateWindowStates.Open})
+            ON CONFLICT ("OrganizationId", "MonthStart") DO NOTHING
+            """, cancellationToken);
+        var month = await LockMonthAsync(auditEvent.OrganizationId, monthStart, cancellationToken);
+        var matureAt = ProposalHistoryRetentionRules.AuditAggregateMonthMaturesAtUtc(monthStart);
+        if (month.State != ProposalAuditAggregateWindowStates.Open || nowUtc.ToUniversalTime() >= matureAt)
+        {
+            month.Invalidate(nowUtc);
+            var existingWindows = await dbContext.ProposalAuditAggregateWindows.Where(value =>
+                value.OrganizationId == auditEvent.OrganizationId && value.MonthStart == monthStart)
+                .ToListAsync(cancellationToken);
+            foreach (var existingWindow in existingWindows) existingWindow.Invalidate(nowUtc);
+            await QuarantineAsync(auditEvent.OrganizationId, monthStart, category, nowUtc, cancellationToken);
+            return;
+        }
+
+        await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO "ProposalAuditAggregateWindows"
                 ("OrganizationId", "MonthStart", "Category", "State", "DistinctRequestCount")
             VALUES ({auditEvent.OrganizationId}, {monthStart}, {category},
@@ -30,28 +49,14 @@ public sealed class PersistenceProposalAuditAggregateProcessor(
             ON CONFLICT ("OrganizationId", "MonthStart", "Category") DO NOTHING
             """, cancellationToken);
         var window = await LockWindowAsync(auditEvent.OrganizationId, monthStart, category, cancellationToken);
-        var monthInvalidated = dbContext.ChangeTracker.Entries<ProposalAuditAggregateWindow>()
-            .Any(entry => entry.Entity.OrganizationId == auditEvent.OrganizationId
-                && entry.Entity.MonthStart == monthStart
-                && entry.Entity.State == ProposalAuditAggregateWindowStates.Invalidated)
-            || await dbContext.ProposalAuditAggregateWindows.AsNoTracking().AnyAsync(value =>
-            value.OrganizationId == auditEvent.OrganizationId && value.MonthStart == monthStart
-            && value.State == ProposalAuditAggregateWindowStates.Invalidated, cancellationToken);
-        if (window.State is ProposalAuditAggregateWindowStates.Sealed or ProposalAuditAggregateWindowStates.Invalidated
-            || monthInvalidated)
+        if (window.State is ProposalAuditAggregateWindowStates.Sealed or ProposalAuditAggregateWindowStates.Invalidated)
         {
+            month.Invalidate(nowUtc);
             var monthWindows = await dbContext.ProposalAuditAggregateWindows.Where(value =>
                 value.OrganizationId == auditEvent.OrganizationId && value.MonthStart == monthStart)
                 .ToListAsync(cancellationToken);
             foreach (var monthWindow in monthWindows) monthWindow.Invalidate(nowUtc);
-            var quarantine = await dbContext.ProposalAuditAggregateQuarantines.SingleOrDefaultAsync(value =>
-                value.OrganizationId == auditEvent.OrganizationId && value.MonthStart == monthStart
-                && value.Category == category, cancellationToken);
-            if (quarantine is null)
-                dbContext.ProposalAuditAggregateQuarantines.Add(new ProposalAuditAggregateQuarantine(
-                    auditEvent.OrganizationId, monthStart, category, nowUtc));
-            else
-                quarantine.Add(nowUtc);
+            await QuarantineAsync(auditEvent.OrganizationId, monthStart, category, nowUtc, cancellationToken);
             return;
         }
 
@@ -69,9 +74,9 @@ public sealed class PersistenceProposalAuditAggregateProcessor(
         if (dbContext.Database.CurrentTransaction is null)
             throw new InvalidOperationException("Audit aggregate sealing must run in a transaction.");
         var now = nowUtc.ToUniversalTime();
-        var candidates = await dbContext.ProposalAuditAggregateWindows.AsNoTracking()
+        var candidates = await dbContext.ProposalAuditAggregateMonths.AsNoTracking()
             .Where(value => value.State == ProposalAuditAggregateWindowStates.Open)
-            .Select(value => new { value.OrganizationId, value.MonthStart }).Distinct()
+            .Select(value => new { value.OrganizationId, value.MonthStart })
             .OrderBy(value => value.OrganizationId).ThenBy(value => value.MonthStart).Take(100)
             .ToListAsync(cancellationToken);
 
@@ -81,14 +86,13 @@ public sealed class PersistenceProposalAuditAggregateProcessor(
             var monthStart = candidate.MonthStart;
             if (now < ProposalHistoryRetentionRules.AuditAggregateMonthMaturesAtUtc(monthStart)) continue;
             await AcquireMonthLockAsync(organizationId, monthStart, cancellationToken);
-            if (await dbContext.ProposalAuditAggregateWindows.AsNoTracking().AnyAsync(value =>
-                    value.OrganizationId == organizationId && value.MonthStart == monthStart
-                    && value.State == ProposalAuditAggregateWindowStates.Invalidated, cancellationToken)) continue;
+            var month = await LockMonthAsync(organizationId, monthStart, cancellationToken);
+            if (month.State != ProposalAuditAggregateWindowStates.Open) continue;
             var windows = await dbContext.ProposalAuditAggregateWindows.Where(value =>
                     value.OrganizationId == organizationId && value.MonthStart == monthStart
                     && value.State == ProposalAuditAggregateWindowStates.Open)
                 .OrderBy(value => value.Category).ToListAsync(cancellationToken);
-            if (windows.Count == 0 || !await IsMigrationReconciledAsync(organizationId, cancellationToken)) continue;
+            if (!await IsMigrationReconciledAsync(organizationId, cancellationToken)) continue;
 
             var range = ProposalHistoryRetentionRules.AuditAggregateMonthUtcRange(monthStart);
             var pending = await dbContext.ProposalAuditEvents.AsNoTracking().Where(value =>
@@ -106,6 +110,7 @@ public sealed class PersistenceProposalAuditAggregateProcessor(
                         cancellationToken);
                 window.Seal(distinctCount, now);
             }
+            month.Seal(now);
             await dbContext.SaveChangesAsync(cancellationToken);
             await dbContext.Database.ExecuteSqlInterpolatedAsync($"""
                 DELETE FROM "ProposalAuditAggregateContributions"
@@ -131,6 +136,28 @@ public sealed class PersistenceProposalAuditAggregateProcessor(
             FOR UPDATE
             """)
         .SingleAsync(cancellationToken);
+
+    private async Task<ProposalAuditAggregateMonth> LockMonthAsync(Guid organizationId, DateOnly monthStart,
+        CancellationToken cancellationToken) => await dbContext.ProposalAuditAggregateMonths
+        .FromSqlInterpolated($"""
+            SELECT * FROM "ProposalAuditAggregateMonths"
+            WHERE "OrganizationId" = {organizationId} AND "MonthStart" = {monthStart}
+            FOR UPDATE
+            """)
+        .SingleAsync(cancellationToken);
+
+    private async Task QuarantineAsync(Guid organizationId, DateOnly monthStart, string category,
+        DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        var quarantine = await dbContext.ProposalAuditAggregateQuarantines.SingleOrDefaultAsync(value =>
+            value.OrganizationId == organizationId && value.MonthStart == monthStart
+            && value.Category == category, cancellationToken);
+        if (quarantine is null)
+            dbContext.ProposalAuditAggregateQuarantines.Add(new ProposalAuditAggregateQuarantine(
+                organizationId, monthStart, category, nowUtc));
+        else
+            quarantine.Add(nowUtc);
+    }
 
     private async Task<bool> IsMigrationReconciledAsync(Guid organizationId, CancellationToken cancellationToken)
     {

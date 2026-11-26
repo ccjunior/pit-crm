@@ -340,6 +340,21 @@ public sealed class ProposalHistoryDomainTests
     }
 
     [Fact]
+    public void Aggregate_month_can_seal_without_category_windows_and_late_arrival_is_terminal()
+    {
+        var month = new ProposalAuditAggregateMonth(Guid.NewGuid(), new DateOnly(2025, 1, 1));
+        var sealedAt = DateTimeOffset.Parse("2026-02-01T12:00:00Z");
+
+        month.Seal(sealedAt);
+
+        Assert.Equal(ProposalAuditAggregateWindowStates.Sealed, month.State);
+        Assert.Equal(sealedAt, month.SealedAtUtc);
+        month.Invalidate(sealedAt.AddMinutes(1));
+        Assert.Equal(ProposalAuditAggregateWindowStates.Invalidated, month.State);
+        Assert.Throws<InvalidOperationException>(() => month.Seal(sealedAt.AddMinutes(2)));
+    }
+
+    [Fact]
     public async Task History_routes_are_mapped_with_explicit_policy_metadata()
     {
         var builder = WebApplication.CreateBuilder();
