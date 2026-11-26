@@ -427,9 +427,11 @@ public static class ProposalAuditAggregatePublicationRules
     {
         var visible = counts.Where(value => value.Value >= MinimumDistinctRequests)
             .ToDictionary(value => value.Key, value => value.Value, StringComparer.Ordinal);
-        if (counts.TryGetValue(ProposalAuditAggregateCategories.Transitions, out var transitions)
-            && counts.TryGetValue(ProposalAuditAggregateCategories.Catalog, out var catalog)
-            && (catalog > transitions || transitions - catalog < MinimumDistinctRequests))
+        var hasTransitions = counts.TryGetValue(ProposalAuditAggregateCategories.Transitions, out var transitions);
+        var hasCatalog = counts.TryGetValue(ProposalAuditAggregateCategories.Catalog, out var catalog);
+        if ((hasTransitions || hasCatalog)
+            && (!hasTransitions || !hasCatalog || catalog < MinimumDistinctRequests
+                || catalog > transitions || transitions - catalog < MinimumDistinctRequests))
         {
             visible.Remove(ProposalAuditAggregateCategories.Transitions);
             visible.Remove(ProposalAuditAggregateCategories.Catalog);

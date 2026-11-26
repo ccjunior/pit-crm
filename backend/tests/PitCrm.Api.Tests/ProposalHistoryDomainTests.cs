@@ -113,6 +113,27 @@ public sealed class ProposalHistoryDomainTests
         Assert.Equal(40, separatedPair[ProposalAuditAggregateCategories.Transitions]);
         Assert.Equal(22, separatedPair[ProposalAuditAggregateCategories.Catalog]);
         Assert.DoesNotContain(ProposalAuditAggregateCategories.Retention, separatedPair.Keys);
+
+        var missingCatalog = ProposalAuditAggregatePublicationRules.FilterPublicCounts(
+            new Dictionary<string, long>
+            {
+                [ProposalAuditAggregateCategories.Transitions] = 40,
+                [ProposalAuditAggregateCategories.ActivityAndComments] = 15
+            });
+        Assert.DoesNotContain(ProposalAuditAggregateCategories.Transitions, missingCatalog.Keys);
+        Assert.Equal(15, missingCatalog[ProposalAuditAggregateCategories.ActivityAndComments]);
+
+        foreach (var catalogCount in new long[] { 0, 9 })
+        {
+            var suppressedComplement = ProposalAuditAggregatePublicationRules.FilterPublicCounts(
+                new Dictionary<string, long>
+                {
+                    [ProposalAuditAggregateCategories.Transitions] = 40,
+                    [ProposalAuditAggregateCategories.Catalog] = catalogCount
+                });
+            Assert.DoesNotContain(ProposalAuditAggregateCategories.Transitions, suppressedComplement.Keys);
+            Assert.DoesNotContain(ProposalAuditAggregateCategories.Catalog, suppressedComplement.Keys);
+        }
     }
 
     [Fact]
