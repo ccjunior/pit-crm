@@ -65,6 +65,17 @@ public sealed class ProposalHistoryDomainTests
     }
 
     [Fact]
+    public void First_unexpired_audit_instant_matches_per_event_civil_cutoff_at_database_precision()
+    {
+        var now = DateTimeOffset.Parse("2026-11-26T15:00:00.123456Z");
+        var firstUnexpired = ProposalHistoryRetentionRules.FirstUnexpiredOccurrenceUtc(now, 12);
+
+        Assert.Equal(TimeSpan.Zero, firstUnexpired.Offset);
+        Assert.True(ProposalHistoryRetentionRules.IsExpired(firstUnexpired.AddTicks(-10), now, 12));
+        Assert.False(ProposalHistoryRetentionRules.IsExpired(firstUnexpired, now, 12));
+    }
+
+    [Fact]
     public void Retention_cycle_archiving_requires_latest_generation_and_terminal_proposal()
     {
         Assert.True(ProposalHistoryRetentionRules.CanArchive(3, 3, isTerminal: true));

@@ -19,6 +19,25 @@ public static class ProposalHistoryRetentionRules
     public static bool IsExpired(DateTimeOffset occurredAtUtc, DateTimeOffset nowUtc, int retentionMonths) =>
         nowUtc.ToUniversalTime() >= AddCivilMonthsUtc(occurredAtUtc, retentionMonths);
 
+    public static DateTimeOffset FirstUnexpiredOccurrenceUtc(DateTimeOffset nowUtc, int retentionMonths)
+    {
+        if (retentionMonths < 1) throw new ArgumentOutOfRangeException(nameof(retentionMonths));
+        var now = nowUtc.ToUniversalTime();
+        var low = now.AddMonths(-retentionMonths).AddDays(-2).Ticks;
+        var high = now.Ticks;
+        while (high - low > 1)
+        {
+            var middle = low + (high - low) / 2;
+            if (IsExpired(new DateTimeOffset(middle, TimeSpan.Zero), now, retentionMonths)) low = middle;
+            else high = middle;
+        }
+
+        // PostgreSQL timestamps have microsecond precision; ceil to the first representable
+        // instant that is still inside the retention window.
+        var cutoffTicks = ((high + 9) / 10) * 10;
+        return new DateTimeOffset(cutoffTicks, TimeSpan.Zero);
+    }
+
     public static bool CanArchive(int generation, int latestGeneration, bool isTerminal) =>
         isTerminal && generation == latestGeneration;
 }

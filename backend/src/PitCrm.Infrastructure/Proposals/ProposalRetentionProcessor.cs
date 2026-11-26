@@ -102,7 +102,7 @@ public sealed class ProposalRetentionProcessor(PitCrmDbContext dbContext) : IPro
     private async Task RedactExpiredAuditAsync(DateTimeOffset dbNow, CancellationToken cancellationToken)
     {
         var candidates = await dbContext.ProposalAuditEvents.AsNoTracking()
-            .Where(value => value.DetailsJson != null).OrderBy(value => value.OccurredAtUtc)
+            .Where(value => value.RedactedAtUtc == null).OrderBy(value => value.OccurredAtUtc)
             .Select(value => new { value.Id, value.OrganizationId, value.OccurredAtUtc })
             .Take(500).ToListAsync(cancellationToken);
         var expired = candidates.Where(value =>
@@ -114,7 +114,7 @@ public sealed class ProposalRetentionProcessor(PitCrmDbContext dbContext) : IPro
             if (!await TryAcquireAuditLockAsync($"proposal-audit-row:{candidate.Id:N}", cancellationToken)) continue;
             var audit = await dbContext.ProposalAuditEvents.SingleOrDefaultAsync(value =>
                 value.OrganizationId == candidate.OrganizationId && value.Id == candidate.Id
-                && value.DetailsJson != null, cancellationToken);
+                && value.RedactedAtUtc == null, cancellationToken);
             if (audit is null || !ProposalHistoryRetentionRules.IsExpired(audit.OccurredAtUtc, dbNow, 12))
                 continue;
             audit.Redact(dbNow);
