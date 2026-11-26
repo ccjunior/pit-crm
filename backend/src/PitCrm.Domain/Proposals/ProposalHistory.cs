@@ -19,6 +19,38 @@ public static class ProposalHistoryRetentionRules
     public static bool IsExpired(DateTimeOffset occurredAtUtc, DateTimeOffset nowUtc, int retentionMonths) =>
         nowUtc.ToUniversalTime() >= AddCivilMonthsUtc(occurredAtUtc, retentionMonths);
 
+    public static DateOnly LocalMonthStart(DateTimeOffset instantUtc)
+    {
+        var local = TimeZoneInfo.ConvertTime(instantUtc, OrganizationTimeZone);
+        return new DateOnly(local.Year, local.Month, 1);
+    }
+
+    public static DateTimeOffset AuditAggregateMonthMaturesAtUtc(DateOnly monthStart)
+    {
+        if (monthStart.Day != 1) throw new ArgumentOutOfRangeException(nameof(monthStart));
+        var local = monthStart.AddMonths(13).ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        return LocalBoundaryToUtc(local, chooseLaterAmbiguous: false);
+    }
+
+    public static (DateTimeOffset StartUtc, DateTimeOffset EndUtc) AuditAggregateMonthUtcRange(DateOnly monthStart)
+    {
+        if (monthStart.Day != 1) throw new ArgumentOutOfRangeException(nameof(monthStart));
+        var localStart = monthStart.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        var localEnd = monthStart.AddMonths(1).ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        return (LocalBoundaryToUtc(localStart, chooseLaterAmbiguous: false),
+            LocalBoundaryToUtc(localEnd, chooseLaterAmbiguous: false));
+    }
+
+    private static DateTimeOffset LocalBoundaryToUtc(DateTime local, bool chooseLaterAmbiguous)
+    {
+        while (OrganizationTimeZone.IsInvalidTime(local)) local = local.AddMinutes(1);
+        var offsets = OrganizationTimeZone.IsAmbiguousTime(local)
+            ? OrganizationTimeZone.GetAmbiguousTimeOffsets(local)
+            : [OrganizationTimeZone.GetUtcOffset(local)];
+        var offset = chooseLaterAmbiguous ? offsets.Min() : offsets.Max();
+        return new DateTimeOffset(local, offset).ToUniversalTime();
+    }
+
     public static DateTimeOffset FirstUnexpiredOccurrenceUtc(DateTimeOffset nowUtc, int retentionMonths)
     {
         if (retentionMonths < 1) throw new ArgumentOutOfRangeException(nameof(retentionMonths));
@@ -330,6 +362,137 @@ public sealed class ProposalAuditEvent
         if (string.IsNullOrWhiteSpace(value) || value.Length > maxLength)
             throw new ArgumentOutOfRangeException(parameterName);
         return value;
+    }
+}
+
+public static class ProposalAuditAggregateCategories
+{
+    public const string Transitions = "Transições";
+    public const string Catalog = "Catálogo";
+    public const string ActivityAndComments = "Atividades e comentários";
+    public const string ArchiveReads = "Consultas ao arquivo";
+    public const string Retention = "Retenção";
+
+    public static readonly string[] All =
+        [Transitions, Catalog, ActivityAndComments, ArchiveReads, Retention];
+}
+
+public static class ProposalAuditAggregateWindowStates
+{
+    public const string Open = "Open";
+    public const string Sealed = "Sealed";
+    public const string Invalidated = "Invalidated";
+}
+
+public static class ProposalAuditAggregatePublicationRules
+{
+    public const long MinimumDistinctRequests = 10;
+
+    public static IReadOnlyDictionary<string, long> FilterPublicCounts(IReadOnlyDictionary<string, long> counts)
+    {
+        var visible = counts.Where(value => value.Value >= MinimumDistinctRequests)
+            .ToDictionary(value => value.Key, value => value.Value, StringComparer.Ordinal);
+        if (counts.TryGetValue(ProposalAuditAggregateCategories.Transitions, out var transitions)
+            && counts.TryGetValue(ProposalAuditAggregateCategories.Catalog, out var catalog)
+            && (catalog > transitions || transitions - catalog < MinimumDistinctRequests))
+        {
+            visible.Remove(ProposalAuditAggregateCategories.Transitions);
+            visible.Remove(ProposalAuditAggregateCategories.Catalog);
+        }
+        return visible;
+    }
+}
+
+public sealed class ProposalAuditAggregateWindow
+{
+    private ProposalAuditAggregateWindow() { }
+
+    public ProposalAuditAggregateWindow(Guid organizationId, DateOnly monthStart, string category)
+    {
+        if (organizationId == Guid.Empty || monthStart.Day != 1
+            || !ProposalAuditAggregateCategories.All.Contains(category, StringComparer.Ordinal))
+            throw new ArgumentException("Audit aggregate window identity is invalid.");
+        OrganizationId = organizationId;
+        MonthStart = monthStart;
+        Category = category;
+        State = ProposalAuditAggregateWindowStates.Open;
+    }
+
+    public Guid OrganizationId { get; private set; }
+    public DateOnly MonthStart { get; private set; }
+    public string Category { get; private set; } = string.Empty;
+    public string State { get; private set; } = ProposalAuditAggregateWindowStates.Open;
+    public long DistinctRequestCount { get; private set; }
+    public DateTimeOffset? SealedAtUtc { get; private set; }
+    public DateTimeOffset? InvalidatedAtUtc { get; private set; }
+
+    public void Seal(long distinctRequestCount, DateTimeOffset nowUtc)
+    {
+        if (State != ProposalAuditAggregateWindowStates.Open || distinctRequestCount < 0)
+            throw new InvalidOperationException("Only an open aggregate window can be sealed.");
+        State = ProposalAuditAggregateWindowStates.Sealed;
+        DistinctRequestCount = distinctRequestCount;
+        SealedAtUtc = nowUtc.ToUniversalTime();
+    }
+
+    public void Invalidate(DateTimeOffset nowUtc)
+    {
+        if (State is not (ProposalAuditAggregateWindowStates.Open or ProposalAuditAggregateWindowStates.Sealed)) return;
+        State = ProposalAuditAggregateWindowStates.Invalidated;
+        InvalidatedAtUtc = nowUtc.ToUniversalTime();
+    }
+}
+
+public sealed class ProposalAuditAggregateContribution
+{
+    private ProposalAuditAggregateContribution() { }
+
+    public ProposalAuditAggregateContribution(Guid organizationId, DateOnly monthStart, string category,
+        string requestToken)
+    {
+        if (organizationId == Guid.Empty || monthStart.Day != 1
+            || !ProposalAuditAggregateCategories.All.Contains(category, StringComparer.Ordinal)
+            || requestToken.Length != 64 || requestToken.Any(value => !Uri.IsHexDigit(value)))
+            throw new ArgumentException("Audit aggregate contribution is invalid.");
+        OrganizationId = organizationId;
+        MonthStart = monthStart;
+        Category = category;
+        RequestToken = requestToken.ToUpperInvariant();
+    }
+
+    public Guid OrganizationId { get; private set; }
+    public DateOnly MonthStart { get; private set; }
+    public string Category { get; private set; } = string.Empty;
+    public string RequestToken { get; private set; } = string.Empty;
+}
+
+public sealed class ProposalAuditAggregateQuarantine
+{
+    private ProposalAuditAggregateQuarantine() { }
+
+    public ProposalAuditAggregateQuarantine(Guid organizationId, DateOnly monthStart, string category,
+        DateTimeOffset quarantinedAtUtc)
+    {
+        if (organizationId == Guid.Empty || monthStart.Day != 1
+            || !ProposalAuditAggregateCategories.All.Contains(category, StringComparer.Ordinal))
+            throw new ArgumentException("Audit aggregate quarantine identity is invalid.");
+        OrganizationId = organizationId;
+        MonthStart = monthStart;
+        Category = category;
+        EventCount = 1;
+        QuarantinedAtUtc = quarantinedAtUtc.ToUniversalTime();
+    }
+
+    public Guid OrganizationId { get; private set; }
+    public DateOnly MonthStart { get; private set; }
+    public string Category { get; private set; } = string.Empty;
+    public long EventCount { get; private set; }
+    public DateTimeOffset QuarantinedAtUtc { get; private set; }
+
+    public void Add(DateTimeOffset nowUtc)
+    {
+        EventCount++;
+        QuarantinedAtUtc = nowUtc.ToUniversalTime();
     }
 }
 

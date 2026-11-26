@@ -901,6 +901,83 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.ToTable("CommercialRequests", (string)null);
                 });
 
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditAggregateContribution", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("MonthStart")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("RequestToken")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("OrganizationId", "MonthStart", "Category", "RequestToken");
+
+                    b.ToTable("ProposalAuditAggregateContributions", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditAggregateQuarantine", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("MonthStart")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<long>("EventCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("QuarantinedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("OrganizationId", "MonthStart", "Category");
+
+                    b.ToTable("ProposalAuditAggregateQuarantines", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditAggregateWindow", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateOnly>("MonthStart")
+                        .HasColumnType("date");
+
+                    b.Property<string>("Category")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<long>("DistinctRequestCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("InvalidatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("SealedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.HasKey("OrganizationId", "MonthStart", "Category");
+
+                    b.HasIndex("State", "MonthStart");
+
+                    b.ToTable("ProposalAuditAggregateWindows", (string)null);
+                });
+
             modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditEvent", b =>
                 {
                     b.Property<Guid>("Id")
@@ -948,6 +1025,9 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("OccurredAtUtc")
+                        .HasFilter("\"RedactedAtUtc\" IS NULL");
 
                     b.HasIndex("OrganizationId", "ActorUserId");
 
@@ -1878,6 +1958,33 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .HasForeignKey("OrganizationId", "ResponsibleUserId")
                         .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditAggregateContribution", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Proposals.ProposalAuditAggregateWindow", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "MonthStart", "Category")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditAggregateQuarantine", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditAggregateWindow", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditEvent", b =>

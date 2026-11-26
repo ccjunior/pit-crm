@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Primitives;
 using PitCrm.Infrastructure.Persistence;
 using PitCrm.Infrastructure.Identity;
 using System.Text.Json;
@@ -77,6 +79,130 @@ public sealed class ProposalHistoryDomainTests
     }
 
     [Fact]
+    public void Aggregate_window_matures_after_the_last_event_cutoff_in_its_local_month()
+    {
+        var month = new DateOnly(2025, 11, 1);
+        var range = ProposalHistoryRetentionRules.AuditAggregateMonthUtcRange(month);
+        var lastPossibleEvent = range.EndUtc.AddTicks(-10);
+        var maturity = ProposalHistoryRetentionRules.AuditAggregateMonthMaturesAtUtc(month);
+
+        Assert.True(maturity >= ProposalHistoryRetentionRules.AddCivilMonthsUtc(lastPossibleEvent, 12));
+    }
+
+    [Fact]
+    public void Aggregate_publication_applies_minimum_and_complementary_suppression()
+    {
+        var suppressedPair = ProposalAuditAggregatePublicationRules.FilterPublicCounts(
+            new Dictionary<string, long>
+            {
+                [ProposalAuditAggregateCategories.Transitions] = 30,
+                [ProposalAuditAggregateCategories.Catalog] = 22,
+                [ProposalAuditAggregateCategories.ActivityAndComments] = 10
+            });
+        Assert.DoesNotContain(ProposalAuditAggregateCategories.Transitions, suppressedPair.Keys);
+        Assert.DoesNotContain(ProposalAuditAggregateCategories.Catalog, suppressedPair.Keys);
+        Assert.Equal(10, suppressedPair[ProposalAuditAggregateCategories.ActivityAndComments]);
+
+        var separatedPair = ProposalAuditAggregatePublicationRules.FilterPublicCounts(
+            new Dictionary<string, long>
+            {
+                [ProposalAuditAggregateCategories.Transitions] = 40,
+                [ProposalAuditAggregateCategories.Catalog] = 22,
+                [ProposalAuditAggregateCategories.Retention] = 9
+            });
+        Assert.Equal(40, separatedPair[ProposalAuditAggregateCategories.Transitions]);
+        Assert.Equal(22, separatedPair[ProposalAuditAggregateCategories.Catalog]);
+        Assert.DoesNotContain(ProposalAuditAggregateCategories.Retention, separatedPair.Keys);
+    }
+
+    [Fact]
+    public void Aggregate_token_is_deterministic_domain_separated_and_fail_closed_without_secret()
+    {
+        var key = Convert.ToBase64String(Enumerable.Range(0, 32).Select(value => (byte)value).ToArray());
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["AuditAggregation:HmacKey"] = key
+        }).Build();
+        var tokens = new AuditAggregateTokenFactory(configuration);
+        var organizationId = Guid.NewGuid();
+        var requestId = Guid.NewGuid();
+        var month = new DateOnly(2025, 11, 1);
+        var token = tokens.Create(organizationId, month, ProposalAuditAggregateCategories.Transitions, requestId);
+
+        Assert.Equal(64, token.Length);
+        Assert.Equal(token, tokens.Create(organizationId, month, ProposalAuditAggregateCategories.Transitions, requestId));
+        Assert.NotEqual(token, tokens.Create(Guid.NewGuid(), month, ProposalAuditAggregateCategories.Transitions, requestId));
+        Assert.NotEqual(token, tokens.Create(organizationId, month.AddMonths(1), ProposalAuditAggregateCategories.Transitions, requestId));
+        Assert.NotEqual(token, tokens.Create(organizationId, month, ProposalAuditAggregateCategories.Catalog, requestId));
+        Assert.DoesNotContain(requestId.ToString("N"), token, StringComparison.OrdinalIgnoreCase);
+
+        var missingSecret = new AuditAggregateTokenFactory(new ConfigurationBuilder().Build());
+        Assert.Throws<InvalidOperationException>(() => missingSecret.Create(organizationId, month,
+            ProposalAuditAggregateCategories.Transitions, requestId));
+    }
+
+    [Fact]
+    public void Aggregate_classifier_uses_fixed_categories_and_requires_structured_catalog_reason()
+    {
+        var organizationId = Guid.NewGuid();
+        var requestId = Guid.NewGuid();
+        var actorId = Guid.NewGuid();
+        var occurredAt = DateTimeOffset.Parse("2025-11-10T12:00:00Z");
+        var transition = new ProposalAuditEvent(Guid.NewGuid(), organizationId, "StageChanged", "Transições",
+            ProposalHistoryActorTypes.Human, actorId, null, occurredAt, requestId);
+        var catalog = new ProposalAuditEvent(Guid.NewGuid(), organizationId, "StageChanged", "Catálogo",
+            ProposalHistoryActorTypes.Human, actorId, null, occurredAt, requestId, detailsJson:
+            "{\"reasonId\":\"" + Guid.NewGuid() + "\",\"appliedToStatus\":\"NotQuoted\"}");
+        var invalidCatalog = new ProposalAuditEvent(Guid.NewGuid(), organizationId, "StageChanged", "Catálogo",
+            ProposalHistoryActorTypes.Human, actorId, null, occurredAt, requestId, detailsJson: "{\"reasonId\":null}");
+        var archiveRead = new ProposalAuditEvent(Guid.NewGuid(), organizationId, "ArchiveRead", "Consultas ao arquivo",
+            ProposalHistoryActorTypes.Human, actorId, null, occurredAt, requestId);
+        var retention = new ProposalAuditEvent(Guid.NewGuid(), organizationId, "TimelineArchived", "Retenção",
+            ProposalHistoryActorTypes.System, null, "ProposalRetention", occurredAt, requestId);
+        var unlinked = new ProposalAuditEvent(Guid.NewGuid(), organizationId, "StageChanged", "Transições",
+            ProposalHistoryActorTypes.System, null, "ProposalRetention", occurredAt);
+
+        Assert.True(ProposalAuditAggregateEventClassifier.TryGetCategory(transition, out var transitionCategory));
+        Assert.Equal(ProposalAuditAggregateCategories.Transitions, transitionCategory);
+        Assert.True(ProposalAuditAggregateEventClassifier.TryGetCategory(catalog, out var catalogCategory));
+        Assert.Equal(ProposalAuditAggregateCategories.Catalog, catalogCategory);
+        Assert.False(ProposalAuditAggregateEventClassifier.TryGetCategory(invalidCatalog, out _));
+        Assert.True(ProposalAuditAggregateEventClassifier.TryGetCategory(archiveRead, out var archiveCategory));
+        Assert.Equal(ProposalAuditAggregateCategories.ArchiveReads, archiveCategory);
+        Assert.True(ProposalAuditAggregateEventClassifier.TryGetCategory(retention, out var retentionCategory));
+        Assert.Equal(ProposalAuditAggregateCategories.Retention, retentionCategory);
+        Assert.False(ProposalAuditAggregateEventClassifier.TryGetCategory(unlinked, out _));
+    }
+
+    [Fact]
+    public void Aggregate_endpoint_accepts_only_one_canonical_month_parameter()
+    {
+        var valid = new QueryCollection(new Dictionary<string, StringValues>
+        {
+            ["month"] = "2025-11"
+        });
+        Assert.True(AuditAggregateRequestParser.TryParseMonth(valid, out var month));
+        Assert.Equal(new DateOnly(2025, 11, 1), month);
+
+        var extraFilter = new QueryCollection(new Dictionary<string, StringValues>
+        {
+            ["month"] = "2025-11",
+            ["category"] = "Transições"
+        });
+        Assert.False(AuditAggregateRequestParser.TryParseMonth(extraFilter, out _));
+
+        var duplicate = new QueryCollection(new Dictionary<string, StringValues>
+        {
+            ["month"] = new StringValues(["2025-11", "2025-12"])
+        });
+        Assert.False(AuditAggregateRequestParser.TryParseMonth(duplicate, out _));
+        Assert.False(AuditAggregateRequestParser.TryParseMonth(new QueryCollection(new Dictionary<string, StringValues>
+        {
+            ["month"] = "2025-13"
+        }), out _));
+    }
+
+    [Fact]
     public void Retention_cycle_archiving_requires_latest_generation_and_terminal_proposal()
     {
         Assert.True(ProposalHistoryRetentionRules.CanArchive(3, 3, isTerminal: true));
@@ -113,6 +239,9 @@ public sealed class ProposalHistoryDomainTests
             foreignKey.PrincipalEntityType.ClrType == typeof(CommercialRequest));
         var idempotency = dbContext.Model.FindEntityType(typeof(ProposalIdempotencyRecord))!;
         var grant = dbContext.Model.FindEntityType(typeof(OrganizationPermissionGrant))!;
+        var aggregateWindow = dbContext.Model.FindEntityType(typeof(ProposalAuditAggregateWindow))!;
+        var aggregateContribution = dbContext.Model.FindEntityType(typeof(ProposalAuditAggregateContribution))!;
+        var grantAudit = dbContext.Model.FindEntityType(typeof(OrganizationPermissionGrantAudit))!;
 
         Assert.Equal(DeleteBehavior.Restrict, proposalLink.DeleteBehavior);
         Assert.Contains(proposalLink.Properties, property => property.Name == "OrganizationId");
@@ -126,16 +255,27 @@ public sealed class ProposalHistoryDomainTests
             foreignKey.PrincipalEntityType.ClrType == typeof(ApplicationUser)
             && foreignKey.Properties.Select(property => property.Name)
                 .SequenceEqual(new[] { "OrganizationId", "UserId" }));
+        Assert.Equal(new[] { "OrganizationId", "MonthStart", "Category" },
+            aggregateWindow.FindPrimaryKey()!.Properties.Select(property => property.Name));
+        Assert.Equal(new[] { "OrganizationId", "MonthStart", "Category", "RequestToken" },
+            aggregateContribution.FindPrimaryKey()!.Properties.Select(property => property.Name));
+        Assert.Contains(grantAudit.GetForeignKeys(), foreignKey =>
+            foreignKey.PrincipalEntityType.ClrType == typeof(ApplicationUser)
+            && foreignKey.Properties.Select(property => property.Name)
+                .SequenceEqual(new[] { "OrganizationId", "ActorUserId" }));
+        Assert.Contains(grantAudit.GetForeignKeys(), foreignKey =>
+            foreignKey.PrincipalEntityType.ClrType == typeof(ApplicationUser)
+            && foreignKey.Properties.Select(property => property.Name)
+                .SequenceEqual(new[] { "OrganizationId", "TargetUserId" }));
     }
 
     [Fact]
-    public void Permission_grant_audit_requires_separate_supported_action_and_justification()
+    public void Permission_grant_audit_requires_supported_scope_action_and_justification()
     {
         var organizationId = Guid.NewGuid();
         var actorId = Guid.NewGuid();
         var recipientId = Guid.NewGuid();
         var now = DateTimeOffset.Parse("2026-11-26T12:00:00-03:00");
-
         var audit = new OrganizationPermissionGrantAudit(organizationId, actorId, recipientId,
             AuthorizationPolicies.ViewProposalAuditGrant, "Granted", now, "Cobertura de auditoria");
 
@@ -149,26 +289,6 @@ public sealed class ProposalHistoryDomainTests
             actorId, recipientId, AuthorizationPolicies.ViewProposalAuditGrant, "Updated", now, "Justificativa"));
         Assert.Throws<ArgumentOutOfRangeException>(() => new OrganizationPermissionGrantAudit(organizationId,
             actorId, recipientId, AuthorizationPolicies.ViewProposalAuditGrant, "Granted", now, " "));
-    }
-
-    [Fact]
-    public void Permission_grant_audit_model_has_tenant_scoped_actor_and_recipient_foreign_keys()
-    {
-        var options = new DbContextOptionsBuilder<PitCrmDbContext>()
-            .UseNpgsql("Host=127.0.0.1;Database=not_used;Username=not_used")
-            .Options;
-        using var dbContext = new PitCrmDbContext(options);
-        var entity = dbContext.Model.FindEntityType(typeof(OrganizationPermissionGrantAudit))!;
-
-        Assert.Equal("OrganizationPermissionGrantAudits", entity.GetTableName());
-        Assert.Contains(entity.GetForeignKeys(), foreignKey =>
-            foreignKey.PrincipalEntityType.ClrType == typeof(ApplicationUser)
-            && foreignKey.Properties.Select(property => property.Name)
-                .SequenceEqual(new[] { "OrganizationId", "ActorUserId" }));
-        Assert.Contains(entity.GetForeignKeys(), foreignKey =>
-            foreignKey.PrincipalEntityType.ClrType == typeof(ApplicationUser)
-            && foreignKey.Properties.Select(property => property.Name)
-                .SequenceEqual(new[] { "OrganizationId", "TargetUserId" }));
     }
 
     [Fact]
@@ -207,6 +327,19 @@ public sealed class ProposalHistoryDomainTests
     }
 
     [Fact]
+    public void Late_aggregate_arrival_invalidates_the_month_window()
+    {
+        var window = new ProposalAuditAggregateWindow(Guid.NewGuid(), new DateOnly(2025, 1, 1),
+            ProposalAuditAggregateCategories.Transitions);
+        var now = DateTimeOffset.Parse("2026-02-01T12:00:00Z");
+
+        window.Invalidate(now);
+
+        Assert.Equal(ProposalAuditAggregateWindowStates.Invalidated, window.State);
+        Assert.Equal(now, window.InvalidatedAtUtc);
+    }
+
+    [Fact]
     public async Task History_routes_are_mapped_with_explicit_policy_metadata()
     {
         var builder = WebApplication.CreateBuilder();
@@ -217,6 +350,7 @@ public sealed class ProposalHistoryDomainTests
         builder.Services.AddScoped<ICurrentOrganizationContext, HttpCurrentOrganizationContext>();
         builder.Services.AddScoped<IProposalHistoryStore, PersistenceProposalHistoryStore>();
         builder.Services.AddScoped<IProposalStore, PersistenceProposalStore>();
+        builder.Services.AddScoped<IProposalAuditAggregateStore, PersistenceProposalAuditAggregateStore>();
         await using var app = builder.Build();
         ProposalHistoryEndpoints.Map(app);
         PermissionGrantEndpoints.Map(app);
@@ -227,6 +361,8 @@ public sealed class ProposalHistoryDomainTests
             endpoint.RoutePattern.RawText == "/api/demands/{id:guid}/proposal-timeline");
         var audit = Assert.Single(endpoints, endpoint =>
             endpoint.RoutePattern.RawText == "/api/proposals/{id:guid}/audit");
+        var aggregates = Assert.Single(endpoints, endpoint =>
+            endpoint.RoutePattern.RawText == "/api/proposals/audit/aggregates");
         var grant = Assert.Single(endpoints, endpoint =>
             endpoint.RoutePattern.RawText == "/api/organization/permission-grants/{permission}/{userId:guid}");
         var revoke = Assert.Single(endpoints, endpoint =>
@@ -235,6 +371,8 @@ public sealed class ProposalHistoryDomainTests
         Assert.Contains(operatorTimeline.Metadata.GetOrderedMetadata<IAuthorizeData>(),
             metadata => metadata.Policy == AuthorizationPolicies.OperateDemands);
         Assert.Contains(audit.Metadata.GetOrderedMetadata<IAuthorizeData>(),
+            metadata => metadata.Policy == AuthorizationPolicies.ViewProposalAudit);
+        Assert.Contains(aggregates.Metadata.GetOrderedMetadata<IAuthorizeData>(),
             metadata => metadata.Policy == AuthorizationPolicies.ViewProposalAudit);
         Assert.Contains(grant.Metadata.GetOrderedMetadata<IAuthorizeData>(),
             metadata => metadata.Policy == AuthorizationPolicies.ManageOrganizationPermissionGrants);

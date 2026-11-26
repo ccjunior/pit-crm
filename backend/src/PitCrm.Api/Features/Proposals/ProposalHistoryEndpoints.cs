@@ -24,6 +24,8 @@ public static class ProposalHistoryEndpoints
             .AddEndpointFilter<Security.AntiforgeryEndpointFilter>();
         app.MapGet("/api/proposals/{id:guid}/audit", GetAuditAsync)
             .RequireAuthorization(AuthorizationPolicies.ViewProposalAudit);
+        app.MapGet("/api/proposals/audit/aggregates", GetAuditAggregatesAsync)
+            .RequireAuthorization(AuthorizationPolicies.ViewProposalAudit);
         app.MapGet("/api/proposals/{id:guid}/timeline/archive", ReadArchiveAsync)
             .RequireAuthorization(AuthorizationPolicies.RestoreProposalTimeline);
         app.MapGet("/api/demands/{id:guid}/proposal-timeline", GetOperatorTimelineAsync)
@@ -156,6 +158,19 @@ public static class ProposalHistoryEndpoints
             return Results.ValidationProblem(errors);
         var result = await store.GetAuditAsync(context.OrganizationId, id, currentPage, size, cancellationToken);
         return result is null ? Results.NotFound() : Results.Ok(result);
+    }
+
+    private static async Task<IResult> GetAuditAggregatesAsync(HttpContext httpContext,
+        ICurrentOrganizationContext context, IProposalAuditAggregateStore store,
+        CancellationToken cancellationToken)
+    {
+        if (!AuditAggregateRequestParser.TryParseMonth(httpContext.Request.Query, out var monthStart))
+            return Results.ValidationProblem(new Dictionary<string, string[]>
+            {
+                ["month"] = ["Informe somente month no formato YYYY-MM."]
+            });
+        var result = await store.GetPublishedMonthAsync(context.OrganizationId, monthStart, cancellationToken);
+        return Results.Ok(result);
     }
 
     private static async Task<IResult> ReadArchiveAsync(Guid id, int? page, int? pageSize,
