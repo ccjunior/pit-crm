@@ -73,7 +73,7 @@ import { CreatedDemand, DemandApi, DemandDetails, DemandListItem, DemandProposal
             <div class="detail-status-row"><span class="status-pill" [attr.data-status]="statusToken(item.status)">{{ item.status }}</span><span [attr.title]="fullDate(item.createdAtUtc)">{{ relativeDate(item.createdAtUtc) }}</span></div>
             <dl class="detail-list"><div><dt>Local</dt><dd>{{ item.locationName }}</dd></div><div><dt>Origem</dt><dd>{{ item.origin }}</dd></div><div><dt>Prioridade</dt><dd><span class="priority-pill" [attr.data-priority]="priorityToken(item.priority)">{{ item.priority || 'Não definida' }}</span></dd></div><div><dt>Responsável</dt><dd>{{ item.assignedToDisplayName || 'Sem responsável' }}</dd></div><div class="detail-wide"><dt>Referências externas</dt><dd>@if (item.externalReferences.length) { @for (reference of item.externalReferences; track $index) { <span class="demand-external-reference"><strong>{{ reference.type }}</strong> · {{ reference.value }}</span> } } @else { Não informadas }</dd></div><div class="detail-wide"><dt>Descrição</dt><dd>{{ item.description }}</dd></div><div class="detail-wide"><dt>Subitens</dt><dd>@if (item.subitems.length) { @for (subitem of item.subitems; track subitem.id) { <span class="demand-external-reference"><strong>{{ subitem.position }}.</strong> {{ subitem.description }} @if (subitem.amount !== null) { · {{ subitem.amount | currency:'BRL' }} }</span> } } @else { Nenhum subitem registrado }</dd></div><div><dt>Criada por</dt><dd>{{ item.createdByDisplayName }}</dd></div></dl>
             <section class="activity-section"><h3>Atividades</h3>@if (item.activities.length) { <ol>@for (activity of item.activities; track activity.id) { <li><div><strong>{{ activity.description }}</strong><small>{{ activity.authorDisplayName }} · {{ activity.occurredAtUtc | date:'dd/MM/yyyy HH:mm' }}</small></div></li> }</ol> } @else { <p>Nenhuma atividade registrada.</p> }</section>
-            @if (isOperator()) { <section class="proposal-operator-timeline" aria-labelledby="operator-proposal-timeline-title"><h3 id="operator-proposal-timeline-title">Histórico da solicitação comercial</h3>@if (proposalTimelineError()) { <p class="error-banner" role="alert">{{ proposalTimelineError() }} @if (!proposalTimelineNotFound()) { <button class="text-button" type="button" (click)="loadProposalTimeline(item.id)">Tentar novamente</button> }</p> }@if (proposalTimelineLoading()) { <p role="status">Carregando histórico…</p> }@else if (!proposalTimelineError() && !proposalTimeline().length) { <p role="status">Nenhum evento comercial disponível.</p> }@else if (proposalTimeline().length) { <ol class="operator-timeline-list">@for (event of proposalTimeline(); track $index) { <li><strong>{{ operatorTimelineTypeLabel(event.type) }}</strong><small>{{ operatorTimelineDateLabel(event) }}</small>@if (event.fromStatus || event.toStatus) { <p>Etapa: {{ proposalStageLabel(event.fromStatus) }} → {{ proposalStageLabel(event.toStatus) }}</p> }</li> }</ol><div class="operator-timeline-pagination"><span>Página {{ proposalTimelinePage() }} · {{ proposalTimelineTotalCount() }} eventos</span><button type="button" class="text-button" (click)="loadProposalTimeline(item.id, proposalTimelinePage() - 1)" [disabled]="proposalTimelineLoading() || proposalTimelinePage() <= 1">Anterior</button><button type="button" class="text-button" (click)="loadProposalTimeline(item.id, proposalTimelinePage() + 1)" [disabled]="proposalTimelineLoading() || proposalTimelinePage() * proposalTimelinePageSize >= proposalTimelineTotalCount()">Próxima</button></div> }</section> }
+            @if (isOperator()) { <section class="proposal-operator-timeline" aria-labelledby="operator-proposal-timeline-title"><h3 id="operator-proposal-timeline-title">Histórico da solicitação comercial</h3>@if (proposalTimelineError()) { <p class="error-banner" role="alert">{{ proposalTimelineError() }} @if (!proposalTimelineNotFound() && !proposalTimelineForbidden()) { <button class="text-button" type="button" (click)="loadProposalTimeline(item.id, proposalTimelineRetryPage() ?? proposalTimelinePage())">Tentar novamente</button> }</p> }@if (proposalTimelineLoading()) { <p role="status">Carregando histórico…</p> }@else if (!proposalTimelineError() && !proposalTimeline().length) { <p role="status">Nenhum evento comercial disponível.</p> }@else if (proposalTimeline().length) { <ol class="operator-timeline-list">@for (event of proposalTimeline(); track $index) { <li><strong>{{ operatorTimelineTypeLabel(event.type) }}</strong><small>{{ operatorTimelineDateLabel(event) }}</small>@if (event.fromStatus || event.toStatus) { <p>Etapa: {{ proposalStageLabel(event.fromStatus) }} → {{ proposalStageLabel(event.toStatus) }}</p> }</li> }</ol>@if (!proposalTimelineNotFound() && !proposalTimelineForbidden()) { <div class="operator-timeline-pagination"><span>Página {{ proposalTimelinePage() }} · {{ proposalTimelineTotalCount() }} eventos</span><button type="button" class="text-button" (click)="loadProposalTimeline(item.id, proposalTimelinePage() - 1)" [disabled]="proposalTimelineLoading() || proposalTimelinePage() <= 1">Anterior</button><button type="button" class="text-button" (click)="loadProposalTimeline(item.id, proposalTimelinePage() + 1)" [disabled]="proposalTimelineLoading() || proposalTimelinePage() * proposalTimelinePageSize >= proposalTimelineTotalCount()">Próxima</button></div> } }</section> }
           </article>
         }
       </dialog>
@@ -118,6 +118,8 @@ export class DemandsHome implements OnInit {
   readonly proposalTimelineLoading = signal(false);
   readonly proposalTimelineError = signal('');
   readonly proposalTimelineNotFound = signal(false);
+  readonly proposalTimelineForbidden = signal(false);
+  readonly proposalTimelineRetryPage = signal<number | null>(null);
   readonly detailLoading = signal(false);
   readonly detailError = signal('');
   readonly editingDemand = signal(false);
@@ -224,7 +226,8 @@ export class DemandsHome implements OnInit {
     this.editingDemand.set(false);
     this.proposalTimelineRequestId++;
     this.proposalTimeline.set([]); this.proposalTimelinePage.set(1); this.proposalTimelineTotalCount.set(0);
-    this.proposalTimelineError.set(''); this.proposalTimelineNotFound.set(false);
+    this.proposalTimelineError.set(''); this.proposalTimelineNotFound.set(false); this.proposalTimelineForbidden.set(false);
+    this.proposalTimelineRetryPage.set(null);
     this.openDialog(this.detailDialog()?.nativeElement);
     this.loadDetails(id);
   }
@@ -235,7 +238,8 @@ export class DemandsHome implements OnInit {
         this.detail.set(detail);
         if (this.isOperator()) {
           this.proposalTimeline.set([]); this.proposalTimelinePage.set(1); this.proposalTimelineTotalCount.set(0);
-          this.proposalTimelineError.set(''); this.proposalTimelineNotFound.set(false);
+          this.proposalTimelineError.set(''); this.proposalTimelineNotFound.set(false); this.proposalTimelineForbidden.set(false);
+          this.proposalTimelineRetryPage.set(null);
           this.loadProposalTimeline(id);
         }
         if (focusTitle) queueMicrotask(() => document.getElementById('demand-detail-title')?.focus());
@@ -255,23 +259,30 @@ export class DemandsHome implements OnInit {
   loadProposalTimeline(demandId: string, page = 1): void {
     if (!this.isOperator() || page < 1) return;
     const requestId = ++this.proposalTimelineRequestId;
-    this.proposalTimelinePage.set(page); this.proposalTimelineLoading.set(true);
-    this.proposalTimelineError.set(''); this.proposalTimelineNotFound.set(false);
+    this.proposalTimelineLoading.set(true);
+    this.proposalTimelineError.set(''); this.proposalTimelineNotFound.set(false); this.proposalTimelineForbidden.set(false);
     this.demandApi.proposalTimeline(demandId, page, this.proposalTimelinePageSize).pipe(finalize(() => {
       if (requestId === this.proposalTimelineRequestId) this.proposalTimelineLoading.set(false);
     })).subscribe({
       next: result => {
         if (requestId !== this.proposalTimelineRequestId) return;
         this.proposalTimeline.set(result.items); this.proposalTimelineTotalCount.set(result.totalCount);
+        this.proposalTimelinePage.set(page); this.proposalTimelineRetryPage.set(null);
       },
       error: error => {
         if (requestId !== this.proposalTimelineRequestId) return;
         if (error.status === 404) {
+          this.proposalTimeline.set([]); this.proposalTimelineTotalCount.set(0); this.proposalTimelineRetryPage.set(null);
           this.proposalTimelineNotFound.set(true);
           this.proposalTimelineError.set('Esta demanda não tem histórico comercial vinculado.');
-        } else this.proposalTimelineError.set(error.status === 403
-          ? 'Seu perfil não tem acesso ao histórico comercial desta demanda.'
-          : 'Não foi possível carregar o histórico comercial. Tente novamente.');
+        } else if (error.status === 403) {
+          this.proposalTimeline.set([]); this.proposalTimelineTotalCount.set(0); this.proposalTimelineRetryPage.set(null);
+          this.proposalTimelineForbidden.set(true);
+          this.proposalTimelineError.set('Seu perfil não tem acesso ao histórico comercial desta demanda.');
+        } else {
+          this.proposalTimelineRetryPage.set(page);
+          this.proposalTimelineError.set('Não foi possível carregar o histórico comercial. Tente novamente.');
+        }
       },
     });
   }
