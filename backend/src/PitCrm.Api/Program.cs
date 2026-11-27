@@ -10,6 +10,7 @@ using PitCrm.Api.Features.Locations;
 using PitCrm.Api.Features.Demands;
 using PitCrm.Api.Features.Proposals;
 using PitCrm.Api.Features.Users;
+using PitCrm.Api.Features.Organizations;
 using PitCrm.Application.Authorization;
 using PitCrm.Application.Organizations.Provisioning;
 using PitCrm.Application.Users.EligibleAssignees;
@@ -25,6 +26,7 @@ using PitCrm.Infrastructure.Customers;
 using PitCrm.Infrastructure.Locations;
 using PitCrm.Infrastructure.Demands;
 using PitCrm.Infrastructure.Proposals;
+using PitCrm.Infrastructure.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -130,6 +132,23 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy(AuthorizationPolicies.ManageProposals, policy =>
         policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
             .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
+    options.AddPolicy(AuthorizationPolicies.ManageProposalReasons, policy =>
+        policy.RequireRole(RoleNames.Administrator)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
+    options.AddPolicy(AuthorizationPolicies.ManageOrganizationPermissionGrants, policy =>
+        policy.RequireRole(RoleNames.Administrator)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
+    options.AddPolicy(AuthorizationPolicies.MentionProposalUsers, policy =>
+        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false"));
+    options.AddPolicy(AuthorizationPolicies.ViewProposalAudit, policy =>
+        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false")
+            .AddRequirements(new OrganizationPermissionGrantRequirement(AuthorizationPolicies.ViewProposalAuditGrant)));
+    options.AddPolicy(AuthorizationPolicies.RestoreProposalTimeline, policy =>
+        policy.RequireRole(RoleNames.Administrator, RoleNames.Manager)
+            .RequireClaim(AuthorizationPolicies.MustChangePasswordClaim, "false")
+            .AddRequirements(new OrganizationPermissionGrantRequirement(AuthorizationPolicies.RestoreProposalTimelineGrant)));
     options.AddPolicy(AuthorizationPolicies.ChangeOwnPassword, policy =>
         policy.RequireRole(RoleNames.Administrator, RoleNames.Manager, RoleNames.Operator));
 });
@@ -142,6 +161,11 @@ builder.Services.AddScoped<ICustomerContactStore, PersistenceCustomerContactStor
 builder.Services.AddScoped<IDemandStore, PersistenceDemandStore>();
 builder.Services.AddScoped<IDemandDraftStore, PersistenceDemandDraftStore>();
 builder.Services.AddScoped<IProposalStore, PersistenceProposalStore>();
+builder.Services.AddScoped<IProposalHistoryStore, PersistenceProposalHistoryStore>();
+builder.Services.AddScoped<IProposalRetentionProcessor, ProposalRetentionProcessor>();
+builder.Services.AddScoped<IOrganizationPermissionGrantLookup, PersistenceOrganizationPermissionGrantLookup>();
+builder.Services.AddScoped<IAuthorizationHandler, OrganizationPermissionGrantHandler>();
+builder.Services.AddHostedService<ProposalRetentionBackgroundService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentOrganizationContext, HttpCurrentOrganizationContext>();
 
@@ -313,6 +337,8 @@ CustomerLocationEndpoints.Map(app);
 CustomerContactEndpoints.Map(app);
 DemandEndpoints.Map(app);
 ProposalEndpoints.Map(app);
+ProposalHistoryEndpoints.Map(app);
+PermissionGrantEndpoints.Map(app);
 DemandDraftEndpoints.Map(app);
 TeamEndpoints.Map(app);
 

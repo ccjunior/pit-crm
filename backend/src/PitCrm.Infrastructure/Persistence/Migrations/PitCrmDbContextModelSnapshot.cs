@@ -679,6 +679,67 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.ToTable("Organizations", (string)null);
                 });
 
+            modelBuilder.Entity("PitCrm.Domain.Organizations.OrganizationPermissionGrant", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Permission")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("OrganizationId", "UserId", "Permission");
+
+                    b.ToTable("OrganizationPermissionGrants", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Organizations.OrganizationPermissionGrantAudit", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Justification")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Permission")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("TargetUserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "ActorUserId");
+
+                    b.HasIndex("OrganizationId", "OccurredAtUtc");
+
+                    b.HasIndex("OrganizationId", "TargetUserId");
+
+                    b.ToTable("OrganizationPermissionGrantAudits", (string)null);
+                });
+
             modelBuilder.Entity("PitCrm.Domain.Proposals.CommercialActivity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -782,12 +843,6 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<string>("SourceType")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasDefaultValue("Manual")
-                        .HasColumnType("character varying(20)");
-
                     b.Property<string>("OutcomeReason")
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
@@ -810,6 +865,13 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
 
                     b.Property<Guid?>("ResponsibleUserId")
                         .HasColumnType("uuid");
+
+                    b.Property<string>("SourceType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("Manual");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -837,6 +899,151 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrganizationId", "Status", "UpdatedAtUtc");
 
                     b.ToTable("CommercialRequests", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<Guid?>("CommercialRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("DetailsJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("RedactedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SystemCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<Guid?>("TimelineEventId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "ActorUserId");
+
+                    b.HasIndex("OrganizationId", "CommercialRequestId");
+
+                    b.HasIndex("OrganizationId", "OccurredAtUtc");
+
+                    b.HasIndex("OrganizationId", "Category", "OccurredAtUtc");
+
+                    b.ToTable("ProposalAuditEvents", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ProposalAuditEvents_Actor", "(\"ActorType\" = 'Human' AND \"ActorUserId\" IS NOT NULL AND \"SystemCode\" IS NULL) OR (\"ActorType\" = 'System' AND \"ActorUserId\" IS NULL AND \"SystemCode\" IS NOT NULL) OR (\"ActorType\" = 'Redacted' AND \"ActorUserId\" IS NULL AND \"SystemCode\" IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalEventSequence", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CommercialRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long>("LastSequence")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("OrganizationId", "CommercialRequestId");
+
+                    b.ToTable("ProposalEventSequences", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalHistoryMigrationReconciliation", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("MigratedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("QuarantinedCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("ReconciledAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("SourceCount")
+                        .HasColumnType("integer");
+
+                    b.HasKey("OrganizationId");
+
+                    b.ToTable("ProposalHistoryMigrationReconciliations", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalIdempotencyRecord", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("Key")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Fingerprint")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("KeyTimestampUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Operation")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<Guid>("ResultId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResultPayloadJson")
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTimeOffset>("StoredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("TargetType")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.HasKey("OrganizationId", "Key");
+
+                    b.HasIndex("KeyTimestampUtc");
+
+                    b.ToTable("ProposalIdempotencyRecords", (string)null);
                 });
 
             modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalItem", b =>
@@ -869,6 +1076,132 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("ProposalItems", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalLegacyQuarantine", b =>
+                {
+                    b.Property<Guid>("SourceId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CommercialRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("QuarantineReason")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.HasKey("SourceId");
+
+                    b.ToTable("ProposalLegacyQuarantine", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalReason", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("CreatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTimeOffset?>("DeactivatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid?>("DeactivatedByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ResultStatus")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "CreatedByUserId");
+
+                    b.HasIndex("OrganizationId", "DeactivatedByUserId");
+
+                    b.HasIndex("OrganizationId", "ResultStatus", "IsActive");
+
+                    b.HasIndex("OrganizationId", "ResultStatus", "Label")
+                        .IsUnique();
+
+                    b.ToTable("ProposalReasons", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalRetentionCycle", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CommercialRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Generation")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("ArchiveAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("ArchivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("ClosedAtKnown")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("DiscardAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)");
+
+                    b.HasKey("OrganizationId", "CommercialRequestId", "Generation");
+
+                    b.HasIndex("State", "ArchiveAtUtc");
+
+                    b.HasIndex("State", "DiscardAtUtc");
+
+                    b.ToTable("ProposalRetentionCycles", (string)null);
                 });
 
             modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalRevision", b =>
@@ -941,6 +1274,144 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrganizationId", "CommercialRequestId", "Status");
 
                     b.ToTable("ProposalRevisions", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalTimelineArchive", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CommercialRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Generation")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("ArchivedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("DiscardAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PayloadJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("OrganizationId", "CommercialRequestId", "Generation");
+
+                    b.ToTable("ProposalTimelineArchives", (string)null);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalTimelineEvent", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ActivityType")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("ActorType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<Guid?>("ActorUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("CommercialRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("FromStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<bool>("OccurredAtKnown")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTimeOffset>("OccurredAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("ReasonId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("ReasonLabelSnapshot")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<long>("Sequence")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid?>("SourceLegacyId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("SystemCode")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("Text")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<string>("ToStatus")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrganizationId", "ActorUserId");
+
+                    b.HasIndex("OrganizationId", "ReasonId");
+
+                    b.HasIndex("OrganizationId", "SourceLegacyId")
+                        .IsUnique()
+                        .HasFilter("\"SourceLegacyId\" IS NOT NULL");
+
+                    b.HasIndex("OrganizationId", "CommercialRequestId", "Sequence")
+                        .IsUnique();
+
+                    b.HasIndex("OrganizationId", "CommercialRequestId", "OccurredAtUtc", "Id");
+
+                    b.ToTable("ProposalTimelineEvents", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_ProposalTimelineEvents_Actor", "(\"ActorType\" = 'Human' AND \"ActorUserId\" IS NOT NULL AND \"SystemCode\" IS NULL) OR (\"ActorType\" = 'System' AND \"ActorUserId\" IS NULL AND \"SystemCode\" IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalTimelineMention", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("EventId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("MentionedUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasAlternateKey("OrganizationId", "Id");
+
+                    b.HasIndex("OrganizationId", "MentionedUserId");
+
+                    b.HasIndex("OrganizationId", "EventId", "MentionedUserId")
+                        .IsUnique();
+
+                    b.ToTable("ProposalTimelineMentions", (string)null);
                 });
 
             modelBuilder.Entity("PitCrm.Infrastructure.Identity.ApplicationUser", b =>
@@ -1314,6 +1785,46 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("PitCrm.Domain.Organizations.OrganizationPermissionGrant", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "UserId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Organizations.OrganizationPermissionGrantAudit", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "ActorUserId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "TargetUserId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("FK_OrganizationPermissionGrantAudits_AspNetUsers_Organization~1");
+                });
+
             modelBuilder.Entity("PitCrm.Domain.Proposals.CommercialActivity", b =>
                 {
                     b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
@@ -1369,6 +1880,55 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
                 });
 
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalAuditEvent", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "ActorUserId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PitCrm.Domain.Proposals.CommercialRequest", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "CommercialRequestId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalEventSequence", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Proposals.CommercialRequest", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "CommercialRequestId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalHistoryMigrationReconciliation", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalIdempotencyRecord", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalItem", b =>
                 {
                     b.HasOne("PitCrm.Domain.Proposals.ProposalRevision", null)
@@ -1376,6 +1936,38 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                         .HasForeignKey("OrganizationId", "ProposalRevisionId")
                         .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalReason", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Organizations.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "CreatedByUserId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "DeactivatedByUserId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalRetentionCycle", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Proposals.CommercialRequest", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "CommercialRequestId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });
 
@@ -1397,6 +1989,54 @@ namespace PitCrm.Infrastructure.Persistence.Migrations
                     b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId", "CreatedByUserId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalTimelineArchive", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Proposals.ProposalRetentionCycle", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "CommercialRequestId", "Generation")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalTimelineEvent", b =>
+                {
+                    b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "ActorUserId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("PitCrm.Domain.Proposals.CommercialRequest", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "CommercialRequestId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Domain.Proposals.ProposalReason", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "ReasonId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("PitCrm.Domain.Proposals.ProposalTimelineMention", b =>
+                {
+                    b.HasOne("PitCrm.Domain.Proposals.ProposalTimelineEvent", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "EventId")
+                        .HasPrincipalKey("OrganizationId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("PitCrm.Infrastructure.Identity.ApplicationUser", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId", "MentionedUserId")
                         .HasPrincipalKey("OrganizationId", "Id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();

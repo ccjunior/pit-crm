@@ -15,7 +15,6 @@ public static class ProposalEndpoints
         proposals.MapGet("/{id:guid}", FindAsync);
         proposals.MapPost("", CreateAsync).AddEndpointFilter<Security.AntiforgeryEndpointFilter>();
         proposals.MapPut("/{id:guid}", UpdateAsync).AddEndpointFilter<Security.AntiforgeryEndpointFilter>();
-        proposals.MapPost("/{id:guid}/status", ChangeStatusAsync).AddEndpointFilter<Security.AntiforgeryEndpointFilter>();
         proposals.MapPost("/{id:guid}/revisions", CreateRevisionAsync).AddEndpointFilter<Security.AntiforgeryEndpointFilter>();
         proposals.MapPost("/{id:guid}/send", RecordSentAsync).AddEndpointFilter<Security.AntiforgeryEndpointFilter>();
         proposals.MapPost("/{id:guid}/approve", ApproveAsync).AddEndpointFilter<Security.AntiforgeryEndpointFilter>();
@@ -75,20 +74,6 @@ public static class ProposalEndpoints
         if (errors.Count > 0) return Results.ValidationProblem(errors);
         var result = await store.UpdateAsync(context.OrganizationId, id, context.UserId, request,
             DateTimeOffset.UtcNow, cancellationToken);
-        return MapResult(result);
-    }
-
-    private static async Task<IResult> ChangeStatusAsync(Guid id, ProposalOutcomeInput request,
-        ICurrentOrganizationContext context, IProposalStore store, CancellationToken cancellationToken)
-    {
-        if (request.Version < 1 || request.Status is null)
-            return Results.ValidationProblem(GeneralError("Informe uma versão e uma etapa válida."));
-        if (request.Status == CommercialRequest.NotQuoted && string.IsNullOrWhiteSpace(request.Reason))
-            return Results.ValidationProblem(new Dictionary<string, string[]> { [nameof(request.Reason)] = ["Informe o motivo para não cotar."] });
-        if (request.Reason?.Trim().Length > 1000)
-            return Results.ValidationProblem(new Dictionary<string, string[]> { [nameof(request.Reason)] = ["O motivo deve ter até 1.000 caracteres."] });
-        var result = await store.ChangeStatusAsync(context.OrganizationId, id, context.UserId,
-            request, DateTimeOffset.UtcNow, cancellationToken);
         return MapResult(result);
     }
 
