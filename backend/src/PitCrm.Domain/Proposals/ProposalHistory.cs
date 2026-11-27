@@ -44,6 +44,13 @@ public static class ProposalHistoryRetentionRules
 
 public static class ProposalIdempotencyKey
 {
+    public static bool TryParseVersion7(string? value, out Guid key)
+    {
+        if (Guid.TryParse(value, out key) && IsVersion7(key)) return true;
+        key = Guid.Empty;
+        return false;
+    }
+
     public static bool IsVersion7(Guid value)
     {
         if (value == Guid.Empty) return false;

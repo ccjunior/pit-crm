@@ -42,6 +42,19 @@ public sealed class ProposalHistoryDomainTests
     }
 
     [Fact]
+    public void Idempotency_key_format_check_leaves_validity_window_to_database_clock()
+    {
+        var databaseNow = DateTimeOffset.Parse("2023-12-14T22:13:20Z").AddTicks(-1);
+        var applicationNow = databaseNow.AddTicks(1);
+
+        Assert.True(ProposalIdempotencyKey.TryParseVersion7(Key.ToString(), out var parsed));
+        Assert.Equal(Key, parsed);
+        Assert.True(ProposalIdempotencyKey.IsWithinValidityWindow(parsed, databaseNow));
+        Assert.False(ProposalIdempotencyKey.IsWithinValidityWindow(parsed, applicationNow));
+        Assert.False(ProposalIdempotencyKey.TryParseVersion7(Guid.NewGuid().ToString(), out _));
+    }
+
+    [Fact]
     public void Retention_cutoff_uses_local_civil_months_and_clamps_month_end()
     {
         var zone = TimeZoneInfo.FindSystemTimeZoneById("America/Sao_Paulo");

@@ -181,7 +181,7 @@ public static class ProposalHistoryEndpoints
     }
 
     private static bool TryIdempotencyKey(string? value, out Guid key) =>
-        Guid.TryParse(value, out key) && ProposalIdempotencyKey.IsWithinValidityWindow(key, DateTimeOffset.UtcNow);
+        ProposalIdempotencyKey.TryParseVersion7(value, out key);
 
     private static IResult IdempotencyProblem() => Results.ValidationProblem(new Dictionary<string, string[]>
     {
