@@ -6,7 +6,9 @@ using PitCrm.Infrastructure.Persistence;
 
 namespace PitCrm.Infrastructure.Proposals;
 
-public sealed class ProposalRetentionProcessor(PitCrmDbContext dbContext) : IProposalRetentionProcessor
+public sealed class ProposalRetentionProcessor(
+    PitCrmDbContext dbContext,
+    IProposalAuditAggregateProcessor auditAggregates) : IProposalRetentionProcessor
 {
     private const string SystemCode = "ProposalRetention";
 
@@ -106,9 +108,12 @@ public sealed class ProposalRetentionProcessor(PitCrmDbContext dbContext) : IPro
             .Select(value => new { value.Id, value.OrganizationId, value.OccurredAtUtc })
             .Take(500).ToListAsync(cancellationToken);
         var expired = candidates.Where(value =>
-            ProposalHistoryRetentionRules.IsExpired(value.OccurredAtUtc, dbNow, 12)).ToArray();
-        if (expired.Length == 0) return;
+            ProposalHistoryRetentionRules.IsExpired(value.OccurredAtUtc, dbNow, 12))
+            .OrderBy(value => value.OrganizationId)
+            .ThenBy(value => ProposalHistoryRetentionRules.LocalMonthStart(value.OccurredAtUtc))
+            .ThenBy(value => value.Id).ToArray();
         await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        var redactedProposals = new HashSet<(Guid OrganizationId, Guid RequestId)>();
         foreach (var candidate in expired)
         {
             if (!await TryAcquireAuditLockAsync($"proposal-audit-row:{candidate.Id:N}", cancellationToken)) continue;
@@ -117,15 +122,17 @@ public sealed class ProposalRetentionProcessor(PitCrmDbContext dbContext) : IPro
                 && value.RedactedAtUtc == null, cancellationToken);
             if (audit is null || !ProposalHistoryRetentionRules.IsExpired(audit.OccurredAtUtc, dbNow, 12))
                 continue;
+            await auditAggregates.ProcessBeforeRedactionAsync(audit, dbNow, cancellationToken);
+            if (audit.CommercialRequestId is { } requestId
+                && audit.EventType != "AuditDetailsRedacted")
+                redactedProposals.Add((audit.OrganizationId, requestId));
             audit.Redact(dbNow);
         }
-        var redactedOrganizations = dbContext.ChangeTracker.Entries<ProposalAuditEvent>()
-            .Where(value => value.State == EntityState.Modified && value.Entity.RedactedAtUtc == dbNow)
-            .Select(value => value.Entity.OrganizationId).Distinct().ToArray();
-        foreach (var organizationId in redactedOrganizations)
-            dbContext.ProposalAuditEvents.Add(CreateSystemAudit(organizationId, null,
+        foreach (var proposal in redactedProposals)
+            dbContext.ProposalAuditEvents.Add(CreateSystemAudit(proposal.OrganizationId, proposal.RequestId,
                 "AuditDetailsRedacted", dbNow, null));
         await dbContext.SaveChangesAsync(cancellationToken);
+        await auditAggregates.SealReadyWindowsAsync(dbNow, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
     }
 

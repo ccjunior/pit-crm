@@ -38,6 +38,10 @@ public sealed class PitCrmDbContext(
     public DbSet<ProposalEventSequence> ProposalEventSequences => Set<ProposalEventSequence>();
     public DbSet<ProposalIdempotencyRecord> ProposalIdempotencyRecords => Set<ProposalIdempotencyRecord>();
     public DbSet<ProposalAuditEvent> ProposalAuditEvents => Set<ProposalAuditEvent>();
+    public DbSet<ProposalAuditAggregateWindow> ProposalAuditAggregateWindows => Set<ProposalAuditAggregateWindow>();
+    public DbSet<ProposalAuditAggregateMonth> ProposalAuditAggregateMonths => Set<ProposalAuditAggregateMonth>();
+    public DbSet<ProposalAuditAggregateContribution> ProposalAuditAggregateContributions => Set<ProposalAuditAggregateContribution>();
+    public DbSet<ProposalAuditAggregateQuarantine> ProposalAuditAggregateQuarantines => Set<ProposalAuditAggregateQuarantine>();
     public DbSet<ProposalRetentionCycle> ProposalRetentionCycles => Set<ProposalRetentionCycle>();
     public DbSet<ProposalTimelineArchive> ProposalTimelineArchives => Set<ProposalTimelineArchive>();
     public DbSet<ProposalLegacyQuarantine> ProposalLegacyQuarantine => Set<ProposalLegacyQuarantine>();
@@ -485,6 +489,50 @@ public sealed class PitCrmDbContext(
                 .HasPrincipalKey(value => new { value.OrganizationId, value.Id }).OnDelete(DeleteBehavior.Restrict);
             audit.HasIndex(value => new { value.OrganizationId, value.OccurredAtUtc });
             audit.HasIndex(value => new { value.OrganizationId, value.Category, value.OccurredAtUtc });
+            audit.HasIndex(value => value.OccurredAtUtc).HasFilter("\"RedactedAtUtc\" IS NULL");
+        });
+
+        builder.Entity<ProposalAuditAggregateWindow>(window =>
+        {
+            window.ToTable("ProposalAuditAggregateWindows");
+            window.HasKey(value => new { value.OrganizationId, value.MonthStart, value.Category });
+            window.Property(value => value.Category).HasMaxLength(40).IsRequired();
+            window.Property(value => value.State).HasMaxLength(12).IsRequired();
+            window.Property(value => value.DistinctRequestCount).IsRequired();
+            window.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
+                .IsRequired().OnDelete(DeleteBehavior.Restrict);
+            window.HasIndex(value => new { value.State, value.MonthStart });
+        });
+
+        builder.Entity<ProposalAuditAggregateMonth>(month =>
+        {
+            month.ToTable("ProposalAuditAggregateMonths");
+            month.HasKey(value => new { value.OrganizationId, value.MonthStart });
+            month.Property(value => value.State).HasMaxLength(12).IsRequired();
+            month.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
+                .IsRequired().OnDelete(DeleteBehavior.Restrict);
+            month.HasIndex(value => new { value.State, value.MonthStart });
+        });
+
+        builder.Entity<ProposalAuditAggregateContribution>(contribution =>
+        {
+            contribution.ToTable("ProposalAuditAggregateContributions");
+            contribution.HasKey(value => new { value.OrganizationId, value.MonthStart, value.Category, value.RequestToken });
+            contribution.Property(value => value.Category).HasMaxLength(40).IsRequired();
+            contribution.Property(value => value.RequestToken).HasMaxLength(64).IsRequired();
+            contribution.HasOne<ProposalAuditAggregateWindow>().WithMany()
+                .HasForeignKey(value => new { value.OrganizationId, value.MonthStart, value.Category })
+                .IsRequired().OnDelete(DeleteBehavior.Restrict);
+        });
+
+        builder.Entity<ProposalAuditAggregateQuarantine>(quarantine =>
+        {
+            quarantine.ToTable("ProposalAuditAggregateQuarantines");
+            quarantine.HasKey(value => new { value.OrganizationId, value.MonthStart, value.Category });
+            quarantine.Property(value => value.Category).HasMaxLength(40).IsRequired();
+            quarantine.Property(value => value.EventCount).IsRequired();
+            quarantine.HasOne<Organization>().WithMany().HasForeignKey(value => value.OrganizationId)
+                .IsRequired().OnDelete(DeleteBehavior.Restrict);
         });
 
         builder.Entity<ProposalRetentionCycle>(cycle =>

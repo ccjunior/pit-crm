@@ -1,3 +1,5 @@
+using PitCrm.Domain.Proposals;
+
 namespace PitCrm.Application.Proposals;
 
 public sealed record ProposalActivityInput(string? Type, string? Text, IReadOnlyList<Guid>? MentionedUserIds);
@@ -16,6 +18,8 @@ public sealed record ProposalReasonDto(Guid Id, string ResultStatus, string Labe
 public sealed record ProposalAuditEventDto(Guid Id, string Type, string Category, DateTimeOffset OccurredAtUtc,
     string? ActorName, string? DetailsJson);
 public sealed record ProposalAuditPageDto(IReadOnlyList<ProposalAuditEventDto> Items, int Page, int PageSize, int TotalCount);
+public sealed record ProposalAuditAggregateCellDto(string Category, long DistinctRequests);
+public sealed record ProposalAuditAggregateMonthDto(string Month, IReadOnlyList<ProposalAuditAggregateCellDto> Cells);
 public sealed record ProposalHistoryWriteResult(ProposalHistoryEventDto? Event, ProposalFailure Failure,
     bool IsReplay = false, ProposalDetailsDto? Proposal = null);
 public sealed record ProposalReasonWriteResult(ProposalReasonDto? Reason, ProposalFailure Failure, bool IsReplay = false);
@@ -47,4 +51,17 @@ public interface IProposalHistoryStore
 public interface IProposalRetentionProcessor
 {
     Task ProcessDueAsync(CancellationToken cancellationToken);
+}
+
+public interface IProposalAuditAggregateProcessor
+{
+    Task ProcessBeforeRedactionAsync(ProposalAuditEvent auditEvent, DateTimeOffset nowUtc,
+        CancellationToken cancellationToken);
+    Task SealReadyWindowsAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken);
+}
+
+public interface IProposalAuditAggregateStore
+{
+    Task<ProposalAuditAggregateMonthDto> GetPublishedMonthAsync(Guid organizationId, DateOnly monthStart,
+        CancellationToken cancellationToken);
 }
