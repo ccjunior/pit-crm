@@ -1,10 +1,13 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
+import { AuthService } from '../core/auth.service';
 import { ProposalsPage } from './proposals-page';
-import { ProposalDetails } from './proposal-api';
+import { ProposalDetails, ProposalHistoryEvent } from './proposal-api';
 
 describe('ProposalsPage', () => {
+  beforeEach(() => sessionStorage.clear());
+
   const proposal: ProposalDetails = {
     id: 'proposal-a', customerId: null, customerName: null, prospectName: 'Cliente Exemplo',
     number: 'SOL-2026-0001', responsibleUserId: null, responsibleName: null,
@@ -17,7 +20,7 @@ describe('ProposalsPage', () => {
   function createPage() {
     TestBed.configureTestingModule({
       imports: [ProposalsPage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), { provide: AuthService, useValue: { session: () => ({ id: 'user-a', organization: { id: 'org-a' } }) } }],
     });
     const fixture = TestBed.createComponent(ProposalsPage);
     const http = TestBed.inject(HttpTestingController);
@@ -33,6 +36,7 @@ describe('ProposalsPage', () => {
   async function openDetail(fixture: ReturnType<typeof createPage>['fixture'], http: HttpTestingController, item = proposal) {
     const request = http.expectOne(`/api/proposals/${item.id}`);
     request.flush(item);
+    http.expectOne(request => request.url === `/api/proposals/${item.id}/timeline`).flush({ items: [], page: 1, pageSize: 20, totalCount: 0 });
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -41,7 +45,7 @@ describe('ProposalsPage', () => {
   it('allows an existing customer after the missing prospect validation', () => {
     TestBed.configureTestingModule({
       imports: [ProposalsPage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), { provide: AuthService, useValue: { session: () => ({ id: 'user-a', organization: { id: 'org-a' } }) } }],
     });
     const page = TestBed.createComponent(ProposalsPage).componentInstance;
     const http = TestBed.inject(HttpTestingController);
@@ -62,7 +66,7 @@ describe('ProposalsPage', () => {
   it('registers the approval for the latest revision and updates the selected request', () => {
     TestBed.configureTestingModule({
       imports: [ProposalsPage],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [provideHttpClient(), provideHttpClientTesting(), { provide: AuthService, useValue: { session: () => ({ id: 'user-a', organization: { id: 'org-a' } }) } }],
     });
     const page = TestBed.createComponent(ProposalsPage).componentInstance;
     const http = TestBed.inject(HttpTestingController);
@@ -88,6 +92,92 @@ describe('ProposalsPage', () => {
     http.expectOne(request => request.url === '/api/proposals').flush({ items: [], totalCount: 0 });
     expect(page.selected()?.status).toBe('Approved');
     expect(page.success()).toContain('Rascunho da demanda criado');
+    http.verify();
+  });
+
+  it('loads and renders the paged commercial timeline', async () => {
+    const { fixture, http } = createPage();
+    fixture.nativeElement.querySelector('tbody tr').click();
+    const event: ProposalHistoryEvent = { id: 'event-a', sequence: 1, type: 'StageChanged', occurredAtUtc: '2026-11-22T12:00:00Z',
+      occurredAtKnown: true, actorName: 'Gestora', fromStatus: 'Received', toStatus: 'Evaluating', reason: null,
+      activityType: null, text: null, mentionedUserIds: [] };
+    http.expectOne('/api/proposals/proposal-a').flush(proposal);
+    http.expectOne('/api/proposals/proposal-a/timeline?page=1&pageSize=20').flush({ items: [event], page: 1, pageSize: 20, totalCount: 1 });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.history-list')?.textContent).toContain('Etapa alterada');
+    expect(fixture.nativeElement.querySelector('.history-list')?.textContent).toContain('Recebida → Em avaliação');
+    expect(fixture.nativeElement.querySelector('.history-list')?.textContent).toContain('Gestora');
+    http.verify();
+  });
+
+  it('posts an activity with a UUIDv7 idempotency key, then refreshes the timeline', async () => {
+    const { fixture, http, page } = createPage();
+    fixture.nativeElement.querySelector('tbody tr').click();
+    await openDetail(fixture, http);
+    page.activityForm.setValue({ type: 'Ligação', text: 'Retornar amanhã', mentionedUserIds: [] });
+    page.recordActivity();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const request = http.expectOne('/api/proposals/proposal-a/activities');
+    expect(request.request.body).toEqual({ type: 'Ligação', text: 'Retornar amanhã', mentionedUserIds: [] });
+    expect(request.request.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    request.flush({ id: 'event-a' });
+    http.expectOne('/api/proposals/proposal-a/timeline?page=1&pageSize=20').flush({ items: [], page: 1, pageSize: 20, totalCount: 0 });
+    fixture.detectChanges();
+    expect(page.activityForm.controls.text.value).toBe('');
+    expect(page.historySuccess()).toContain('salvo');
+    http.verify();
+  });
+
+  it('reuses the persisted idempotency key after a lost response and component reload', async () => {
+    const first = createPage();
+    first.fixture.nativeElement.querySelector('tbody tr').click();
+    await openDetail(first.fixture, first.http);
+    first.page.activityForm.setValue({ type: 'Ligação', text: 'Retornar amanhã', mentionedUserIds: [] });
+    first.page.recordActivity();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const lostResponseRequest = first.http.expectOne('/api/proposals/proposal-a/activities');
+    const originalKey = lostResponseRequest.request.headers.get('Idempotency-Key');
+    lostResponseRequest.error(new ProgressEvent('network error'));
+    first.http.verify();
+    first.fixture.destroy();
+
+    TestBed.resetTestingModule();
+    const second = createPage();
+    second.fixture.nativeElement.querySelector('tbody tr').click();
+    await openDetail(second.fixture, second.http);
+    second.page.activityForm.setValue({ type: 'Ligação', text: 'Retornar amanhã', mentionedUserIds: [] });
+    second.page.recordActivity();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const retryRequest = second.http.expectOne('/api/proposals/proposal-a/activities');
+    expect(retryRequest.request.headers.get('Idempotency-Key')).toBe(originalKey);
+    retryRequest.flush({ id: 'event-a' });
+    second.http.expectOne('/api/proposals/proposal-a/timeline?page=1&pageSize=20').flush({ items: [], page: 1, pageSize: 20, totalCount: 0 });
+    second.fixture.detectChanges();
+    expect(sessionStorage.getItem('pitcrm:pending-idempotency:v1')).toBeNull();
+    second.http.verify();
+  });
+
+  it('keeps outcome reason input intact after a 409 status conflict', async () => {
+    const { fixture, http, page } = createPage();
+    const evaluating = { ...proposal, status: 'Evaluating', demandDraftState: 'Converted' };
+    fixture.nativeElement.querySelector('tbody tr').click();
+    await openDetail(fixture, http, evaluating);
+    http.expectOne('/api/proposals/reasons?resultStatus=NotQuoted').flush([
+      { id: 'reason-a', resultStatus: 'NotQuoted', label: 'Sem viabilidade', isActive: true },
+    ]);
+    fixture.detectChanges();
+    page.resultForm.controls.reasonId.setValue('reason-a');
+    page.markOutcome();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    const request = http.expectOne('/api/proposals/proposal-a/status');
+    expect(request.request.body).toEqual({ version: 1, status: 'NotQuoted', reasonId: 'reason-a' });
+    request.flush({ error: 'A solicitação foi alterada. Atualize os dados antes de tentar novamente.' }, { status: 409, statusText: 'Conflict' });
+    fixture.detectChanges();
+    expect(page.resultForm.controls.reasonId.value).toBe('reason-a');
+    expect(page.historyConflict()).toBe(true);
+    expect(fixture.nativeElement.textContent).toContain('Recarregar dados atuais');
     http.verify();
   });
 
@@ -124,9 +214,11 @@ describe('ProposalsPage', () => {
     row.click();
     await openDetail(fixture, http);
     const dialog = fixture.nativeElement.querySelector('[role="dialog"]') as HTMLElement;
-    const buttons = Array.from(dialog.querySelectorAll('button')) as HTMLButtonElement[];
-    const first = buttons[0];
-    const last = buttons[buttons.length - 1];
+    const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+      'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+    )).filter(element => element.tabIndex >= 0);
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
 
     first.focus();
     first.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true, shiftKey: true }));

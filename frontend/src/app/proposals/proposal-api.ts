@@ -1,4 +1,4 @@
-import { HttpClient, HttpParams } from '@angular/common/http';
+import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
@@ -20,6 +20,22 @@ export interface ProposalRevision {
   approvalNotes: string | null; approvedAtUtc: string | null;
 }
 export interface ProposalActivity { id: string; actorDisplayName: string; eventType: string; description: string; occurredAtUtc: string; }
+export interface ProposalHistoryEvent {
+  id: string; sequence: number; type: string; occurredAtUtc: string | null; occurredAtKnown: boolean;
+  actorName: string | null; fromStatus: string | null; toStatus: string | null; reason: string | null;
+  activityType: string | null; text: string | null; mentionedUserIds: string[];
+}
+export interface ProposalHistoryPage {
+  items: ProposalHistoryEvent[]; page: number; pageSize: number; totalCount: number;
+}
+export interface ProposalOperatorHistoryItem {
+  type: string; occurredAtUtc: string | null; occurredAtKnown: boolean;
+  fromStatus: string | null; toStatus: string | null;
+}
+export interface ProposalOperatorHistoryPage {
+  items: ProposalOperatorHistoryItem[]; page: number; pageSize: number; totalCount: number;
+}
+export interface ProposalReason { id: string; resultStatus: string; label: string; isActive: boolean; }
 export interface ProposalListItem {
   id: string; customerId: string | null; customerName: string | null; prospectName: string | null;
   number: string; responsibleUserId: string | null; responsibleName: string | null;
@@ -39,6 +55,8 @@ export interface ProposalInput {
   responsibleUserId: string | null; references: { type: string; value: string }[];
 }
 export interface ProposalCommandResponse { proposal: ProposalDetails; demandDraftId?: string | null; }
+export interface ProposalActivityInput { type?: string; text: string; mentionedUserIds: string[]; }
+export interface ProposalStatusInput { version: number; status: string; reasonId: string | null; }
 
 @Injectable({ providedIn: 'root' })
 export class ProposalApi {
@@ -54,6 +72,29 @@ export class ProposalApi {
     return this.http.get<ProposalPage>('/api/proposals', { params });
   }
   find(id: string): Observable<ProposalDetails> { return this.http.get<ProposalDetails>(`/api/proposals/${id}`); }
+  timeline(id: string, page = 1, pageSize = 20): Observable<ProposalHistoryPage> {
+    const params = new HttpParams().set('page', page).set('pageSize', pageSize);
+    return this.http.get<ProposalHistoryPage>(`/api/proposals/${id}/timeline`, { params });
+  }
+  operatorTimeline(demandId: string, page = 1, pageSize = 20): Observable<ProposalOperatorHistoryPage> {
+    const params = new HttpParams().set('page', page).set('pageSize', pageSize);
+    return this.http.get<ProposalOperatorHistoryPage>(`/api/demands/${demandId}/proposal-timeline`, { params });
+  }
+  reasons(resultStatus?: string): Observable<ProposalReason[]> {
+    let params = new HttpParams();
+    if (resultStatus) params = params.set('resultStatus', resultStatus);
+    return this.http.get<ProposalReason[]>('/api/proposals/reasons', { params });
+  }
+  recordActivity(id: string, input: ProposalActivityInput, idempotencyKey: string): Observable<ProposalHistoryEvent> {
+    return this.http.post<ProposalHistoryEvent>(`/api/proposals/${id}/activities`, input, {
+      headers: new HttpHeaders({ 'Idempotency-Key': idempotencyKey }),
+    });
+  }
+  recordComment(id: string, input: Omit<ProposalActivityInput, 'type'>, idempotencyKey: string): Observable<ProposalHistoryEvent> {
+    return this.http.post<ProposalHistoryEvent>(`/api/proposals/${id}/comments`, input, {
+      headers: new HttpHeaders({ 'Idempotency-Key': idempotencyKey }),
+    });
+  }
   create(input: ProposalInput): Observable<ProposalDetails> { return this.http.post<ProposalDetails>('/api/proposals', input); }
   update(id: string, version: number, input: ProposalInput): Observable<ProposalDetails> {
     return this.http.put<ProposalDetails>(`/api/proposals/${id}`, { version, ...input });
@@ -69,7 +110,9 @@ export class ProposalApi {
       version, revisionId, approverName, channel, notes: null, approvedAtUtc: new Date().toISOString(),
     });
   }
-  changeStatus(id: string, version: number, status: string, reason: string | null): Observable<ProposalDetails> {
-    return this.http.post<ProposalDetails>(`/api/proposals/${id}/status`, { version, status, reason });
+  changeStatus(id: string, input: ProposalStatusInput, idempotencyKey: string): Observable<ProposalDetails> {
+    return this.http.post<ProposalDetails>(`/api/proposals/${id}/status`, input, {
+      headers: new HttpHeaders({ 'Idempotency-Key': idempotencyKey }),
+    });
   }
 }

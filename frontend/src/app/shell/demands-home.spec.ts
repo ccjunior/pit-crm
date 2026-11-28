@@ -10,15 +10,17 @@ import { DemandsHome } from './demands-home';
 describe('DemandsHome', () => {
   let fixture: ComponentFixture<DemandsHome>;
   let http: HttpTestingController;
+  let sessionRoles = ['Gestor'];
 
   beforeEach(async () => {
+    sessionRoles = ['Gestor'];
     await TestBed.configureTestingModule({
       imports: [DemandsHome],
       providers: [
         provideRouter([]),
         provideHttpClient(withInterceptors([apiInterceptor])),
         provideHttpClientTesting(),
-        { provide: AuthService, useValue: { getCsrfToken: () => of('csrf-value'), expireSession: () => undefined } },
+        { provide: AuthService, useValue: { session: () => ({ roles: sessionRoles }), getCsrfToken: () => of('csrf-value'), expireSession: () => undefined } },
       ],
     }).compileComponents();
     http = TestBed.inject(HttpTestingController);
@@ -35,6 +37,18 @@ describe('DemandsHome', () => {
   });
 
   afterEach(() => http.verify());
+
+  function openOperatorTimeline() {
+    sessionRoles = ['Operador'];
+    (fixture.nativeElement.querySelector('.demand-card-main') as HTMLButtonElement).click();
+    http.expectOne('/api/demands/demand-a').flush({
+      id: 'demand-a', referenceNumber: 42, customerId: 'customer-a', customerName: 'Cliente Alfa', locationId: 'location-a',
+      locationName: 'Obra Centro', description: 'Revisar bomba hidráulica', origin: 'WhatsApp', priority: 'Alta', status: 'Recebida',
+      externalReferences: [], assignedToUserId: null, assignedToDisplayName: null, createdByUserId: 'user-a',
+      createdByDisplayName: 'Gestora', createdAtUtc: '2026-11-17T12:00:00Z', version: 2, subitems: [], activities: [],
+    });
+    return http.expectOne('/api/demands/demand-a/proposal-timeline?page=1&pageSize=20');
+  }
 
   it('switches between cards and table and opens persisted demand details in a side panel', () => {
     expect(fixture.nativeElement.querySelector('.demand-card')).not.toBeNull();
@@ -59,6 +73,119 @@ describe('DemandsHome', () => {
     expect(fixture.nativeElement.querySelector('.detail-drawer[open]')).not.toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Demanda criada.');
     expect(fixture.nativeElement.textContent).toContain('CH-42');
+  });
+
+  it('shows only the allowlisted commercial timeline fields to an Operator', () => {
+    const timeline = openOperatorTimeline();
+    timeline.flush({ items: [{ type: 'StageChanged', occurredAtUtc: '2026-11-17T12:00:00Z', occurredAtKnown: true,
+      fromStatus: 'Received', toStatus: 'Evaluating', actorName: 'PRIVATE_ACTOR', text: 'PRIVATE_TEXT',
+      reason: 'PRIVATE_REASON', mentionedUserIds: ['PRIVATE_MENTION'] }], page: 1, pageSize: 20, totalCount: 1 });
+    fixture.detectChanges();
+    const projection = fixture.nativeElement.querySelector('.proposal-operator-timeline') as HTMLElement;
+    expect(projection.textContent).toContain('Etapa alterada');
+    expect(projection.textContent).toContain('Recebida → Em avaliação');
+    expect(projection.textContent).not.toContain('PRIVATE_ACTOR');
+    expect(projection.textContent).not.toContain('PRIVATE_TEXT');
+    expect(projection.textContent).not.toContain('PRIVATE_REASON');
+    expect(projection.textContent).not.toContain('PRIVATE_MENTION');
+  });
+
+  it('paginates the Operator timeline and returns to page one when reopening the demand', () => {
+    openOperatorTimeline().flush({ items: [{
+      type: 'StageChanged', occurredAtUtc: '2026-11-17T12:00:00Z', occurredAtKnown: true,
+      fromStatus: 'Received', toStatus: 'Evaluating',
+    }], page: 1, pageSize: 20, totalCount: 21 });
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('.operator-timeline-pagination button:last-child') as HTMLButtonElement).click();
+    const pageTwo = http.expectOne('/api/demands/demand-a/proposal-timeline?page=2&pageSize=20');
+    pageTwo.flush({ items: [{ type: 'CommentAdded', occurredAtUtc: '2026-11-18T12:00:00Z', occurredAtKnown: true,
+      fromStatus: null, toStatus: null }], page: 2, pageSize: 20, totalCount: 21 });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.operator-timeline-pagination')?.textContent).toContain('Página 2 · 21 eventos');
+    expect(fixture.nativeElement.querySelector('.operator-timeline-list')?.textContent).toContain('Comentário');
+    expect((fixture.nativeElement.querySelector('.operator-timeline-pagination button:last-child') as HTMLButtonElement).disabled).toBe(true);
+
+    fixture.componentInstance.closeDetails();
+    fixture.detectChanges();
+    openOperatorTimeline().flush({
+      items: [], page: 1, pageSize: 20, totalCount: 0,
+    });
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('.proposal-operator-timeline')?.textContent).toContain('Nenhum evento comercial disponível');
+  });
+
+  it('shows access denied without retrying a forbidden timeline request', () => {
+    openOperatorTimeline().flush({ items: [{ type: 'StageChanged', occurredAtUtc: '2026-11-17T12:00:00Z', occurredAtKnown: true,
+      fromStatus: 'Received', toStatus: 'Evaluating' }], page: 1, pageSize: 20, totalCount: 21 });
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.operator-timeline-pagination button:last-child') as HTMLButtonElement).click();
+    http.expectOne('/api/demands/demand-a/proposal-timeline?page=2&pageSize=20')
+      .flush({ title: 'Forbidden' }, { status: 403, statusText: 'Forbidden' });
+    fixture.detectChanges();
+    const projection = fixture.nativeElement.querySelector('.proposal-operator-timeline') as HTMLElement;
+    expect(projection.textContent).toContain('Seu perfil não tem acesso ao histórico comercial desta demanda.');
+    expect(fixture.componentInstance.proposalTimeline()).toEqual([]);
+    expect(fixture.componentInstance.proposalTimelineTotalCount()).toBe(0);
+    expect(projection.querySelector('.operator-timeline-list')).toBeNull();
+    expect(projection.querySelector('.operator-timeline-pagination')).toBeNull();
+    expect(projection.querySelector('.error-banner button')).toBeNull();
+  });
+
+  it('shows a specific missing-history state for 404 without offering a retry', () => {
+    openOperatorTimeline().flush({ items: [{ type: 'StageChanged', occurredAtUtc: '2026-11-17T12:00:00Z', occurredAtKnown: true,
+      fromStatus: 'Received', toStatus: 'Evaluating' }], page: 1, pageSize: 20, totalCount: 21 });
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelector('.operator-timeline-pagination button:last-child') as HTMLButtonElement).click();
+    http.expectOne('/api/demands/demand-a/proposal-timeline?page=2&pageSize=20')
+      .flush({ title: 'Not Found' }, { status: 404, statusText: 'Not Found' });
+    fixture.detectChanges();
+    const projection = fixture.nativeElement.querySelector('.proposal-operator-timeline') as HTMLElement;
+    expect(projection.textContent).toContain('Esta demanda não tem histórico comercial vinculado.');
+    expect(fixture.componentInstance.proposalTimeline()).toEqual([]);
+    expect(fixture.componentInstance.proposalTimelineTotalCount()).toBe(0);
+    expect(projection.querySelector('.operator-timeline-list')).toBeNull();
+    expect(projection.querySelector('.operator-timeline-pagination')).toBeNull();
+    expect(projection.querySelector('.error-banner button')).toBeNull();
+  });
+
+  it('offers retry for a temporary timeline error and loads the first page again', () => {
+    openOperatorTimeline().flush({ title: 'Internal Server Error' }, { status: 500, statusText: 'Internal Server Error' });
+    fixture.detectChanges();
+    const projection = fixture.nativeElement.querySelector('.proposal-operator-timeline') as HTMLElement;
+    expect(projection.textContent).toContain('Não foi possível carregar o histórico comercial. Tente novamente.');
+    (projection.querySelector('button') as HTMLButtonElement).click();
+    http.expectOne('/api/demands/demand-a/proposal-timeline?page=1&pageSize=20').flush({
+      items: [{ type: 'StageChanged', occurredAtUtc: '2026-11-17T12:00:00Z', occurredAtKnown: true,
+        fromStatus: 'Received', toStatus: 'Evaluating' }], page: 1, pageSize: 20, totalCount: 1,
+    });
+    fixture.detectChanges();
+    expect(projection.textContent).not.toContain('Não foi possível carregar');
+    expect(projection.textContent).toContain('Recebida → Em avaliação');
+  });
+
+  it('keeps the current page after page two fails and retries page two', () => {
+    openOperatorTimeline().flush({ items: [{ type: 'StageChanged', occurredAtUtc: '2026-11-17T12:00:00Z', occurredAtKnown: true,
+      fromStatus: 'Received', toStatus: 'Evaluating' }], page: 1, pageSize: 20, totalCount: 21 });
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('.operator-timeline-pagination button:last-child') as HTMLButtonElement).click();
+    http.expectOne('/api/demands/demand-a/proposal-timeline?page=2&pageSize=20')
+      .flush({ title: 'Internal Server Error' }, { status: 500, statusText: 'Internal Server Error' });
+    fixture.detectChanges();
+
+    const projection = fixture.nativeElement.querySelector('.proposal-operator-timeline') as HTMLElement;
+    expect(projection.querySelector('.operator-timeline-pagination')?.textContent).toContain('Página 1 · 21 eventos');
+    expect(projection.querySelector('.operator-timeline-list')?.textContent).toContain('Etapa alterada');
+    (projection.querySelector('.error-banner button') as HTMLButtonElement).click();
+    http.expectOne('/api/demands/demand-a/proposal-timeline?page=2&pageSize=20').flush({
+      items: [{ type: 'CommentAdded', occurredAtUtc: '2026-11-18T12:00:00Z', occurredAtKnown: true,
+        fromStatus: null, toStatus: null }], page: 2, pageSize: 20, totalCount: 21,
+    });
+    fixture.detectChanges();
+    expect(projection.querySelector('.operator-timeline-pagination')?.textContent).toContain('Página 2 · 21 eventos');
+    expect(projection.querySelector('.operator-timeline-list')?.textContent).toContain('Comentário');
+    expect(projection.querySelector('.operator-timeline-list')?.textContent).not.toContain('Etapa alterada');
   });
 
   it('opens the existing demand in edit mode and returns to its refreshed detail after saving', () => {
